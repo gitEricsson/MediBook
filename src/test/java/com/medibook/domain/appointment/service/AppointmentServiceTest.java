@@ -13,6 +13,7 @@ import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
 import com.medibook.messaging.producer.AppointmentEventProducer;
+import com.medibook.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,7 @@ class AppointmentServiceTest {
     private Doctor doctor;
     private Appointment appointment;
     private LocalDateTime futureTime;
+    private UserPrincipal principal;
 
     @BeforeEach
     void setUp() {
@@ -62,6 +64,7 @@ class AppointmentServiceTest {
         appointment = Appointment.builder()
                 .id(10L).patient(patient).doctor(doctor)
                 .scheduledAt(futureTime).status(AppointmentStatus.PENDING).build();
+        principal = UserPrincipal.fromUser(patient);
     }
 
     // ─── Book ────────────────────────────────────────────────────────────────
@@ -112,7 +115,7 @@ class AppointmentServiceTest {
         when(appointmentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(appointment));
         when(appointmentRepository.save(any())).thenReturn(appointment);
 
-        AppointmentResponse response = appointmentService.cancel(10L);
+        AppointmentResponse response = appointmentService.cancel(10L, principal);
 
         assertThat(response).isNotNull();
         verify(eventProducer).publishAppointmentEvent(argThat(e -> "CANCELLED".equals(e.getEventType())));
@@ -124,7 +127,7 @@ class AppointmentServiceTest {
         appointment.setStatus(AppointmentStatus.COMPLETED);
         when(appointmentRepository.findByIdWithDetails(10L)).thenReturn(Optional.of(appointment));
 
-        assertThatThrownBy(() -> appointmentService.cancel(10L))
+        assertThatThrownBy(() -> appointmentService.cancel(10L, principal))
                 .isInstanceOf(MediBookException.class)
                 .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
     }

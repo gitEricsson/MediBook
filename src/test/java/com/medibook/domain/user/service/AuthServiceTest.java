@@ -26,6 +26,9 @@ import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
+import org.mockito.ArgumentCaptor;
+import com.medibook.common.exception.ResourceNotFoundException;
+
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuthService — Unit Tests")
 class AuthServiceTest {
@@ -230,5 +233,180 @@ class AuthServiceTest {
         assertThatThrownBy(() -> authService.resendVerificationEmail(1L))
                 .isInstanceOf(MediBookException.class)
                 .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+    }
+
+    @Test
+    @DisplayName("resendVerificationEmail — unverified user triggers fresh token and email dispatch")
+    void resendVerification_notYetVerified_sendsEmail() {
+        testUser.setActive(false);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(emailVerificationService.createToken(1L)).thenReturn("fresh-verify-token");
+
+        authService.resendVerificationEmail(1L);
+
+        verify(emailVerificationService).createToken(1L);
+        verify(emailVerificationService).sendVerificationEmail(testUser.getEmail(), "fresh-verify-token");
+    }
+
+    @Test
+    @DisplayName("resendVerificationEmail — unknown userId throws NOT_FOUND")
+    void resendVerification_userNotFound_throwsNotFound() {
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.resendVerificationEmail(99L))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ─── Verify Two-Factor ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("verifyTwoFactor — valid OTP issues full token pair without extra DB query")
+    void verifyTwoFactor_validOtp_returnsTokenPair() {
+        TwoFactorVerifyRequest req = new TwoFactorVerifyRequest();
+        req.setEmail("patient@medibook.com");
+        req.setOtp("123456");
+
+        when(userRepository.findByEmail("patient@medibook.com")).thenReturn(Optional.of(testUser));
+        when(tokenProvider.generateAccessTokenFromUserId(1L, "patient@medibook.com", "ROLE_PATIENT"))
+                .thenReturn("access-token");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
+        when(refreshTokenService.createRefreshToken(1L)).thenReturn("refresh-token");
+
+        TokenResponse response = authService.verifyTwoFactor(req);
+
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
+        assertThat(response.getUser().getEmail()).isEqualTo("patient@medibook.com");
+        verify(emailOtpService).verify("patient@medibook.com", "123456");
+    }
+
+    @Test
+    @DisplayName("verifyTwoFactor — wrong OTP propagates UNAUTHORIZED and skips user lookup")
+    void verifyTwoFactor_wrongOtp_propagatesUnauthorized() {
+        TwoFactorVerifyRequest req = new TwoFactorVerifyRequest();
+        req.setEmail("patient@medibook.com");
+        req.setOtp("000000");
+
+        doThrow(new MediBookException("Invalid OTP", HttpStatus.UNAUTHORIZED, "OTP_INVALID"))
+                .when(emailOtpService).verify("patient@medibook.com", "000000");
+
+        assertThatThrownBy(() -> authService.verifyTwoFactor(req))
+                .isInstanceOf(MediBookException.class)
+                .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED));
+        verify(userRepository, never()).findByEmail(anyString());
+    }
+
+    // ─── Reset Password ──────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("resetPassword — valid token encodes new password and persists user")
+    void resetPassword_validToken_encodesAndSaves() {
+        ResetPasswordRequest req = new ResetPasswordRequest();
+        req.setToken("valid-reset-token");
+        req.setNewPassword("NewPassword1!");
+
+        when(passwordResetService.validateAndConsume("valid-reset-token")).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+        when(passwordEncoder.encode("NewPassword1!")).thenReturn("new-encoded");
+
+        authService.resetPassword(req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getPassword()).isEqualTo("new-encoded");
+    }
+
+    @Test
+    @DisplayName("resetPassword — expired or invalid token throws BAD_REQUEST, skips DB lookup")
+    void resetPassword_invalidToken_throws() {
+        ResetPasswordRequest req = new ResetPasswordRequest();
+        req.setToken("stale-token");
+        req.setNewPassword("NewPassword1!");
+
+        when(passwordResetService.validateAndConsume("stale-token"))
+                .thenThrow(new MediBookException("Invalid or expired password reset link",
+                        HttpStatus.BAD_REQUEST, "RESET_TOKEN_INVALID"));
+
+        assertThatThrownBy(() -> authService.resetPassword(req))
+                .isInstanceOf(MediBookException.class)
+                .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(userRepository, never()).findById(anyLong());
+    }
+
+    // ─── Verify Email ────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("verifyEmail — valid token flips user active=true and persists")
+    void verifyEmail_validToken_activatesUser() {
+        EmailVerifyRequest req = new EmailVerifyRequest();
+        req.setToken("valid-verify-token");
+
+        when(emailVerificationService.validateAndConsume("valid-verify-token")).thenReturn(1L);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+
+        authService.verifyEmail(req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().isActive()).isTrue();
+    }
+
+    @Test
+    @DisplayName("verifyEmail — invalid token throws BAD_REQUEST without touching user store")
+    void verifyEmail_invalidToken_throws() {
+        EmailVerifyRequest req = new EmailVerifyRequest();
+        req.setToken("bad-verify-token");
+
+        when(emailVerificationService.validateAndConsume("bad-verify-token"))
+                .thenThrow(new MediBookException("Invalid or expired email verification link",
+                        HttpStatus.BAD_REQUEST, "VERIFY_TOKEN_INVALID"));
+
+        assertThatThrownBy(() -> authService.verifyEmail(req))
+                .isInstanceOf(MediBookException.class)
+                .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
+        verify(userRepository, never()).findById(anyLong());
+    }
+
+    // ─── Refresh (additional paths) ──────────────────────────────────────────
+
+    @Test
+    @DisplayName("refresh — user deleted between token rotation and DB lookup throws NOT_FOUND")
+    void refresh_userNotFound_throwsNotFound() {
+        var rotationResult = new RefreshTokenService.RotationResult(99L, "new-refresh");
+        when(refreshTokenService.rotate("orphan-token")).thenReturn(rotationResult);
+        when(userRepository.findById(99L)).thenReturn(Optional.empty());
+
+        RefreshTokenRequest req = new RefreshTokenRequest();
+        req.setRefreshToken("orphan-token");
+
+        assertThatThrownBy(() -> authService.refresh(req))
+                .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    // ─── Register (additional paths) ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("register — email is normalised to lower-case before persistence")
+    void register_emailNormalized_toLowerCase() {
+        RegisterRequest req = new RegisterRequest();
+        req.setEmail("UPPER@MEDIBOOK.COM");
+        req.setPassword("Password1!");
+        req.setFirstName("Jane");
+        req.setLastName("Smith");
+
+        when(userRepository.existsByEmail("UPPER@MEDIBOOK.COM")).thenReturn(false);
+        when(passwordEncoder.encode(any())).thenReturn("encoded");
+        when(userRepository.save(any())).thenReturn(testUser);
+        when(emailVerificationService.createToken(anyLong())).thenReturn("verify-token");
+        when(tokenProvider.generateAccessTokenFromUserId(anyLong(), anyString(), anyString()))
+                .thenReturn("access-token");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
+        when(refreshTokenService.createRefreshToken(anyLong())).thenReturn("refresh-token");
+
+        authService.register(req);
+
+        ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(captor.capture());
+        assertThat(captor.getValue().getEmail()).isEqualTo("upper@medibook.com");
     }
 }

@@ -11,6 +11,10 @@ public class DepartmentRequest {
     @Size(max = 150)
     private String name;
 
+    @NotBlank(message = "Department code is required")
+    @Size(max = 50)
+    private String code;
+
     @Size(max = 2000)
     private String description;
 }

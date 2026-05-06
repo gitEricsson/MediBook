@@ -16,10 +16,17 @@ public class Department extends AuditableEntity {
     @Column(nullable = false, unique = true, length = 150)
     private String name;
 
+    @Column(unique = true, length = 50)
+    private String code;
+
     @Column(columnDefinition = "TEXT")
     private String description;
 
     @Column(name = "is_active")
     @Builder.Default
     private boolean isActive = true;
+
+    @Version
+    @Builder.Default
+    private Long version = 0L;
 }

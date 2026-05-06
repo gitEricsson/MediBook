@@ -9,16 +9,14 @@ import lombok.Data;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class TokenResponse {
 
+    private UserResponse user;
+
     private String accessToken;
     private String refreshToken;
     private String tokenType;
-    private long expiresIn;
+    private Long expiresIn;
 
-    /** Set to true when 2FA is enabled and OTP step is required */
     private Boolean twoFactorRequired;
-
-    /** Partial token only valid to complete the 2FA step */
-    private String twoFactorToken;
 
     public static TokenResponse of(String accessToken, String refreshToken, long expiresInMs) {
         return TokenResponse.builder()
@@ -29,11 +27,9 @@ public class TokenResponse {
                 .build();
     }
 
-    public static TokenResponse twoFactorChallenge(String twoFactorToken) {
+    public static TokenResponse twoFactorChallenge() {
         return TokenResponse.builder()
                 .twoFactorRequired(true)
-                .twoFactorToken(twoFactorToken)
-                .tokenType("Bearer")
                 .build();
     }
 }

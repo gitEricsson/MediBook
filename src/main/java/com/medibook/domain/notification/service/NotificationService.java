@@ -5,9 +5,14 @@ import com.medibook.domain.notification.repository.NotificationRepository;
 import com.medibook.messaging.event.AppointmentEvent;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.cassandra.core.CassandraOperations;
+import org.springframework.data.cassandra.core.query.Query;
+import org.springframework.data.cassandra.core.query.Criteria;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
 
@@ -17,6 +22,7 @@ import java.util.UUID;
 public class NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final CassandraOperations cassandraOperations;
 
     public void sendAppointmentBooked(AppointmentEvent event) {
         // Notify patient
@@ -52,6 +58,16 @@ public class NotificationService {
 
     public List<Notification> getUnread(Long userId) {
         return notificationRepository.findUnreadByUserId(userId);
+    }
+
+    /** Delete notifications older than 30 days — runs nightly at 03:00 */
+    @Scheduled(cron = "0 0 3 * * *")
+    public void purgeExpiredNotifications() {
+        Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
+        boolean deleted = cassandraOperations.delete(
+                Query.query(Criteria.where("created_at").lt(cutoff)),
+                Notification.class);
+        log.info("Expired notification purge completed. Any rows deleted: {}", deleted);
     }
 
     private void save(Long userId, String title, String message, String type, Long appointmentId) {

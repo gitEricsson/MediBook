@@ -4,9 +4,12 @@ import com.medibook.audit.entity.AuditLog;
 import com.medibook.audit.repository.AuditLogRepository;
 import com.medibook.messaging.event.AuditEvent;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -30,7 +33,7 @@ public class AuditLogService {
                 .actorEmail(event.getActorEmail())
                 .entityType(event.getResourceType())
                 .entityId(event.getResourceId())
-                .ipAddress(null) // To be populated from request context in future
+                .ipAddress(resolveClientIp())
                 .correlationId(null)
                 .build();
 
@@ -43,5 +46,21 @@ public class AuditLogService {
 
     private void persistFallback(AuditEvent event, Throwable t) {
         log.error("Cassandra CB OPEN — AuditLog dropped for actor [{}]: {}", event.getActorId(), t.getMessage());
+    }
+
+    private String resolveClientIp() {
+        try {
+            ServletRequestAttributes attrs =
+                    (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs == null) return null;
+            HttpServletRequest request = attrs.getRequest();
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
+            return request.getRemoteAddr();
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

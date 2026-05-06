@@ -98,16 +98,18 @@ spring:
 # ─── JWT ────────────────────────────────────────────────────────────────────
 app:
   jwt:
-    secret: ${JWT_SECRET:medibook-super-secret-key-must-be-at-least-256-bits-long-for-hs256}
+    secret: ${JWT_SECRET}
     access-token-expiration-ms: 900000        # 15 min
     refresh-token-expiration-ms: 604800000    # 7 days
   otp:
     expiration-minutes: 5
     length: 6
   phi:
-    encryption-key: ${PHI_ENCRYPTION_KEY:medibook-phi-aes256-encryption-key!}
+    encryption-key: ${PHI_ENCRYPTION_KEY}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:3000}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:
@@ -170,7 +172,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus
+        include: health,info
   endpoint:
     health:
       show-details: when-authorized
@@ -179,7 +181,7 @@ management:
 logging:
   level:
     com.medibook: INFO
-    org.springframework.security: WARN
+    org.springframework.security: INFO
     org.hibernate.SQL: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

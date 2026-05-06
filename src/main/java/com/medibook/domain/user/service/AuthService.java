@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,89 +24,95 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final UserRepository userRepository;
-    private final PasswordEncoder passwordEncoder;
-    private final AuthenticationManager authenticationManager;
-    private final JwtTokenProvider tokenProvider;
-    private final RefreshTokenService refreshTokenService;
-    private final EmailOtpService emailOtpService;
+    private final UserRepository           userRepository;
+    private final PasswordEncoder          passwordEncoder;
+    private final AuthenticationManager    authenticationManager;
+    private final JwtTokenProvider         tokenProvider;
+    private final RefreshTokenService      refreshTokenService;
+    private final EmailOtpService          emailOtpService;
+    private final PasswordResetService     passwordResetService;
+    private final EmailVerificationService emailVerificationService;
+
+    // ─── Register ────────────────────────────────────────────────────────────
 
     @Transactional
-    public UserResponse register(RegisterRequest request) {
+    public TokenResponse register(RegisterRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new MediBookException("Email already registered", HttpStatus.CONFLICT, "EMAIL_TAKEN");
         }
 
-        User user = User.builder()
+        User saved = userRepository.save(User.builder()
                 .email(request.getEmail().toLowerCase())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .phone(request.getPhone())
+                .dateOfBirth(request.getDob())
                 .role(Role.ROLE_PATIENT)
-                .build();
+                .build());
 
-        User saved = userRepository.save(user);
-        log.info("New user registered: {}", saved.getEmail());
-        return UserResponse.fromUser(saved);
+        log.info("New patient registered: id={} email={}", saved.getId(), saved.getEmail());
+
+        String verifyToken = emailVerificationService.createToken(saved.getId());
+        emailVerificationService.sendVerificationEmail(saved.getEmail(), verifyToken);
+
+        return buildTokenResponse(saved);
     }
 
-    @Transactional
+    // ─── Login ───────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
     public TokenResponse login(LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
-
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User", "email", request.getEmail()));
-
-        if (user.isTwoFactorEnabled()) {
-            String otp = emailOtpService.generateAndStore(user.getEmail());
-            emailOtpService.sendOtpEmail(user.getEmail(), otp);
-            return TokenResponse.builder().twoFactorRequired(true).build();
+        Authentication auth;
+        try {
+            auth = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+        } catch (AuthenticationException ex) {
+            log.warn("Failed login attempt for: {} — {}", request.getEmail(), ex.getClass().getSimpleName());
+            throw ex;
         }
 
-        return issueTokenPair(authentication);
+        UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+        if (principal.isTwoFactorEnabled()) {
+            String otp = emailOtpService.generateAndStore(principal.getEmail());
+            emailOtpService.sendOtpEmail(principal.getEmail(), otp);
+            return TokenResponse.twoFactorChallenge();
+        }
+
+        // UserPrincipal already holds all fields from the auth query — no second DB round-trip
+        return issueTokenPair(auth);
     }
 
-    @Transactional
+    // ─── Two-Factor ──────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
     public TokenResponse verifyTwoFactor(TwoFactorVerifyRequest request) {
         emailOtpService.verify(request.getEmail(), request.getOtp());
 
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "email", request.getEmail()));
 
-        UserPrincipal principal = UserPrincipal.fromUser(user);
-        Authentication authentication = new UsernamePasswordAuthenticationToken(
-                principal, null, principal.getAuthorities());
-
-        return issueTokenPair(authentication);
+        return buildTokenResponse(user);
     }
 
-    @Transactional
-    public void enableTwoFactor(Long userId) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
-        user.setTwoFactorEnabled(true);
-        userRepository.save(user);
-        log.info("2FA enabled for user {}", userId);
-    }
+    // ─── Token Lifecycle ─────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public TokenResponse refresh(RefreshTokenRequest request) {
-        Long userId = refreshTokenService.validateAndGetUserId(request.getRefreshToken());
-        String newRefreshToken = refreshTokenService.rotate(request.getRefreshToken());
+        // rotate() validates the token and returns both userId and the new token atomically
+        var rotation = refreshTokenService.rotate(request.getRefreshToken());
 
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        User user = userRepository.findById(rotation.userId())
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", rotation.userId()));
 
         String accessToken = tokenProvider.generateAccessTokenFromUserId(
-                userId, user.getEmail(), user.getRole().name());
+                rotation.userId(), user.getEmail(), user.getRole().name());
 
         return TokenResponse.builder()
                 .accessToken(accessToken)
-                .refreshToken(newRefreshToken)
-                .expiresIn(900000L)
+                .refreshToken(rotation.newToken())
+                .tokenType("Bearer")
+                .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
                 .build();
     }
 
@@ -113,14 +120,93 @@ public class AuthService {
         refreshTokenService.revoke(refreshToken);
     }
 
+    // ─── Password Reset ──────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public void forgotPassword(ForgotPasswordRequest request) {
+        // No enumeration: always 204 — only send email when user exists
+        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+            String token = passwordResetService.createToken(user.getId());
+            passwordResetService.sendResetEmail(user.getEmail(), token);
+        });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        Long userId = passwordResetService.validateAndConsume(request.getToken());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+        log.info("Password reset completed for userId={}", userId);
+    }
+
+    // ─── Email Verification ──────────────────────────────────────────────────
+
+    @Transactional
+    public void verifyEmail(EmailVerifyRequest request) {
+        Long userId = emailVerificationService.validateAndConsume(request.getToken());
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        user.setActive(true);
+        userRepository.save(user);
+        log.info("Email verified for userId={}", userId);
+    }
+
+    @Transactional(readOnly = true)
+    public void resendVerificationEmail(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        if (user.isActive()) {
+            throw new MediBookException("Email is already verified", HttpStatus.BAD_REQUEST, "ALREADY_VERIFIED");
+        }
+        String token = emailVerificationService.createToken(userId);
+        emailVerificationService.sendVerificationEmail(user.getEmail(), token);
+    }
+
+    // ─── 2FA Toggle ──────────────────────────────────────────────────────────
+
+    @Transactional
+    public void enableTwoFactor(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        user.setTwoFactorEnabled(true);
+        userRepository.save(user);
+        log.info("2FA enabled for userId={}", userId);
+    }
+
+    // ─── Internal helpers ────────────────────────────────────────────────────
+
+    /**
+     * Issues a token pair from a fully-authenticated principal.
+     * The principal was loaded during auth — no extra DB query needed.
+     */
     private TokenResponse issueTokenPair(Authentication auth) {
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
-        String accessToken = tokenProvider.generateAccessToken(auth);
+        String accessToken  = tokenProvider.generateAccessToken(auth);
         String refreshToken = refreshTokenService.createRefreshToken(principal.getId());
         return TokenResponse.builder()
+                .user(principal.toUserResponse())
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
-                .expiresIn(900000L)
+                .tokenType("Bearer")
+                .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
+                .build();
+    }
+
+    /**
+     * Issues a token pair from a User entity (register, 2FA verify paths).
+     */
+    private TokenResponse buildTokenResponse(User user) {
+        String accessToken  = tokenProvider.generateAccessTokenFromUserId(
+                user.getId(), user.getEmail(), user.getRole().name());
+        String refreshToken = refreshTokenService.createRefreshToken(user.getId());
+        return TokenResponse.builder()
+                .user(UserResponse.fromUser(user))
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
                 .build();
     }
 }

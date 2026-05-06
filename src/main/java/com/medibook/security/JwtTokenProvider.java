@@ -59,16 +59,6 @@ public class JwtTokenProvider {
                 .compact();
     }
 
-    public String generateRefreshToken(Long userId) {
-        return Jwts.builder()
-                .subject(String.valueOf(userId))
-                .claim("type", "REFRESH")
-                .issuedAt(new Date())
-                .expiration(new Date(System.currentTimeMillis() + refreshTokenExpirationMs))
-                .signWith(secretKey)
-                .compact();
-    }
-
     public Claims parseToken(String token) {
         return Jwts.parser()
                 .verifyWith(secretKey)
@@ -97,6 +87,10 @@ public class JwtTokenProvider {
             log.warn("JWT claims empty: {}", e.getMessage());
         }
         return false;
+    }
+
+    public long getAccessTokenExpirationMs() {
+        return accessTokenExpirationMs;
     }
 
     public long getRefreshTokenExpirationMs() {

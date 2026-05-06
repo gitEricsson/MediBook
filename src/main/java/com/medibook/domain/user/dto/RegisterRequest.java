@@ -1,9 +1,9 @@
 package com.medibook.domain.user.dto;
 
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.constraints.*;
 import lombok.Data;
+
+import java.time.LocalDate;
 
 @Data
 public class RegisterRequest {
@@ -22,8 +22,18 @@ public class RegisterRequest {
 
     @NotBlank(message = "Password is required")
     @Size(min = 8, max = 100, message = "Password must be between 8 and 100 characters")
+    @Pattern(
+        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[^A-Za-z0-9]).+$",
+        message = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
+    )
     private String password;
 
-    @Size(max = 20)
+    @Pattern(
+        regexp = "^\\+?[0-9]{7,20}$",
+        message = "Phone must be 7–20 digits, optionally prefixed with +"
+    )
     private String phone;
+
+    @Past(message = "Date of birth must be in the past")
+    private LocalDate dob;
 }

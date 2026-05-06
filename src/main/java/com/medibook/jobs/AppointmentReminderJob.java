@@ -10,6 +10,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 
 /**
@@ -26,8 +27,11 @@ public class AppointmentReminderJob {
 
     @Scheduled(fixedRate = 3_600_000, initialDelay = 60_000)  // every hour
     public void sendReminders() {
-        LocalDateTime from = LocalDateTime.now().plusHours(23);
-        LocalDateTime to   = LocalDateTime.now().plusHours(25);
+        // Truncate to the current hour so the 1-hour window is deterministic regardless of
+        // when within the hour the job fires — prevents duplicate reminders on overlapping runs.
+        LocalDateTime now  = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
+        LocalDateTime from = now.plusHours(23);
+        LocalDateTime to   = now.plusHours(24);
 
         List<Appointment> upcoming = appointmentRepository.findUpcomingConfirmed(from, to);
         log.info("ReminderJob: found {} upcoming appointments", upcoming.size());

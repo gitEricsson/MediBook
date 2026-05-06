@@ -25,7 +25,13 @@ import java.time.Duration;
 @RequiredArgsConstructor
 public class EmailOtpService {
 
-    private static final String OTP_KEY_PREFIX = "otp:";
+    private static final String OTP_KEY_PREFIX     = "otp:code:";
+    private static final String OTP_GEN_PREFIX     = "otp:gen:";
+    private static final String OTP_FAIL_PREFIX    = "otp:fail:";
+    private static final int    MAX_GEN_PER_WINDOW = 3;
+    private static final int    MAX_VERIFY_FAILS   = 5;
+    private static final long   LOCKOUT_MINUTES    = 15;
+
     private final SecureRandom secureRandom = new SecureRandom();
 
     private final RedisTemplate<String, Object> redisTemplate;
@@ -40,6 +46,17 @@ public class EmailOtpService {
     // ─── Generate & Store ────────────────────────────────────────────────────
 
     public String generateAndStore(String email) {
+        String genKey = OTP_GEN_PREFIX + email;
+        Long genCount = redisTemplate.opsForValue().increment(genKey);
+        if (genCount != null && genCount == 1) {
+            redisTemplate.expire(genKey, Duration.ofMinutes(otpExpirationMinutes));
+        }
+        if (genCount != null && genCount > MAX_GEN_PER_WINDOW) {
+            throw new MediBookException(
+                    "Too many OTP requests. Please wait " + otpExpirationMinutes + " minutes before retrying.",
+                    HttpStatus.TOO_MANY_REQUESTS, "OTP_RATE_LIMITED");
+        }
+
         String otp = String.format("%06d", secureRandom.nextInt(1_000_000));
         redisTemplate.opsForValue().set(
                 OTP_KEY_PREFIX + email,
@@ -51,18 +68,31 @@ public class EmailOtpService {
     // ─── Verify ──────────────────────────────────────────────────────────────
 
     public void verify(String email, String otp) {
-        String key = OTP_KEY_PREFIX + email;
-        Object stored = redisTemplate.opsForValue().get(key);
+        String codeKey = OTP_KEY_PREFIX + email;
+        String failKey = OTP_FAIL_PREFIX + email;
 
+        Object failCount = redisTemplate.opsForValue().get(failKey);
+        if (failCount != null && Integer.parseInt(failCount.toString()) >= MAX_VERIFY_FAILS) {
+            throw new MediBookException(
+                    "Account temporarily locked due to too many failed attempts. Try again in " + LOCKOUT_MINUTES + " minutes.",
+                    HttpStatus.TOO_MANY_REQUESTS, "OTP_LOCKED");
+        }
+
+        Object stored = redisTemplate.opsForValue().get(codeKey);
         if (stored == null) {
             throw new MediBookException("OTP expired or not found", HttpStatus.UNAUTHORIZED, "OTP_EXPIRED");
         }
         if (!stored.toString().equals(otp)) {
+            Long fails = redisTemplate.opsForValue().increment(failKey);
+            if (fails != null && fails == 1) {
+                redisTemplate.expire(failKey, Duration.ofMinutes(LOCKOUT_MINUTES));
+            }
             throw new MediBookException("Invalid OTP", HttpStatus.UNAUTHORIZED, "OTP_INVALID");
         }
 
-        // Invalidate immediately after successful use
-        redisTemplate.delete(key);
+        // Invalidate code and clear failure counter on success
+        redisTemplate.delete(codeKey);
+        redisTemplate.delete(failKey);
     }
 
     // ─── Send Email ──────────────────────────────────────────────────────────

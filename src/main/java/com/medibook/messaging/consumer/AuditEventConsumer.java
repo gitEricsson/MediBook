@@ -25,11 +25,8 @@ public class AuditEventConsumer {
     public void onAuditEvent(ConsumerRecord<String, AuditEvent> record, Acknowledgment ack) {
         AuditEvent event = record.value();
         log.debug("Consuming AuditEvent [{}] action={}", event.getEventId(), event.getAction());
-        try {
-            auditLogService.persist(event);
-            ack.acknowledge();
-        } catch (Exception ex) {
-            log.error("Failed to persist AuditEvent [{}]: {}", event.getEventId(), ex.getMessage());
-        }
+        // Exceptions propagate to the container's DefaultErrorHandler (retry + DLT routing)
+        auditLogService.persist(event);
+        ack.acknowledge();
     }
 }

@@ -2,6 +2,7 @@ package com.medibook.domain.appointment.service;
 
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.security.UserPrincipal;
 import com.medibook.domain.appointment.dto.AppointmentRequest;
 import com.medibook.domain.appointment.dto.AppointmentResponse;
 import com.medibook.domain.appointment.entity.Appointment;
@@ -21,6 +22,7 @@ import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -35,7 +37,6 @@ public class AppointmentService {
     private final UserRepository userRepository;
     private final AppointmentEventProducer eventProducer;
 
-    @CacheEvict(value = "appointments", allEntries = true)
     @Bulkhead(name = "appointmentService")
     @Transactional
     public AppointmentResponse book(Long patientId, AppointmentRequest request) {
@@ -60,7 +61,14 @@ public class AppointmentService {
                 .status(AppointmentStatus.PENDING)
                 .build();
 
-        Appointment saved = appointmentRepository.save(appointment);
+        Appointment saved;
+        try {
+            saved = appointmentRepository.save(appointment);
+        } catch (DataIntegrityViolationException ex) {
+            // DB-level constraint violation (race condition: two requests beat the app-level check)
+            throw new MediBookException("Doctor is not available at the requested time",
+                    HttpStatus.CONFLICT, "SLOT_TAKEN");
+        }
 
         // Publish Kafka event
         eventProducer.publishAppointmentEvent(buildEvent(saved, "BOOKED"));
@@ -74,8 +82,13 @@ public class AppointmentService {
 
     @CacheEvict(value = "appointments", key = "#id")
     @Transactional
-    public AppointmentResponse confirm(Long id, Long doctorUserId) {
+    public AppointmentResponse confirm(Long id, UserPrincipal principal) {
         Appointment appt = getAndValidate(id);
+        boolean isAdmin = principal.hasRole("ROLE_ADMIN");
+        if (!isAdmin && !appt.getDoctor().getUser().getId().equals(principal.getId())) {
+            throw new MediBookException("Only the assigned doctor can confirm this appointment",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
         appt.setStatus(AppointmentStatus.CONFIRMED);
         Appointment saved = appointmentRepository.save(appt);
         eventProducer.publishAppointmentEvent(buildEvent(saved, "CONFIRMED"));
@@ -84,11 +97,18 @@ public class AppointmentService {
 
     @CacheEvict(value = "appointments", key = "#id")
     @Transactional
-    public AppointmentResponse cancel(Long id) {
+    public AppointmentResponse cancel(Long id, UserPrincipal principal) {
         Appointment appt = getAndValidate(id);
         if (appt.getStatus() == AppointmentStatus.COMPLETED) {
             throw new MediBookException("Cannot cancel a completed appointment",
                     HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
+        }
+        boolean isAdmin = principal.hasRole("ROLE_ADMIN");
+        boolean isPatient = appt.getPatient().getId().equals(principal.getId());
+        boolean isAssignedDoctor = appt.getDoctor().getUser().getId().equals(principal.getId());
+        if (!isAdmin && !isPatient && !isAssignedDoctor) {
+            throw new MediBookException("Not authorized to cancel this appointment",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
         appt.setStatus(AppointmentStatus.CANCELLED);
         Appointment saved = appointmentRepository.save(appt);

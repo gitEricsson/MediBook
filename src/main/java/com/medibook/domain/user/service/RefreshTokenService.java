@@ -4,7 +4,9 @@ import com.medibook.common.exception.MediBookException;
 import com.medibook.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisOperations;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
@@ -46,11 +48,23 @@ public class RefreshTokenService {
         return Long.parseLong(userId.toString());
     }
 
-    /** Rotate: revoke old token, issue new one */
+    /** Rotate: atomically revoke old token and issue new one via Redis pipeline */
+    @SuppressWarnings("unchecked")
     public String rotate(String oldToken) {
         Long userId = validateAndGetUserId(oldToken);
-        revoke(oldToken);
-        return createRefreshToken(userId);
+        String newToken = UUID.randomUUID().toString();
+        Duration expiration = Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs());
+
+        redisTemplate.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) {
+                operations.delete(PREFIX + oldToken);
+                operations.opsForValue().set(REVOKED_PREFIX + oldToken, "1", expiration);
+                operations.opsForValue().set(PREFIX + newToken, String.valueOf(userId), expiration);
+                return null;
+            }
+        });
+        return newToken;
     }
 
     public void revoke(String token) {

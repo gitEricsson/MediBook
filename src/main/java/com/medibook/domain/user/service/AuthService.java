@@ -12,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -52,16 +53,21 @@ public class AuthService {
 
     @Transactional
     public TokenResponse login(LoginRequest request) {
-        Authentication authentication = authenticationManager.authenticate(
-                new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
-        );
+        Authentication authentication;
+        try {
+            authentication = authenticationManager.authenticate(
+                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            );
+        } catch (BadCredentialsException ex) {
+            log.warn("Failed login attempt for email: {}", request.getEmail());
+            throw ex;
+        }
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User", "email", request.getEmail()));
-
-        if (user.isTwoFactorEnabled()) {
-            String otp = emailOtpService.generateAndStore(user.getEmail());
-            emailOtpService.sendOtpEmail(user.getEmail(), otp);
+        // User already loaded by CustomUserDetailsService — no second DB query needed
+        UserPrincipal principal = (UserPrincipal) authentication.getPrincipal();
+        if (principal.isTwoFactorEnabled()) {
+            String otp = emailOtpService.generateAndStore(principal.getEmail());
+            emailOtpService.sendOtpEmail(principal.getEmail(), otp);
             return TokenResponse.builder().twoFactorRequired(true).build();
         }
 

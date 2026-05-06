@@ -27,17 +27,13 @@ public class AppointmentEventConsumer {
         AppointmentEvent event = record.value();
         log.info("Consumed AppointmentEvent [{}] type={}", event.getEventId(), event.getEventType());
 
-        try {
-            switch (event.getEventType()) {
-                case "BOOKED"    -> notificationService.sendAppointmentBooked(event);
-                case "CONFIRMED" -> notificationService.sendAppointmentConfirmed(event);
-                case "CANCELLED" -> notificationService.sendAppointmentCancelled(event);
-                default          -> log.warn("Unhandled event type: {}", event.getEventType());
-            }
-            ack.acknowledge();
-        } catch (Exception ex) {
-            log.error("Failed to process AppointmentEvent [{}]: {}", event.getEventId(), ex.getMessage());
-            // Don't ack — will be retried
+        // Exceptions propagate to the container's DefaultErrorHandler (retry + DLT routing)
+        switch (event.getEventType()) {
+            case "BOOKED"    -> notificationService.sendAppointmentBooked(event);
+            case "CONFIRMED" -> notificationService.sendAppointmentConfirmed(event);
+            case "CANCELLED" -> notificationService.sendAppointmentCancelled(event);
+            default          -> log.warn("Unhandled event type: {}", event.getEventType());
         }
+        ack.acknowledge();
     }
 }

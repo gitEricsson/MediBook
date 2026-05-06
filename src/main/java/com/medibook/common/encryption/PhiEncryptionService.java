@@ -6,11 +6,14 @@ import org.springframework.stereotype.Service;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
+import java.security.spec.KeySpec;
 import java.util.Base64;
 
 /**
@@ -28,12 +31,22 @@ public class PhiEncryptionService {
     private final SecretKey secretKey;
     private final SecureRandom secureRandom = new SecureRandom();
 
+    // Fixed application-level salt — the key itself is the secret, not this salt
+    private static final byte[] PBKDF2_SALT = "MediBook-PHI-v1-Salt".getBytes(StandardCharsets.UTF_8);
+    private static final int PBKDF2_ITERATIONS = 310_000;
+
     public PhiEncryptionService(@Value("${app.phi.encryption-key}") String rawKey) {
-        byte[] keyBytes = rawKey.getBytes(StandardCharsets.UTF_8);
-        // Pad or truncate to 32 bytes (AES-256)
-        byte[] key256 = new byte[32];
-        System.arraycopy(keyBytes, 0, key256, 0, Math.min(keyBytes.length, 32));
-        this.secretKey = new SecretKeySpec(key256, "AES");
+        if (rawKey == null || rawKey.isBlank()) {
+            throw new IllegalStateException("PHI_ENCRYPTION_KEY environment variable must be set");
+        }
+        try {
+            SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");
+            KeySpec spec = new PBEKeySpec(rawKey.toCharArray(), PBKDF2_SALT, PBKDF2_ITERATIONS, 256);
+            byte[] keyBytes = factory.generateSecret(spec).getEncoded();
+            this.secretKey = new SecretKeySpec(keyBytes, "AES");
+        } catch (Exception e) {
+            throw new IllegalStateException("Failed to derive PHI encryption key", e);
+        }
     }
 
     public String encrypt(String plaintext) {

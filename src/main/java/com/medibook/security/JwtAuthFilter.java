@@ -42,7 +42,13 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     return;
                 }
 
-                Long userId = Long.parseLong(claims.getSubject());
+                String subject = claims.getSubject();
+                if (subject == null || subject.isBlank()) {
+                    log.warn("JWT token has no subject — rejecting");
+                    filterChain.doFilter(request, response);
+                    return;
+                }
+                Long userId = Long.parseLong(subject);
                 UserDetails userDetails = userDetailsService.loadUserById(userId);
 
                 UsernamePasswordAuthenticationToken authToken =

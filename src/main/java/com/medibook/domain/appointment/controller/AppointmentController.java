@@ -66,12 +66,14 @@ public class AppointmentController {
     @Operation(summary = "Confirm an appointment (Doctor/Admin)")
     public ResponseEntity<ApiResponse<AppointmentResponse>> confirm(
             @PathVariable Long id, @CurrentUser UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(appointmentService.confirm(id, principal.getId())));
+        return ResponseEntity.ok(ApiResponse.ok(appointmentService.confirm(id, principal)));
     }
 
     @PatchMapping("/{id}/cancel")
-    @Operation(summary = "Cancel an appointment")
-    public ResponseEntity<ApiResponse<AppointmentResponse>> cancel(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(appointmentService.cancel(id)));
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "Cancel an appointment (Patient/Doctor/Admin)")
+    public ResponseEntity<ApiResponse<AppointmentResponse>> cancel(
+            @PathVariable Long id, @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(appointmentService.cancel(id, principal)));
     }
 }

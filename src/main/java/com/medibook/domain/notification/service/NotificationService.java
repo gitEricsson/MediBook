@@ -64,10 +64,10 @@ public class NotificationService {
     @Scheduled(cron = "0 0 3 * * *")
     public void purgeExpiredNotifications() {
         Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
-        long deleted = cassandraOperations.delete(
+        boolean deleted = cassandraOperations.delete(
                 Query.query(Criteria.where("created_at").lt(cutoff)),
                 Notification.class);
-        log.info("Purged {} expired notifications older than 30 days", deleted);
+        log.info("Expired notification purge completed. Any rows deleted: {}", deleted);
     }
 
     private void save(Long userId, String title, String message, String type, Long appointmentId) {

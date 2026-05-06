@@ -23,19 +23,21 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuthService — Unit Tests")
 class AuthServiceTest {
 
-    @Mock UserRepository userRepository;
-    @Mock PasswordEncoder passwordEncoder;
-    @Mock AuthenticationManager authenticationManager;
-    @Mock JwtTokenProvider tokenProvider;
-    @Mock RefreshTokenService refreshTokenService;
-    @Mock EmailOtpService emailOtpService;
+    @Mock UserRepository            userRepository;
+    @Mock PasswordEncoder           passwordEncoder;
+    @Mock AuthenticationManager     authenticationManager;
+    @Mock JwtTokenProvider          tokenProvider;
+    @Mock RefreshTokenService       refreshTokenService;
+    @Mock EmailOtpService           emailOtpService;
+    @Mock PasswordResetService      passwordResetService;
+    @Mock EmailVerificationService  emailVerificationService;
 
     @InjectMocks AuthService authService;
 
@@ -58,7 +60,7 @@ class AuthServiceTest {
     // ─── Register ────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("register — success creates user and returns response")
+    @DisplayName("register — success persists user and returns token pair with user data")
     void register_success() {
         RegisterRequest req = new RegisterRequest();
         req.setEmail("new@medibook.com");
@@ -69,11 +71,22 @@ class AuthServiceTest {
         when(userRepository.existsByEmail("new@medibook.com")).thenReturn(false);
         when(passwordEncoder.encode(any())).thenReturn("encoded");
         when(userRepository.save(any())).thenReturn(testUser);
+        when(emailVerificationService.createToken(anyLong())).thenReturn("verify-token");
+        when(tokenProvider.generateAccessTokenFromUserId(anyLong(), anyString(), anyString()))
+                .thenReturn("access-token");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
+        when(refreshTokenService.createRefreshToken(anyLong())).thenReturn("refresh-token");
 
-        UserResponse response = authService.register(req);
+        TokenResponse response = authService.register(req);
 
-        assertThat(response).isNotNull();
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
+        assertThat(response.getUser()).isNotNull();
+        assertThat(response.getUser().getEmail()).isEqualTo(testUser.getEmail());
+        assertThat(response.getTokenType()).isEqualTo("Bearer");
         verify(userRepository).save(any(User.class));
+        verify(emailVerificationService).createToken(testUser.getId());
+        verify(emailVerificationService).sendVerificationEmail(eq(testUser.getEmail()), eq("verify-token"));
     }
 
     @Test
@@ -95,7 +108,7 @@ class AuthServiceTest {
     // ─── Login ───────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("login — no 2FA, returns full JWT pair")
+    @DisplayName("login — no 2FA, returns full JWT pair without extra DB query")
     void login_noTwoFactor_returnsTokenPair() {
         LoginRequest req = new LoginRequest();
         req.setEmail("patient@medibook.com");
@@ -105,8 +118,8 @@ class AuthServiceTest {
         Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
 
         when(authenticationManager.authenticate(any())).thenReturn(auth);
-        when(userRepository.findByEmail("patient@medibook.com")).thenReturn(Optional.of(testUser));
         when(tokenProvider.generateAccessToken(auth)).thenReturn("access-token");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
         when(refreshTokenService.createRefreshToken(1L)).thenReturn("refresh-token");
 
         TokenResponse response = authService.login(req);
@@ -114,11 +127,16 @@ class AuthServiceTest {
         assertThat(response.getAccessToken()).isEqualTo("access-token");
         assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
         assertThat(response.getTwoFactorRequired()).isNull();
+        assertThat(response.getUser()).isNotNull();
+        assertThat(response.getUser().getEmail()).isEqualTo("patient@medibook.com");
+        // Verify no additional DB query was made beyond auth manager
+        verify(userRepository, never()).findByEmail(anyString());
+        verify(userRepository, never()).findById(anyLong());
     }
 
     @Test
     @DisplayName("login — 2FA enabled, returns challenge with twoFactorRequired=true")
-    void login_twoFactorEnabled_returnChallenge() {
+    void login_twoFactorEnabled_returnsChallenge() {
         testUser.setTwoFactorEnabled(true);
         LoginRequest req = new LoginRequest();
         req.setEmail("patient@medibook.com");
@@ -128,26 +146,27 @@ class AuthServiceTest {
         Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
 
         when(authenticationManager.authenticate(any())).thenReturn(auth);
-        when(userRepository.findByEmail("patient@medibook.com")).thenReturn(Optional.of(testUser));
         when(emailOtpService.generateAndStore("patient@medibook.com")).thenReturn("123456");
 
         TokenResponse response = authService.login(req);
 
         assertThat(response.getTwoFactorRequired()).isTrue();
         assertThat(response.getAccessToken()).isNull();
+        assertThat(response.getRefreshToken()).isNull();
         verify(emailOtpService).sendOtpEmail("patient@medibook.com", "123456");
     }
 
     // ─── Refresh ─────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("refresh — valid token rotates and issues new access token")
+    @DisplayName("refresh — valid token rotates atomically and issues new access token")
     void refresh_valid_rotatesToken() {
-        when(refreshTokenService.validateAndGetUserId("old-token")).thenReturn(1L);
-        when(refreshTokenService.rotate("old-token")).thenReturn("new-refresh");
+        var rotationResult = new RefreshTokenService.RotationResult(1L, "new-refresh");
+        when(refreshTokenService.rotate("old-token")).thenReturn(rotationResult);
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(tokenProvider.generateAccessTokenFromUserId(1L, "patient@medibook.com", "ROLE_PATIENT"))
                 .thenReturn("new-access");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
 
         RefreshTokenRequest req = new RefreshTokenRequest();
         req.setRefreshToken("old-token");
@@ -156,6 +175,8 @@ class AuthServiceTest {
 
         assertThat(response.getAccessToken()).isEqualTo("new-access");
         assertThat(response.getRefreshToken()).isEqualTo("new-refresh");
+        // Verify no redundant validateAndGetUserId call
+        verify(refreshTokenService, never()).validateAndGetUserId(anyString());
     }
 
     // ─── Logout ──────────────────────────────────────────────────────────────
@@ -165,5 +186,49 @@ class AuthServiceTest {
     void logout_revokesToken() {
         authService.logout("some-token");
         verify(refreshTokenService).revoke("some-token");
+    }
+
+    // ─── Forgot Password ─────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("forgotPassword — existing user triggers reset email")
+    void forgotPassword_existingUser_sendsEmail() {
+        ForgotPasswordRequest req = new ForgotPasswordRequest();
+        req.setEmail("patient@medibook.com");
+
+        when(userRepository.findByEmail("patient@medibook.com")).thenReturn(Optional.of(testUser));
+        when(passwordResetService.createToken(1L)).thenReturn("reset-token");
+
+        authService.forgotPassword(req);
+
+        verify(passwordResetService).createToken(1L);
+        verify(passwordResetService).sendResetEmail("patient@medibook.com", "reset-token");
+    }
+
+    @Test
+    @DisplayName("forgotPassword — unknown email is silently ignored (no enumeration)")
+    void forgotPassword_unknownEmail_noOp() {
+        ForgotPasswordRequest req = new ForgotPasswordRequest();
+        req.setEmail("nobody@medibook.com");
+
+        when(userRepository.findByEmail("nobody@medibook.com")).thenReturn(Optional.empty());
+
+        authService.forgotPassword(req);
+
+        verify(passwordResetService, never()).createToken(anyLong());
+        verify(passwordResetService, never()).sendResetEmail(anyString(), anyString());
+    }
+
+    // ─── Email Verification ──────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("resendVerificationEmail — already verified throws BAD_REQUEST")
+    void resendVerification_alreadyVerified_throws() {
+        testUser.setActive(true);
+        when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
+
+        assertThatThrownBy(() -> authService.resendVerificationEmail(1L))
+                .isInstanceOf(MediBookException.class)
+                .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.BAD_REQUEST));
     }
 }

@@ -108,6 +108,8 @@ app:
     encryption-key: ${PHI_ENCRYPTION_KEY}
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+  frontend:
+    url: ${FRONTEND_URL:http://localhost:3000}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:

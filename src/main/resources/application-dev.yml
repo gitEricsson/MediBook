@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/medibook_dev?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: medibook
+    password: medibook
+  jpa:
+    show-sql: true
+  data:
+    cassandra:
+      contact-points: localhost
+      port: 9042
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+  mail:
+    host: localhost
+    port: 1025  # MailHog for local dev
+
+logging:
+  level:
+    com.medibook: DEBUG
+    org.springframework.security: DEBUG

@@ -1,0 +1,16 @@
+spring:
+  flyway:
+    enabled: false          # Testcontainers manages schema via init SQL
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+  data:
+    cassandra:
+      schema-action: RECREATE
+  kafka:
+    bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
+
+logging:
+  level:
+    com.medibook: DEBUG

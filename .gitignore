@@ -1,0 +1,41 @@
+# ─── Build output ────────────────────────────────────────────────────────────
+target/
+!.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+# ─── IDE ─────────────────────────────────────────────────────────────────────
+.idea/
+*.iml
+*.iws
+*.ipr
+.vscode/
+*.swp
+*.swo
+*.DS_Store
+
+# ─── Spring Boot ─────────────────────────────────────────────────────────────
+*.log
+logs/
+spring.log
+
+# ─── Secrets — NEVER commit ──────────────────────────────────────────────────
+.env
+*.env
+application-prod.yml
+**/secrets/
+
+# ─── Docker ──────────────────────────────────────────────────────────────────
+docker/volumes/
+
+# ─── Maven wrapper ───────────────────────────────────────────────────────────
+.mvn/wrapper/maven-wrapper.properties
+
+# ─── Jacoco ──────────────────────────────────────────────────────────────────
+**/jacoco.exec
+**/site/jacoco/
+
+# ─── OS ──────────────────────────────────────────────────────────────────────
+Thumbs.db
+ehthumbs.db
+Desktop.ini

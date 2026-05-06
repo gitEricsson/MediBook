@@ -1,0 +1,95 @@
+---
+# MediBook Kubernetes Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: medibook-app
+  namespace: medibook
+  labels:
+    app: medibook
+    version: "1.0.0"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: medibook
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: medibook
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+      containers:
+        - name: medibook
+          image: medibook/app:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: "prod"
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: db-host
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: db-password
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: jwt-secret
+            - name: PHI_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: phi-encryption-key
+            - name: REDIS_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: redis-host
+            - name: KAFKA_BROKERS
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: kafka-brokers
+            - name: CASSANDRA_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: cassandra-host
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "1000m"
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+      terminationGracePeriodSeconds: 60

@@ -1,0 +1,185 @@
+spring:
+  application:
+    name: medibook
+
+  # ─── Java 21 Virtual Threads ────────────────────────────────────────────
+  threads:
+    virtual:
+      enabled: true
+
+  # ─── MySQL / HikariCP ───────────────────────────────────────────────────
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:medibook}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:medibook}
+    password: ${DB_PASSWORD:medibook}
+    hikari:
+      pool-name: MediBook-HikariCP
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 600000
+      connection-timeout: 30000
+      max-lifetime: 1800000
+      leak-detection-threshold: 15000
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+        format_sql: true
+        default_batch_fetch_size: 25
+
+  # ─── Flyway ─────────────────────────────────────────────────────────────
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+  # ─── Cassandra ──────────────────────────────────────────────────────────
+  data:
+    cassandra:
+      keyspace-name: ${CASSANDRA_KEYSPACE:medibook}
+      contact-points: ${CASSANDRA_HOST:localhost}
+      port: ${CASSANDRA_PORT:9042}
+      local-datacenter: ${CASSANDRA_DATACENTER:datacenter1}
+      username: ${CASSANDRA_USER:cassandra}
+      password: ${CASSANDRA_PASSWORD:cassandra}
+      schema-action: CREATE_IF_NOT_EXISTS
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      timeout: 2000ms
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 1000ms
+
+  # ─── Kafka ──────────────────────────────────────────────────────────────
+  kafka:
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+      retries: 3
+      properties:
+        spring.json.add.type.headers: false
+        acks: all
+        enable.idempotence: true
+    consumer:
+      group-id: medibook-group
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring.json.trusted.packages: "com.medibook.messaging.event"
+    listener:
+      ack-mode: MANUAL_IMMEDIATE
+      concurrency: 3
+
+  # ─── Email ──────────────────────────────────────────────────────────────
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
+# ─── JWT ────────────────────────────────────────────────────────────────────
+app:
+  jwt:
+    secret: ${JWT_SECRET:medibook-super-secret-key-must-be-at-least-256-bits-long-for-hs256}
+    access-token-expiration-ms: 900000        # 15 min
+    refresh-token-expiration-ms: 604800000    # 7 days
+  otp:
+    expiration-minutes: 5
+    length: 6
+  phi:
+    encryption-key: ${PHI_ENCRYPTION_KEY:medibook-phi-aes256-encryption-key!}
+  cors:
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+
+# ─── Resilience4j ───────────────────────────────────────────────────────────
+resilience4j:
+  bulkhead:
+    instances:
+      appointmentService:
+        max-concurrent-calls: 20
+        max-wait-duration: 500ms
+      patientService:
+        max-concurrent-calls: 15
+        max-wait-duration: 500ms
+      doctorService:
+        max-concurrent-calls: 15
+        max-wait-duration: 500ms
+      notificationService:
+        max-concurrent-calls: 30
+        max-wait-duration: 200ms
+  thread-pool-bulkhead:
+    instances:
+      reportService:
+        max-thread-pool-size: 4
+        core-thread-pool-size: 2
+        queue-capacity: 10
+  rate-limiter:
+    instances:
+      authEndpoint:
+        limit-for-period: 5
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+      apiEndpoint:
+        limit-for-period: 100
+        limit-refresh-period: 1m
+        timeout-duration: 0s
+  circuit-breaker:
+    instances:
+      kafkaProducer:
+        failure-rate-threshold: 50
+        slow-call-rate-threshold: 80
+        slow-call-duration-threshold: 3s
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 5
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+      cassandraWrite:
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 20s
+        sliding-window-size: 10
+
+# ─── Springdoc / Swagger ────────────────────────────────────────────────────
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: alpha
+
+# ─── Actuator ───────────────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ─── Logging ────────────────────────────────────────────────────────────────
+logging:
+  level:
+    com.medibook: INFO
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"

@@ -27,6 +27,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -40,8 +42,9 @@ public class AppointmentService {
     @Bulkhead(name = "appointmentService")
     @Transactional
     public AppointmentResponse book(Long patientId, AppointmentRequest request) {
-        // Conflict check
-        if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt())) {
+        LocalDateTime endTime = request.getScheduledAt().plusMinutes(request.getDurationMins());
+
+        if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt(), endTime)) {
             throw new MediBookException("Doctor is not available at the requested time",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
@@ -52,10 +55,17 @@ public class AppointmentService {
         Doctor doctor = doctorRepository.findByIdWithDetails(request.getDoctorId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", request.getDoctorId()));
 
+        if (!doctor.isActive()) {
+            throw new MediBookException("Doctor is not currently accepting appointments",
+                    HttpStatus.CONFLICT, "DOCTOR_INACTIVE");
+        }
+
         Appointment appointment = Appointment.builder()
                 .patient(patient)
                 .doctor(doctor)
+                .department(doctor.getDepartment())
                 .scheduledAt(request.getScheduledAt())
+                .endTime(endTime)
                 .durationMins(request.getDurationMins())
                 .reason(request.getReason())
                 .status(AppointmentStatus.PENDING)
@@ -84,14 +94,22 @@ public class AppointmentService {
     @Transactional
     public AppointmentResponse confirm(Long id, UserPrincipal principal) {
         Appointment appt = getAndValidate(id);
+
+        if (appt.getStatus() != AppointmentStatus.PENDING) {
+            throw new MediBookException("Only PENDING appointments can be confirmed",
+                    HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
+        }
+
         boolean isAdmin = principal.hasRole("ROLE_ADMIN");
         if (!isAdmin && !appt.getDoctor().getUser().getId().equals(principal.getId())) {
             throw new MediBookException("Only the assigned doctor can confirm this appointment",
                     HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
+
         appt.setStatus(AppointmentStatus.CONFIRMED);
         Appointment saved = appointmentRepository.save(appt);
         eventProducer.publishAppointmentEvent(buildEvent(saved, "CONFIRMED"));
+        eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), "APPOINTMENT_CONFIRMED"));
         return AppointmentResponse.fromEntity(saved);
     }
 
@@ -99,10 +117,12 @@ public class AppointmentService {
     @Transactional
     public AppointmentResponse cancel(Long id, UserPrincipal principal) {
         Appointment appt = getAndValidate(id);
+
         if (appt.getStatus() == AppointmentStatus.COMPLETED) {
             throw new MediBookException("Cannot cancel a completed appointment",
                     HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
+
         boolean isAdmin = principal.hasRole("ROLE_ADMIN");
         boolean isPatient = appt.getPatient().getId().equals(principal.getId());
         boolean isAssignedDoctor = appt.getDoctor().getUser().getId().equals(principal.getId());
@@ -110,9 +130,14 @@ public class AppointmentService {
             throw new MediBookException("Not authorized to cancel this appointment",
                     HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
+
         appt.setStatus(AppointmentStatus.CANCELLED);
+        appt.setCancelledAt(LocalDateTime.now());
+        appt.setCancelledBy(userRepository.getReferenceById(principal.getId()));
+
         Appointment saved = appointmentRepository.save(appt);
         eventProducer.publishAppointmentEvent(buildEvent(saved, "CANCELLED"));
+        eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), "APPOINTMENT_CANCELLED"));
         return AppointmentResponse.fromEntity(saved);
     }
 

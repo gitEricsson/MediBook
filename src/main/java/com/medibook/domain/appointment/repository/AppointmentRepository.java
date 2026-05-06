@@ -4,6 +4,7 @@ import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
@@ -15,30 +16,45 @@ import java.util.Optional;
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
+    // EntityGraph prevents N+1 on list endpoints — eager-loads patient, doctor, doctor.user, doctor.department
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Page<Appointment> findByPatientId(Long patientId, Pageable pageable);
 
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Page<Appointment> findByDoctorId(Long doctorId, Pageable pageable);
 
     Page<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);
 
-    @Query("SELECT a FROM Appointment a JOIN FETCH a.patient JOIN FETCH a.doctor WHERE a.id = :id")
+    // JOIN FETCH doctor.user and doctor.department so fromEntity() never triggers lazy loads
+    @Query("""
+           SELECT a FROM Appointment a
+           JOIN FETCH a.patient
+           JOIN FETCH a.doctor d
+           JOIN FETCH d.user
+           JOIN FETCH d.department
+           WHERE a.id = :id
+           """)
     Optional<Appointment> findByIdWithDetails(Long id);
 
     /** Used by reminder job — upcoming appointments in the next window */
     @Query("""
            SELECT a FROM Appointment a
-           JOIN FETCH a.patient JOIN FETCH a.doctor
+           JOIN FETCH a.patient
+           JOIN FETCH a.doctor d
+           JOIN FETCH d.user
+           JOIN FETCH d.department
            WHERE a.scheduledAt BETWEEN :from AND :to
            AND a.status = 'CONFIRMED'
            """)
     List<Appointment> findUpcomingConfirmed(LocalDateTime from, LocalDateTime to);
 
-    /** Conflict check — same doctor slot */
+    /** Conflict check — overlapping time range for the same doctor */
     @Query("""
            SELECT COUNT(a) > 0 FROM Appointment a
            WHERE a.doctor.id = :doctorId
-           AND a.scheduledAt = :scheduledAt
+           AND a.scheduledAt < :endTime
+           AND a.endTime > :scheduledAt
            AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
            """)
-    boolean existsConflict(Long doctorId, LocalDateTime scheduledAt);
+    boolean existsConflict(Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
 }

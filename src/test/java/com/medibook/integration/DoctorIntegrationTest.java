@@ -199,7 +199,6 @@ class DoctorIntegrationTest {
         DoctorRequest req = new DoctorRequest();
         req.setUserId(newDoctorUserId);
         req.setDepartmentId(departmentId);
-        // licenseNumber not set
         mockMvc.perform(post("/api/v1/doctors")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType(MediaType.APPLICATION_JSON)

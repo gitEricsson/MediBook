@@ -21,6 +21,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -45,13 +46,12 @@ public class DoctorSearchService {
         Specification<Doctor> spec = Specification.where(null);
 
         if (query != null && !query.isBlank()) {
-            spec = spec.and((root, q, cb) -> 
-                cb.or(
-                    cb.like(cb.lower(root.get("user").get("firstName")), "%" + query.toLowerCase() + "%"),
-                    cb.like(cb.lower(root.get("user").get("lastName")), "%" + query.toLowerCase() + "%"),
-                    cb.like(cb.lower(root.get("specialization")), "%" + query.toLowerCase() + "%")
-                )
-            );
+            String booleanQuery = query.trim() + "*";
+            List<Long> matchedIds = doctorRepository.findIdsByFullText(booleanQuery);
+            if (matchedIds.isEmpty()) {
+                return Page.empty(pageable);
+            }
+            spec = spec.and((root, q, cb) -> root.get("id").in(matchedIds));
         }
 
         if (departmentIds != null && !departmentIds.isEmpty()) {
@@ -66,7 +66,6 @@ public class DoctorSearchService {
             spec = spec.and((root, q, cb) -> cb.equal(root.get("acceptingNew"), acceptingNew));
         }
 
-        // Always only show active doctors
         spec = spec.and((root, q, cb) -> cb.isTrue(root.get("isActive")));
 
         return doctorRepository.findAll(spec, pageable).map(DoctorResponse::fromEntity);
@@ -85,50 +84,58 @@ public class DoctorSearchService {
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
         int slotDuration = doctor.getSlotDurationMins();
 
-        List<AvailabilityGridResponse.DaySlots> days = new ArrayList<>();
-        
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
-        List<Appointment> existingAppointments = appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
-                doctorId, from.atStartOfDay(), to.plusDays(1).atStartOfDay());
 
+        Set<LocalDateTime> bookedSlots = appointmentRepository
+                .findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
+                        doctorId, from.atStartOfDay(), to.plusDays(1).atStartOfDay())
+                .stream()
+                .map(Appointment::getScheduledAt)
+                .collect(Collectors.toSet());
+
+        List<LocalDateTime> allSlotStarts = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
-            final LocalDate currentDate = date;
             int dayOfWeek = date.getDayOfWeek().getValue();
-            
-            List<DoctorWorkingHours> dailyHours = workingHours.stream()
-                    .filter(h -> h.getDayOfWeek() == dayOfWeek)
-                    .collect(Collectors.toList());
-
-            List<AvailabilityGridResponse.SlotInfo> slots = new ArrayList<>();
-
-            for (DoctorWorkingHours hours : dailyHours) {
+            for (DoctorWorkingHours hours : workingHours) {
+                if (hours.getDayOfWeek() != dayOfWeek) continue;
                 LocalTime current = hours.getStartTime();
                 while (current.isBefore(hours.getEndTime())) {
-                    LocalDateTime start = currentDate.atTime(current);
-                    LocalDateTime end = start.plusMinutes(30);
+                    allSlotStarts.add(date.atTime(current));
+                    current = current.plusMinutes(slotDuration);
+                }
+            }
+        }
+
+        Set<LocalDateTime> heldSlots = holdService.getHeldSlots(doctorId, allSlotStarts);
+
+        List<AvailabilityGridResponse.DaySlots> days = new ArrayList<>();
+        for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
+            int dayOfWeek = date.getDayOfWeek().getValue();
+            List<AvailabilityGridResponse.SlotInfo> slots = new ArrayList<>();
+
+            for (DoctorWorkingHours hours : workingHours) {
+                if (hours.getDayOfWeek() != dayOfWeek) continue;
+                LocalTime current = hours.getStartTime();
+                while (current.isBefore(hours.getEndTime())) {
+                    LocalDateTime start = date.atTime(current);
+                    LocalDateTime end   = start.plusMinutes(slotDuration); // fixed: was hardcoded 30
 
                     String status = "OPEN";
-                    final LocalDateTime finalStart = start;
-                    if (existingAppointments.stream().anyMatch(a -> a.getScheduledAt().equals(finalStart))) {
+                    if (bookedSlots.contains(start)) {
                         status = "TAKEN";
-                    } else if (holdService.isSlotHeld(doctorId, finalStart)) {
+                    } else if (heldSlots.contains(start)) {
                         status = "HELD";
                     }
 
                     slots.add(AvailabilityGridResponse.SlotInfo.builder()
-                            .start(start)
-                            .end(end)
-                            .status(status)
-                            .build());
-                    
+                            .start(start).end(end).status(status).build());
+
                     current = current.plusMinutes(slotDuration);
                 }
             }
 
             days.add(AvailabilityGridResponse.DaySlots.builder()
-                    .date(date)
-                    .slots(slots)
-                    .build());
+                    .date(date).slots(slots).build());
         }
 
         return AvailabilityGridResponse.builder().days(days).build();

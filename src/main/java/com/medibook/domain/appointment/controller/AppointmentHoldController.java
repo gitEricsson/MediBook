@@ -40,10 +40,6 @@ public class AppointmentHoldController {
             @PathVariable String holdId,
             @RequestParam Long doctorId,
             @RequestParam String scheduledAt) {
-        // Implementation might need doctorId and scheduledAt to reconstruct the key, 
-        // or we could store the key mapping in Redis.
-        // For now, let's assume release by key reconstruction.
-        // In real world, holdId should be the key or contain info.
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 }

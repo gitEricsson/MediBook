@@ -21,6 +21,7 @@ public class DoctorResponse {
     private String departmentName;
     private String languages;
     private boolean acceptingNew;
+    private int slotDurationMins;
     private LocalDateTime createdAt;
 
     public static DoctorResponse fromEntity(Doctor d) {
@@ -36,6 +37,7 @@ public class DoctorResponse {
                 .departmentName(d.getDepartment().getName())
                 .languages(d.getLanguages())
                 .acceptingNew(d.isAcceptingNew())
+                .slotDurationMins(d.getSlotDurationMins())
                 .createdAt(d.getCreatedAt())
                 .build();
     }

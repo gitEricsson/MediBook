@@ -1,13 +1,14 @@
 package com.medibook.domain.notification.controller;
 
 import com.medibook.common.response.ApiResponse;
-import com.medibook.domain.notification.entity.Notification;
+import com.medibook.domain.notification.dto.NotificationResponse;
 import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -29,12 +30,12 @@ public class NotificationController {
 
     @GetMapping
     @Operation(summary = "Get list of notifications")
-    public ResponseEntity<ApiResponse<List<Notification>>> getNotifications(
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> getNotifications(
             @CurrentUser UserPrincipal principal,
             @RequestParam(required = false) boolean unread) {
-        List<Notification> list = unread ? 
-                notificationService.getUnread(principal.getId()) : 
-                notificationService.getRecent(principal.getId());
+        List<NotificationResponse> list = unread
+                ? notificationService.getUnread(principal.getId())
+                : notificationService.getRecent(principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(list));
     }
 
@@ -43,8 +44,8 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @CurrentUser UserPrincipal principal,
             @PathVariable UUID id,
-            @RequestParam Instant createdAt) {
-        notificationService.markAsRead(principal.getId(), createdAt, id);
+            @RequestBody MarkReadRequest body) {
+        notificationService.markAsRead(principal.getId(), body.getCreatedAt(), id);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }
 
@@ -65,5 +66,10 @@ public class NotificationController {
     @Operation(summary = "Establish SSE stream for live notifications")
     public SseEmitter streamNotifications(@CurrentUser UserPrincipal principal) {
         return notificationService.subscribe(principal.getId());
+    }
+
+    @Data
+    static class MarkReadRequest {
+        private Instant createdAt;
     }
 }

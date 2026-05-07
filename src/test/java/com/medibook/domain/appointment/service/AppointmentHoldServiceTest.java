@@ -31,7 +31,6 @@ class AppointmentHoldServiceTest {
     private static final Long   DOCTOR_ID = 10L;
     private static final LocalDateTime SLOT = LocalDateTime.of(2026, 6, 20, 10, 0);
 
-    // null-safe: argThat passes null during Mockito's stub-ordering resolution
     private static String keyStartsWith(String prefix) {
         return argThat((String k) -> k != null && k.startsWith(prefix));
     }

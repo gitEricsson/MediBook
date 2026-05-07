@@ -88,7 +88,6 @@ public class EmailOtpService {
             throw new MediBookException("Invalid OTP", HttpStatus.UNAUTHORIZED, "OTP_INVALID");
         }
 
-        // Invalidate code and clear failure counter on success
         redisTemplate.delete(codeKey);
         redisTemplate.delete(failKey);
     }

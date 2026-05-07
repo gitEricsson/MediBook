@@ -27,7 +27,6 @@ public class AppointmentEventConsumer {
         AppointmentEvent event = record.value();
         log.info("Consumed AppointmentEvent [{}] type={}", event.getEventId(), event.getEventType());
 
-        // Exceptions propagate to the container's DefaultErrorHandler (retry + DLT routing)
         switch (event.getEventType()) {
             case "BOOKED"    -> notificationService.sendAppointmentBooked(event);
             case "CONFIRMED" -> notificationService.sendAppointmentConfirmed(event);

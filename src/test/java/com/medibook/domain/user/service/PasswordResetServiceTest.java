@@ -41,7 +41,6 @@ class PasswordResetServiceTest {
         String token = passwordResetService.createToken(42L);
 
         assertThat(token).isNotBlank();
-        // UUID v4 format: 8-4-4-4-12 hex chars
         assertThat(token).matches("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}");
     }
 
@@ -74,7 +73,6 @@ class PasswordResetServiceTest {
         Long userId = passwordResetService.validateAndConsume("any-valid-token");
 
         assertThat(userId).isEqualTo(42L);
-        // getAndDelete is the atomic proof — no separate delete call needed
         verify(valueOps).getAndDelete(argThat(k -> k.startsWith("pwd-reset:")));
     }
 

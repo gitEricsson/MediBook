@@ -40,7 +40,6 @@ class DoctorScheduleServiceTest {
 
     @InjectMocks DoctorScheduleService scheduleService;
 
-    // Fixed date — Sunday (dayOfWeek = 7) so tests are deterministic
     private static final LocalDate   DATE       = LocalDate.of(2026, 6, 21);
     private static final int         DOW        = 7; // Sunday
     private static final Long        DOCTOR_ID  = 10L;
@@ -61,7 +60,6 @@ class DoctorScheduleServiceTest {
         Doctor doctor = Doctor.builder().id(DOCTOR_ID).user(docUser).department(dept)
                 .licenseNumber("LIC-001").build();
 
-        // Appointments at different times (09:00, 10:00, 11:00, 12:00, 13:00)
         pendingAppt   = appt(doctor, patient, DATE.atTime(9, 0),  AppointmentStatus.PENDING);
         confirmedAppt = appt(doctor, patient, DATE.atTime(10, 0), AppointmentStatus.CONFIRMED);
         cancelledAppt = appt(doctor, patient, DATE.atTime(11, 0), AppointmentStatus.CANCELLED);
@@ -81,7 +79,6 @@ class DoctorScheduleServiceTest {
 
         assertThat(response.getWorkStart()).isEqualTo(LocalTime.of(9, 0));
         assertThat(response.getWorkEnd()).isEqualTo(LocalTime.of(17, 0));
-        // 9:00–17:00 in 30-min slots = 16 free slots
         assertThat(response.getFreeSlots()).hasSize(16);
     }
 
@@ -97,7 +94,6 @@ class DoctorScheduleServiceTest {
 
         assertThat(response.getWorkStart()).isEqualTo(LocalTime.of(8, 0));
         assertThat(response.getWorkEnd()).isEqualTo(LocalTime.of(12, 0));
-        // 8:00–12:00 = 8 slots
         assertThat(response.getFreeSlots()).hasSize(8);
     }
 
@@ -106,14 +102,12 @@ class DoctorScheduleServiceTest {
     @DisplayName("getDailySchedule — PENDING/CONFIRMED/COMPLETED appointments block their time slots")
     void getDailySchedule_activeAppointments_reduceFreeSlots() {
         when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of());
-        // 3 non-cancelled appointments at 09:00, 10:00, 13:00
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                 eq(DOCTOR_ID), any(), any()))
                 .thenReturn(List.of(pendingAppt, confirmedAppt, completedAppt));
 
         ScheduleDayResponse response = scheduleService.getDailySchedule(DOCTOR_ID, DATE);
 
-        // 16 total − 3 taken = 13 free
         assertThat(response.getFreeSlots()).hasSize(13);
     }
 
@@ -210,7 +204,6 @@ class DoctorScheduleServiceTest {
     @Test
     @DisplayName("getScheduleSummary — custom 4-hour window → totalSlots=8, minus taken appointments")
     void getScheduleSummary_customHours_correctFreeSlotCalculation() {
-        // 08:00–12:00 = 4 hours = 8 slots; 2 non-cancelled taken → 6 free
         DoctorWorkingHours hours = buildHours(LocalTime.of(8, 0), LocalTime.of(12, 0));
         when(appointmentRepository.countByDoctorIdAndDateAndStatus(any(), any(), any(), any())).thenReturn(0L);
         when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of(hours));
@@ -228,7 +221,6 @@ class DoctorScheduleServiceTest {
     void getScheduleSummary_cancelledNotCountedAsTaken() {
         when(appointmentRepository.countByDoctorIdAndDateAndStatus(any(), any(), any(), any())).thenReturn(0L);
         when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of());
-        // Only cancelled appointments → 0 taken → 16 free
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                 eq(DOCTOR_ID), any(), any()))
                 .thenReturn(List.of(cancelledAppt, noShowAppt));
@@ -241,14 +233,12 @@ class DoctorScheduleServiceTest {
     @Test
     @DisplayName("getScheduleSummary — freeSlots is never negative when more taken than slots")
     void getScheduleSummary_freeSlotsNeverNegative() {
-        // 1-hour window = 2 total slots; 5 appointments taken → max(0, 2-5) = 0
         DoctorWorkingHours hours = buildHours(LocalTime.of(9, 0), LocalTime.of(10, 0));
         when(appointmentRepository.countByDoctorIdAndDateAndStatus(any(), any(), any(), any())).thenReturn(0L);
         when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of(hours));
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                 eq(DOCTOR_ID), any(), any()))
                 .thenReturn(List.of(pendingAppt, confirmedAppt, completedAppt, cancelledAppt, noShowAppt));
-        // Only 3 non-cancelled (pending, confirmed, completed) but 2 > totalSlots=2 → freeSlots=0
 
         ScheduleSummaryResponse response = scheduleService.getScheduleSummary(DOCTOR_ID, DATE);
 
@@ -284,7 +274,6 @@ class DoctorScheduleServiceTest {
     @Test
     @DisplayName("getWeeklySummary — CANCELLED appointments not counted in day totals")
     void getWeeklySummary_cancelledNotCounted() {
-        // Return one CANCELLED appointment for every day
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                 anyLong(), any(), any())).thenReturn(List.of(cancelledAppt));
 
@@ -296,7 +285,6 @@ class DoctorScheduleServiceTest {
     @Test
     @DisplayName("getWeeklySummary — non-cancelled appointments are counted per day")
     void getWeeklySummary_activeAppointmentsCounted() {
-        // 2 active (PENDING + CONFIRMED) per day
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                 anyLong(), any(), any())).thenReturn(List.of(pendingAppt, confirmedAppt));
 

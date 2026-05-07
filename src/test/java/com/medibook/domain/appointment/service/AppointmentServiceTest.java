@@ -78,7 +78,6 @@ class AppointmentServiceTest {
         patientPrincipal = UserPrincipal.fromUser(patient);
         doctorPrincipal = UserPrincipal.fromUser(doctorUser);
 
-        // cancel() always calls getReferenceById — stub leniently so it doesn't fail in tests that don't care
         lenient().when(userRepository.getReferenceById(anyLong())).thenReturn(patient);
     }
 

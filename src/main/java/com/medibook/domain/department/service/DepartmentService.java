@@ -33,7 +33,6 @@ public class DepartmentService {
     @Bulkhead(name = "departmentService")
     @Transactional(readOnly = true)
     public List<DepartmentResponse> getAllActive() {
-        // Patients only see active departments
         return departmentRepository.findAll().stream()
                 .filter(Department::isActive)
                 .map(DepartmentResponse::fromEntity)
@@ -48,7 +47,6 @@ public class DepartmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", id));
     }
 
-    // --- Admin Operations ---
 
     @CircuitBreaker(name = "departmentAdminStats", fallbackMethod = "getAdminStatsFallback")
     @Bulkhead(name = "departmentAdminStats")
@@ -88,7 +86,6 @@ public class DepartmentService {
         Department dept = departmentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", id));
                 
-        // Check uniqueness if changed
         if (!dept.getName().equalsIgnoreCase(request.getName()) && 
             departmentRepository.existsByNameIgnoreCase(request.getName())) {
             throw new MediBookException("Department name already exists", HttpStatus.CONFLICT, "NAME_EXISTS");
@@ -101,7 +98,6 @@ public class DepartmentService {
         dept.setName(request.getName());
         dept.setCode(request.getCode().toUpperCase());
         dept.setDescription(request.getDescription());
-        // Optimistic locking handles concurrent updates (version field is auto-managed by JPA)
         return DepartmentResponse.fromEntity(departmentRepository.save(dept));
     }
 
@@ -127,7 +123,6 @@ public class DepartmentService {
 
     @Transactional(readOnly = true)
     public List<DepartmentAdminResponse> getAllAdminStats() {
-        // Unpaginated version for CSV export
         LocalDateTime ninetyDaysAgo = LocalDateTime.now().minusDays(90);
         return departmentRepository.getAdminStats(null, null, ninetyDaysAgo, Pageable.unpaged()).getContent();
     }

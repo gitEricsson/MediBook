@@ -30,7 +30,6 @@ public class PatientHistoryService {
                 
         PatientProfile profile = profileRepository.findByUserId(patientId).orElse(null);
         
-        // Find most recent consultation note
         List<ConsultationNote> notes = consultationNoteRepository.findByPatientId(patientId);
         ConsultationNote lastNote = notes.isEmpty() ? null : notes.get(0);
 

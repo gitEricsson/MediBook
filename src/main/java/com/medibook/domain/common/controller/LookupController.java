@@ -32,7 +32,6 @@ public class LookupController {
     @GetMapping("/languages")
     @Operation(summary = "Get supported languages for the platform")
     public ResponseEntity<ApiResponse<List<String>>> getLanguages() {
-        // Return a curated list of supported languages
         List<String> languages = Arrays.asList(
                 "English", "Spanish", "French", "German", "Chinese", 
                 "Japanese", "Arabic", "Portuguese", "Russian", "Hindi"

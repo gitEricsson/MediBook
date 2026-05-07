@@ -30,7 +30,6 @@ public class AppointmentTransitionService {
         Appointment appt = appointmentRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
 
-        // doctorId here is the User ID (from principal.getId()) — compare against the doctor's user, not entity ID
         if (!appt.getDoctor().getUser().getId().equals(doctorId)) {
             throw new MediBookException("Not authorized to transition this appointment", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
@@ -38,8 +37,11 @@ public class AppointmentTransitionService {
         AppointmentStatus current = appt.getStatus();
         AppointmentStatus target = request.getTo();
 
-        // State Machine Enforcement
-        if (target == AppointmentStatus.COMPLETED || target == AppointmentStatus.NO_SHOW) {
+        if (target == AppointmentStatus.CONFIRMED) {
+            if (current != AppointmentStatus.PENDING) {
+                throw new MediBookException("Only PENDING appointments can be confirmed", HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
+            }
+        } else if (target == AppointmentStatus.COMPLETED || target == AppointmentStatus.NO_SHOW) {
             if (current != AppointmentStatus.CONFIRMED) {
                 throw new MediBookException("Only CONFIRMED appointments can be marked as " + target, HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
             }
@@ -48,12 +50,13 @@ public class AppointmentTransitionService {
                 throw new MediBookException("Cannot cancel a completed appointment", HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
             }
             appt.setCancellationReason(request.getReason());
+        } else {
+            throw new MediBookException("Unsupported target status: " + target, HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
         }
 
         appt.setStatus(target);
         Appointment saved = appointmentRepository.save(appt);
 
-        // Fire Notification Event (e.g. telling patient it's cancelled or completed)
         AppointmentEvent event = AppointmentEvent.builder()
                 .eventType("STATUS_CHANGED_TO_" + target.name())
                 .appointmentId(saved.getId())

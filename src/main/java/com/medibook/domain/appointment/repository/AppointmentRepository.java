@@ -16,7 +16,6 @@ import java.util.Optional;
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
-    // EntityGraph prevents N+1 on list endpoints — eager-loads patient, doctor, doctor.user, doctor.department
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Page<Appointment> findByPatientId(Long patientId, Pageable pageable);
 
@@ -31,7 +30,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     Page<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);
 
-    // JOIN FETCH doctor.user and doctor.department so fromEntity() never triggers lazy loads
     @Query("""
            SELECT a FROM Appointment a
            JOIN FETCH a.patient
@@ -64,7 +62,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            """)
     boolean existsConflict(Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
 
-    // Doctor Schedule Queries
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     List<Appointment> findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(Long doctorId, LocalDateTime startOfDay, LocalDateTime endOfDay);

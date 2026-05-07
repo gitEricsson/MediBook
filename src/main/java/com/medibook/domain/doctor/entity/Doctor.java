@@ -47,4 +47,7 @@ public class Doctor extends AuditableEntity {
     @Column(name = "slot_duration_mins", nullable = false)
     @Builder.Default
     private int slotDurationMins = 30;
+
+    @Column(name = "search_vector", columnDefinition = "TEXT")
+    private String searchVector;
 }

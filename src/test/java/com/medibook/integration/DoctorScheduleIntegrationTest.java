@@ -121,7 +121,6 @@ class DoctorScheduleIntegrationTest {
                 .specialization("Cardiology").build());
         doctorEntityId = doctor.getId();
 
-        // Configure working hours for the test day (Mon–Sun, dayOfWeek = testDate.getDayOfWeek().getValue())
         workingHoursRepository.save(DoctorWorkingHours.builder()
                 .doctor(doctor)
                 .dayOfWeek(testDate.getDayOfWeek().getValue())
@@ -132,14 +131,9 @@ class DoctorScheduleIntegrationTest {
         doctorToken  = loginAndGetToken("sched-doctor@test.com",  "Password1!");
         patientToken = loginAndGetToken("sched-patient@test.com", "Password1!");
 
-        // Book appointments using doctorEntityId so data appears in schedule queries
-        // The service uses doctorId from the repository, which is the Doctor entity ID.
-        // We use @Autowired appointmentRepository to inject appointments directly
-        // rather than going via the booking endpoint (which uses principal.getId() as patient ID).
         LocalDateTime slot1 = testDate.atTime(9, 0);
         LocalDateTime slot2 = testDate.atTime(10, 0);
 
-        // Save appointments directly so we control the doctorId FK
         var appt1 = com.medibook.domain.appointment.entity.Appointment.builder()
                 .patient(patientUser).doctor(doctor).department(dept)
                 .scheduledAt(slot1).endTime(slot1.plusMinutes(30))
@@ -216,7 +210,6 @@ class DoctorScheduleIntegrationTest {
                 .andExpect(jsonPath("$.data.appointments").isArray())
                 .andReturn();
 
-        // Verify the schedule uses the configured 09:00–17:00 working hours
         var tree = objectMapper.readTree(result.getResponse().getContentAsString());
         assertThat(tree.get("data").get("workStart").asText()).isEqualTo("09:00:00");
         assertThat(tree.get("data").get("workEnd").asText()).isEqualTo("17:00:00");
@@ -232,20 +225,14 @@ class DoctorScheduleIntegrationTest {
                 .andReturn();
 
         var data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
-        // 16 total slots − 1 CONFIRMED taken (09:00) = 15 free (CANCELLED at 10:00 doesn't reduce)
         assertThat(data.get("freeSlots").size()).isEqualTo(15);
-        // Both appointments appear in the list (service doesn't filter by status)
         assertThat(data.get("appointments").size()).isEqualTo(2);
     }
 
     @Test @Order(7)
     @DisplayName("GET /api/v1/me/schedule — day with no working hours uses default 09:00–17:00 bounds")
     void getDailySchedule_noCustomHours_usesDefaultBounds() throws Exception {
-        // Use a date with no configured working hours (not testDate)
         LocalDate dayWithNoHours = testDate.plusDays(1);
-        // Ensure no hours exist for that day (we only configured testDate's dayOfWeek)
-        // This test may need the day to have a different dayOfWeek than testDate
-        // If they share the same dayOfWeek, skip gracefully
         if (dayWithNoHours.getDayOfWeek() == testDate.getDayOfWeek()) {
             return; // same day of week — skip
         }
@@ -298,12 +285,9 @@ class DoctorScheduleIntegrationTest {
 
         var data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
         assertThat(data.size()).isEqualTo(7);
-        // Each key must be a date string in YYYY-MM-DD format
         data.fieldNames().forEachRemaining(key ->
                 assertThat(key).matches("\\d{4}-\\d{2}-\\d{2}"));
-        // Day with appointment (non-cancelled) should show count ≥ 1
         assertThat(data.get(testDate.toString()).asLong()).isGreaterThanOrEqualTo(1);
-        // Verify cancelled doesn't count — total for testDate should be 1 (confirmed only)
         assertThat(data.get(testDate.toString()).asLong()).isEqualTo(1);
     }
 
@@ -333,7 +317,6 @@ class DoctorScheduleIntegrationTest {
                 .andExpect(jsonPath("$.data.upcoming").isNumber())
                 .andExpect(jsonPath("$.data.noShow").isNumber())
                 .andExpect(jsonPath("$.data.freeSlots").isNumber())
-                // freeSlots must never be negative
                 .andExpect(jsonPath("$.data.freeSlots",
                         org.hamcrest.Matchers.greaterThanOrEqualTo(0)));
     }
@@ -363,8 +346,6 @@ class DoctorScheduleIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true))
                 .andReturn();
 
-        // data can be null (no confirmed appointment today) or an appointment object —
-        // either is valid; we only verify the HTTP layer responds correctly
         var data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
         assertThat(data).isNotNull();  // even null JSON is serialized as a node
     }
@@ -379,10 +360,8 @@ class DoctorScheduleIntegrationTest {
 
         var data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
         if (!data.isNull()) {
-            // If an appointment was returned, verify it's CONFIRMED and in the future
             assertThat(data.get("status").asText()).isEqualTo("CONFIRMED");
             assertThat(data.get("id").asLong()).isPositive();
         }
-        // null is also acceptable if no CONFIRMED appointment after now
     }
 }

@@ -3,7 +3,10 @@ package com.medibook.domain.doctor.controller;
 import com.medibook.common.response.ApiResponse;
 import com.medibook.domain.doctor.dto.DoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorResponse;
+import com.medibook.domain.doctor.dto.WorkingHoursRequest;
+import com.medibook.domain.doctor.dto.WorkingHoursResponse;
 import com.medibook.domain.doctor.service.DoctorService;
+import com.medibook.domain.doctor.service.DoctorWorkingHoursService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -17,6 +20,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/v1/doctors")
 @RequiredArgsConstructor
@@ -25,6 +30,7 @@ import org.springframework.web.bind.annotation.*;
 public class DoctorController {
 
     private final DoctorService doctorService;
+    private final DoctorWorkingHoursService workingHoursService;
 
     @GetMapping
     @Operation(summary = "List all doctors with pagination")
@@ -60,5 +66,20 @@ public class DoctorController {
     public ResponseEntity<ApiResponse<DoctorResponse>> update(
             @PathVariable Long id, @Valid @RequestBody DoctorRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(doctorService.update(id, request)));
+    }
+
+    @GetMapping("/{id}/hours")
+    @Operation(summary = "Get working hours for a doctor")
+    public ResponseEntity<ApiResponse<List<WorkingHoursResponse>>> getHours(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(workingHoursService.getByDoctorId(id)));
+    }
+
+    @PutMapping("/{id}/hours")
+    @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR')")
+    @Operation(summary = "Replace all working hours for a doctor (Admin or own Doctor)")
+    public ResponseEntity<ApiResponse<List<WorkingHoursResponse>>> setHours(
+            @PathVariable Long id,
+            @Valid @RequestBody WorkingHoursRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(workingHoursService.replaceAll(id, request)));
     }
 }

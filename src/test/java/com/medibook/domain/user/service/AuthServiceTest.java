@@ -130,7 +130,6 @@ class AuthServiceTest {
         assertThat(response.getTwoFactorRequired()).isNull();
         assertThat(response.getUser()).isNotNull();
         assertThat(response.getUser().getEmail()).isEqualTo("patient@medibook.com");
-        // Verify no additional DB query was made beyond auth manager
         verify(userRepository, never()).findByEmail(anyString());
         verify(userRepository, never()).findById(anyLong());
     }
@@ -175,7 +174,6 @@ class AuthServiceTest {
 
         assertThat(response.getAccessToken()).isEqualTo("new-access");
         assertThat(response.getRefreshToken()).isEqualTo("new-refresh");
-        // Verify no redundant validateAndGetUserId call
         verify(refreshTokenService, never()).validateAndGetUserId(anyString());
     }
 

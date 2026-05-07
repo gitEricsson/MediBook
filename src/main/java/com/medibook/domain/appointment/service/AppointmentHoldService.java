@@ -7,9 +7,15 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+import org.springframework.data.redis.core.SessionCallback;
+import org.springframework.data.redis.core.RedisOperations;
+
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -75,6 +81,34 @@ public class AppointmentHoldService {
     public boolean isSlotHeld(Long doctorId, LocalDateTime scheduledAt) {
         String slotKey = buildSlotKey(doctorId, scheduledAt);
         return Boolean.TRUE.equals(redisTemplate.hasKey(slotKey));
+    }
+
+    /**
+     * Batch-checks which of the given slots are currently held.
+     * Fires all EXISTS commands in a single Redis pipeline — one network round-trip
+     * regardless of how many slots are checked.
+     */
+    @SuppressWarnings("unchecked")
+    public Set<LocalDateTime> getHeldSlots(Long doctorId, List<LocalDateTime> slots) {
+        if (slots.isEmpty()) return Set.of();
+
+        List<Object> results = redisTemplate.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) {
+                for (LocalDateTime slot : slots) {
+                    operations.hasKey(buildSlotKey(doctorId, slot));
+                }
+                return null;
+            }
+        });
+
+        Set<LocalDateTime> held = new HashSet<>();
+        for (int i = 0; i < slots.size(); i++) {
+            if (Boolean.TRUE.equals(results.get(i))) {
+                held.add(slots.get(i));
+            }
+        }
+        return held;
     }
 
     private String buildSlotKey(Long doctorId, LocalDateTime scheduledAt) {

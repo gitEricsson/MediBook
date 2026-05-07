@@ -31,7 +31,6 @@ public class PhiEncryptionService {
     private final SecretKey secretKey;
     private final SecureRandom secureRandom = new SecureRandom();
 
-    // Fixed application-level salt — the key itself is the secret, not this salt
     private static final byte[] PBKDF2_SALT = "MediBook-PHI-v1-Salt".getBytes(StandardCharsets.UTF_8);
     private static final int PBKDF2_ITERATIONS = 310_000;
 
@@ -60,7 +59,6 @@ public class PhiEncryptionService {
 
             byte[] cipherText = cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8));
 
-            // Prepend IV to ciphertext
             ByteBuffer bb = ByteBuffer.allocate(iv.length + cipherText.length);
             bb.put(iv);
             bb.put(cipherText);

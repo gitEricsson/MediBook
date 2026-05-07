@@ -62,13 +62,19 @@ public class DoctorService {
         Department dept = departmentRepository.findById(request.getDepartmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
 
-        Doctor doctor = Doctor.builder()
+        Doctor.DoctorBuilder builder = Doctor.builder()
                 .user(user)
                 .department(dept)
                 .specialization(request.getSpecialization())
                 .licenseNumber(request.getLicenseNumber())
-                .bio(request.getBio())
-                .build();
+                .bio(request.getBio());
+
+        if (request.getSlotDurationMins() != null) {
+            builder.slotDurationMins(request.getSlotDurationMins());
+        }
+
+        Doctor doctor = builder.build();
+        doctor.setSearchVector(buildSearchVector(user.getFirstName(), user.getLastName(), request.getSpecialization()));
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor));
     }
@@ -85,7 +91,19 @@ public class DoctorService {
         doctor.setDepartment(dept);
         doctor.setSpecialization(request.getSpecialization());
         doctor.setBio(request.getBio());
+        if (request.getSlotDurationMins() != null) {
+            doctor.setSlotDurationMins(request.getSlotDurationMins());
+        }
+        doctor.setSearchVector(buildSearchVector(
+                doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+    }
+
+    private String buildSearchVector(String firstName, String lastName, String specialization) {
+        return String.join(" ",
+                firstName  != null ? firstName  : "",
+                lastName   != null ? lastName   : "",
+                specialization != null ? specialization : "").trim();
     }
 }

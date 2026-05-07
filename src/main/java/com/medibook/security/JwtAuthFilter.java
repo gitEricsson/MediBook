@@ -36,7 +36,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             try {
                 Claims claims = tokenProvider.parseToken(token);
 
-                // Only process ACCESS tokens — reject REFRESH tokens used as Bearer
                 if (!"ACCESS".equals(claims.get("type", String.class))) {
                     filterChain.doFilter(request, response);
                     return;

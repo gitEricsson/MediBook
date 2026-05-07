@@ -23,7 +23,6 @@ import static org.mockito.Mockito.*;
 @DisplayName("EmailOtpService — Unit Tests")
 class EmailOtpServiceTest {
     private static String keyStartsWith(String prefix) {
-        // null guard: argThat passes null while Mockito resolves stub ordering
         return argThat((String k) -> k != null && k.startsWith(prefix));
     }
 

@@ -111,7 +111,6 @@ class ConsultationNoteIntegrationTest {
         patientToken = loginAndGetToken("notes-patient@test.com", "Password1!");
         doctorToken  = loginAndGetToken("notes-doctor@test.com",  "Password1!");
 
-        // Book an appointment so we have an appointmentId to attach notes to
         AppointmentRequest apptReq = new AppointmentRequest();
         apptReq.setDoctorId(doctorEntityId);
         apptReq.setScheduledAt(LocalDateTime.now().plusDays(5).withMinute(0).withSecond(0).withNano(0));
@@ -193,7 +192,6 @@ class ConsultationNoteIntegrationTest {
         noteId = objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("data").get("id").asLong();
 
-        // Verify PHI is encrypted at rest (raw DB value should NOT be plaintext)
         var rawNote = noteRepository.findById(noteId).orElseThrow();
         assertThat(rawNote.getDiagnosis()).isNotEqualTo("Hypertension Stage 2"); // encrypted in DB
     }
@@ -301,7 +299,6 @@ class ConsultationNoteIntegrationTest {
         Assumptions.assumeTrue(noteId != null);
         ConsultationNoteRequest req = new ConsultationNoteRequest();
         req.setDiagnosis("Valid diagnosis");
-        // treatmentPlan intentionally missing
 
         mockMvc.perform(put("/api/v1/consultation-notes/" + noteId)
                         .header("Authorization", "Bearer " + doctorToken)

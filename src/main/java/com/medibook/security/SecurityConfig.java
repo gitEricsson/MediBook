@@ -35,10 +35,9 @@ public class SecurityConfig {
     private final JwtAuthFilter            jwtAuthFilter;
     private final RateLimitFilter          rateLimitFilter;
 
-    @Value("${app.cors.allowed-origins:*}")
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
     private String allowedOrigins;
 
-    // Truly public — no Bearer required
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/auth/register",
             "/api/v1/auth/login",
@@ -78,6 +77,9 @@ public class SecurityConfig {
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/departments/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                // GET doctor search and availability is open to all authenticated users (patients need it to book).
+                // Write operations (POST register, PUT update) are further protected by @PreAuthorize in the controller.
+                .requestMatchers(HttpMethod.GET, "/api/v1/doctors/**").authenticated()
                 .requestMatchers("/api/v1/doctors/**").hasAnyRole("DOCTOR", "ADMIN")
                 .anyRequest().authenticated()
             )
@@ -109,7 +111,6 @@ public class SecurityConfig {
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        // allowedOriginPatterns supports "*" + allowCredentials(true); setAllowedOrigins("*") does not.
         configuration.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));

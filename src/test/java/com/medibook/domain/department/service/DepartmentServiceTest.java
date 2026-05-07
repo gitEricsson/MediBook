@@ -144,7 +144,6 @@ class DepartmentServiceTest {
     void update_sameNameAsItself_doesNotConflict() {
         when(departmentRepository.findById(1L)).thenReturn(Optional.of(activeDept));
         when(departmentRepository.save(any())).thenReturn(activeDept);
-        // code also unchanged, so neither uniqueness check fires
 
         departmentService.update(1L, buildRequest("Cardiology", "CARD", null));
 
@@ -180,7 +179,6 @@ class DepartmentServiceTest {
     @DisplayName("update — changing code to existing one throws 409 CODE_EXISTS")
     void update_codeChangedToDuplicate_throwsConflict() {
         when(departmentRepository.findById(1L)).thenReturn(Optional.of(activeDept));
-        // name unchanged ("Cardiology" == "Cardiology") so existsByNameIgnoreCase never fires
         when(departmentRepository.existsByCodeIgnoreCase("OLD")).thenReturn(true);
 
         assertThatThrownBy(() -> departmentService.update(1L, buildRequest("Cardiology", "OLD", null)))

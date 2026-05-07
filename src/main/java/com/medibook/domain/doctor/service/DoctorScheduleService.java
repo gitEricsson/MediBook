@@ -53,7 +53,6 @@ public class DoctorScheduleService {
             workEnd = hoursList.get(0).getEndTime();
         }
 
-        // Calculate free slots (naive implementation based on 30 min intervals)
         List<ScheduleDayResponse.TimeSlot> freeSlots = new ArrayList<>();
         LocalTime current = workStart;
         while (current.isBefore(workEnd)) {
@@ -90,7 +89,6 @@ public class DoctorScheduleService {
         long upcoming = appointmentRepository.countByDoctorIdAndDateAndStatus(doctorId, startOfDay, endOfDay, AppointmentStatus.CONFIRMED);
         long noShow = appointmentRepository.countByDoctorIdAndDateAndStatus(doctorId, startOfDay, endOfDay, AppointmentStatus.NO_SHOW);
         
-        // Naive free slots total (could be refined)
         int dayOfWeek = date.getDayOfWeek().getValue();
         List<DoctorWorkingHours> hoursList = workingHoursRepository.findByDoctorIdAndDayOfWeek(doctorId, dayOfWeek);
         long totalPossibleSlots = 16; // Default 8 hours * 2 slots

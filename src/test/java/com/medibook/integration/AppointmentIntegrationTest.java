@@ -83,10 +83,8 @@ class AppointmentIntegrationTest {
         registry.add("spring.data.redis.port",     () -> redis.getMappedPort(6379));
     }
 
-    // Kafka is out of scope for these HTTP-layer tests
     @MockBean AppointmentEventProducer eventProducer;
 
-    // Patient history requires complex additional data — mock it
     @MockBean PatientHistoryService patientHistoryService;
 
     @Autowired MockMvc               mockMvc;
@@ -98,7 +96,6 @@ class AppointmentIntegrationTest {
     @Autowired AppointmentHoldService holdService;
     @Autowired PasswordEncoder       passwordEncoder;
 
-    // Shared state across ordered tests
     Long   doctorEntityId;
     Long   doctorUserId;
     String patientToken;
@@ -147,7 +144,6 @@ class AppointmentIntegrationTest {
         doctorToken  = loginAndGetToken("it-doctor@test.com",  "Password1!");
         adminToken   = loginAndGetToken("it-admin@test.com",   "Password1!");
 
-        // PatientHistoryService returns a stub response for all patients
         when(patientHistoryService.getPatientSummary(anyLong()))
                 .thenReturn(com.medibook.domain.patient.dto.PatientSummaryResponse.builder()
                         .patientId(patientUser.getId()).fullName("Alice Patient").build());
@@ -277,7 +273,6 @@ class AppointmentIntegrationTest {
                 .get("data").get("id").asLong();
         assertThat(appointmentId).isPositive();
 
-        // Verify DB state
         assertThat(appointmentRepository.findById(appointmentId))
                 .hasValueSatisfying(a -> {
                     assertThat(a.getStatus()).isEqualTo(AppointmentStatus.PENDING);
@@ -412,7 +407,6 @@ class AppointmentIntegrationTest {
     @Order(17)
     @DisplayName("POST /api/v1/appointments/{id}/transition — PENDING→CANCELLED succeeds")
     void transition_pendingToCancelled_succeeds() throws Exception {
-        // Book a fresh appointment specifically for this transition test
         LocalDateTime slot = LocalDateTime.now().plusDays(14).withMinute(0).withSecond(0).withNano(0);
         MvcResult bookResult = mockMvc.perform(post("/api/v1/appointments")
                         .header("Authorization", "Bearer " + patientToken)
@@ -479,7 +473,6 @@ class AppointmentIntegrationTest {
     @Order(21)
     @DisplayName("POST /api/v1/appointments/{id}/cancel — within 24h notice returns 422 WITHIN_NOTICE_PERIOD")
     void cancel_withinNoticePeriod_returns422() throws Exception {
-        // Book an appointment, then set its time to within 24h directly in DB
         LocalDateTime futureSlot = LocalDateTime.now().plusDays(21).withMinute(0).withSecond(0).withNano(0);
         MvcResult bookResult = mockMvc.perform(post("/api/v1/appointments")
                         .header("Authorization", "Bearer " + patientToken)
@@ -490,7 +483,6 @@ class AppointmentIntegrationTest {
         Long noticeId = objectMapper.readTree(bookResult.getResponse().getContentAsString())
                 .get("data").get("id").asLong();
 
-        // Force scheduledAt to within 12 hours in the DB
         appointmentRepository.findById(noticeId).ifPresent(a -> {
             a.setScheduledAt(LocalDateTime.now().plusHours(12));
             a.setEndTime(LocalDateTime.now().plusHours(12).plusMinutes(30));
@@ -511,7 +503,6 @@ class AppointmentIntegrationTest {
     @Order(22)
     @DisplayName("POST /api/v1/appointments/{id}/cancel — patient cancels their own appointment → 200 CANCELLED")
     void cancel_byPatient_succeeds() throws Exception {
-        // Book a fresh appointment to cancel
         LocalDateTime slot = LocalDateTime.now().plusDays(30).withMinute(0).withSecond(0).withNano(0);
         MvcResult bookResult = mockMvc.perform(post("/api/v1/appointments")
                         .header("Authorization", "Bearer " + patientToken)
@@ -545,7 +536,6 @@ class AppointmentIntegrationTest {
     @Order(23)
     @DisplayName("POST /api/v1/appointments/{id}/reschedule — moves appointment to new slot")
     void reschedule_success_updatesSlot() throws Exception {
-        // Book the appointment to reschedule
         LocalDateTime originalSlot = LocalDateTime.now().plusDays(35).withMinute(0).withSecond(0).withNano(0);
         MvcResult bookResult = mockMvc.perform(post("/api/v1/appointments")
                         .header("Authorization", "Bearer " + patientToken)

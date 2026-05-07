@@ -39,7 +39,6 @@ public class EmailVerificationService {
     }
 
     public Long validateAndConsume(String token) {
-        // getAndDelete is atomic (Redis GETDEL) — prevents concurrent double-use of the same token
         Object value = redisTemplate.opsForValue().getAndDelete(PREFIX + token);
         if (value == null) {
             throw new MediBookException(

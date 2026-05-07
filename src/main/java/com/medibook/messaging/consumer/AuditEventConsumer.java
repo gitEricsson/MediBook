@@ -25,7 +25,6 @@ public class AuditEventConsumer {
     public void onAuditEvent(ConsumerRecord<String, AuditEvent> record, Acknowledgment ack) {
         AuditEvent event = record.value();
         log.debug("Consuming AuditEvent [{}] action={}", event.getEventId(), event.getAction());
-        // Exceptions propagate to the container's DefaultErrorHandler (retry + DLT routing)
         auditLogService.persist(event);
         ack.acknowledge();
     }

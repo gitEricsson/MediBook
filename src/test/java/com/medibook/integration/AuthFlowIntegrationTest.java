@@ -72,14 +72,10 @@ class AuthFlowIntegrationTest {
     @Autowired UserRepository                   userRepository;
     @Autowired RedisTemplate<String, Object>    redisTemplate;
 
-    // Shared across ordered tests within each flow
     static Long   userId;
     static String accessToken;
     static String refreshToken;
 
-    // Flow 1: Password Reset
-    // register → POST /forgot-password (no-op email) → create token via service
-    // → POST /reset-password with real token → login with new password succeeds
 
     @Test
     @Order(1)
@@ -121,7 +117,6 @@ class AuthFlowIntegrationTest {
     void resetFlow_resetPassword_success() throws Exception {
         Assumptions.assumeTrue(userId != null, "Register must succeed first");
 
-        // Bypass email: create a real token directly via the service
         String resetToken = passwordResetService.createToken(userId);
 
         ResetPasswordRequest req = new ResetPasswordRequest();
@@ -176,7 +171,6 @@ class AuthFlowIntegrationTest {
                         .content(objectMapper.writeValueAsString(first)))
                 .andExpect(status().isOk());
 
-        // second use of the same token must be rejected
         ResetPasswordRequest replay = new ResetPasswordRequest();
         replay.setToken(oneUseToken);
         replay.setNewPassword("Replay1234!");
@@ -188,9 +182,6 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("RESET_TOKEN_INVALID"));
     }
 
-    // Flow 2: Email Verification
-    // register → create verify token via service → POST /email/verify
-    // → GET /me shows active=true
 
     @Test
     @Order(6)
@@ -212,7 +203,6 @@ class AuthFlowIntegrationTest {
         Long verifyUserId = tree.get("data").get("user").get("id").asLong();
         accessToken       = tree.get("data").get("accessToken").asText();
 
-        // Bypass email: create a real token via the service
         String verifyToken = emailVerificationService.createToken(verifyUserId);
 
         EmailVerifyRequest verifyReq = new EmailVerifyRequest();
@@ -224,7 +214,6 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
 
-        // Confirm the user is now active in the DB
         User user = userRepository.findByEmail("verify-flow@test.com").orElseThrow();
         assertThat(user.isActive()).isTrue();
     }
@@ -255,7 +244,6 @@ class AuthFlowIntegrationTest {
                         .content(objectMapper.writeValueAsString(first)))
                 .andExpect(status().isOk());
 
-        // replay
         EmailVerifyRequest replay = new EmailVerifyRequest();
         replay.setToken(oneUseToken);
         mockMvc.perform(post("/api/v1/auth/email/verify")
@@ -265,9 +253,6 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("VERIFY_TOKEN_INVALID"));
     }
 
-    // Flow 3: Two-Factor Authentication
-    // register → enable 2FA via service → POST /login (twoFactorRequired=true)
-    // → read OTP from Redis → POST /2fa/verify → full token pair
 
     @Test
     @Order(9)
@@ -288,7 +273,6 @@ class AuthFlowIntegrationTest {
         var tree = objectMapper.readTree(registerResult.getResponse().getContentAsString());
         Long twoFaUserId = tree.get("data").get("user").get("id").asLong();
 
-        // Enable 2FA directly via service (no admin endpoint needed)
         authService.enableTwoFactor(twoFaUserId);
 
         LoginRequest loginReq = new LoginRequest();
@@ -307,7 +291,6 @@ class AuthFlowIntegrationTest {
     @Order(10)
     @DisplayName("[2FA Flow] POST /2fa/verify — correct OTP returns full token pair")
     void twoFaFlow_verifyOtp_returnsTokenPair() throws Exception {
-        // Trigger OTP generation by logging in again (stores OTP in Redis)
         LoginRequest loginReq = new LoginRequest();
         loginReq.setEmail("twofa-flow@test.com");
         loginReq.setPassword("Password1!");
@@ -318,7 +301,6 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.twoFactorRequired").value(true));
 
-        // Read the OTP directly from Redis (key = "otp:code:{email}")
         Object storedOtp = redisTemplate.opsForValue().get("otp:code:twofa-flow@test.com");
         assertThat(storedOtp).as("OTP must be stored in Redis after login").isNotNull();
 
@@ -339,7 +321,6 @@ class AuthFlowIntegrationTest {
     @Order(11)
     @DisplayName("[2FA Flow] POST /2fa/verify — wrong OTP returns 401")
     void twoFaFlow_wrongOtp_returns401() throws Exception {
-        // Trigger a fresh OTP so the key exists in Redis
         LoginRequest loginReq = new LoginRequest();
         loginReq.setEmail("twofa-flow@test.com");
         loginReq.setPassword("Password1!");
@@ -358,8 +339,6 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // Flow 4: Refresh Token Lifecycle
-    // login → use token → logout (revoke) → replay refresh token → 401
 
     @Test
     @Order(12)

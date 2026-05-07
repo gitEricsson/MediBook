@@ -1,43 +1,64 @@
 package com.medibook.domain.notification.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medibook.domain.notification.dto.NotificationResponse;
 import com.medibook.domain.notification.entity.Notification;
 import com.medibook.domain.notification.repository.NotificationRepository;
 import com.medibook.messaging.event.AppointmentEvent;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.cassandra.core.CassandraOperations;
-import org.springframework.data.cassandra.core.query.Query;
+import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.data.cassandra.core.query.Criteria;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.data.cassandra.core.query.Query;
+import org.springframework.data.redis.connection.Message;
+import org.springframework.data.redis.connection.MessageListener;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.PatternTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class NotificationService {
+public class NotificationService implements MessageListener {
 
-    private final NotificationRepository notificationRepository;
-    private final CassandraOperations cassandraOperations;
+    private static final Duration   NOTIFICATION_TTL    = Duration.ofDays(30);
+    private static final String     PUBSUB_PREFIX       = "notifications:user:";
+
+    private final NotificationRepository          notificationRepository;
+    private final CassandraOperations             cassandraOperations;
+    private final StringRedisTemplate             stringRedisTemplate;
+    private final RedisMessageListenerContainer   listenerContainer;
+    private final ObjectMapper                    objectMapper;
+
     private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
+
+    @PostConstruct
+    public void registerPubSubListener() {
+        listenerContainer.addMessageListener(this, new PatternTopic(PUBSUB_PREFIX + "*"));
+        log.info("Registered Redis pub/sub listener on pattern {}*", PUBSUB_PREFIX);
+    }
+
 
     @Async
     public void sendAppointmentBooked(AppointmentEvent event) {
-        // Notify patient
         save(event.getPatientId(), "Appointment Booked",
                 "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is booked.",
                 "APPOINTMENT_BOOKED", event.getAppointmentId());
-
-        // Notify doctor
         save(event.getDoctorId(), "New Appointment",
                 "Patient " + event.getPatientName() + " booked an appointment on " + event.getScheduledAt(),
                 "APPOINTMENT_BOOKED", event.getAppointmentId());
@@ -55,32 +76,36 @@ public class NotificationService {
         save(event.getPatientId(), "Appointment Cancelled",
                 "Your appointment on " + event.getScheduledAt() + " has been cancelled.",
                 "APPOINTMENT_CANCELLED", event.getAppointmentId());
-
         save(event.getDoctorId(), "Appointment Cancelled",
                 "Appointment with " + event.getPatientName() + " on " + event.getScheduledAt() + " has been cancelled.",
                 "APPOINTMENT_CANCELLED", event.getAppointmentId());
     }
 
-    public List<Notification> getRecent(Long userId) {
-        return notificationRepository.findRecentByUserId(userId);
+
+    public List<NotificationResponse> getRecent(Long userId) {
+        return notificationRepository.findRecentByUserId(userId).stream()
+                .map(NotificationResponse::fromEntity)
+                .collect(Collectors.toList());
     }
 
-    public List<Notification> getUnread(Long userId) {
-        return notificationRepository.findUnreadByUserId(userId);
+    public List<NotificationResponse> getUnread(Long userId) {
+        return notificationRepository.findUnreadByUserId(userId).stream()
+                .map(NotificationResponse::fromEntity)
+                .collect(Collectors.toList());
     }
 
     public long getUnreadCount(Long userId) {
-        return notificationRepository.findUnreadByUserId(userId).size();
+        return notificationRepository.countUnreadByUserId(userId);
     }
 
     public void markAsRead(Long userId, Instant createdAt, UUID notificationId) {
-        // Cassandra update needs the full primary key
         Notification notification = cassandraOperations.selectOne(
-                Query.query(Criteria.where("user_id").is(userId),
-                            Criteria.where("created_at").is(createdAt),
-                            Criteria.where("notification_id").is(notificationId)),
+                Query.query(
+                        Criteria.where("user_id").is(userId),
+                        Criteria.where("created_at").is(createdAt),
+                        Criteria.where("notification_id").is(notificationId)),
                 Notification.class);
-        
+
         if (notification != null) {
             notification.setRead(true);
             notification.setReadAt(Instant.now());
@@ -90,46 +115,39 @@ public class NotificationService {
 
     public void markAllRead(Long userId) {
         List<Notification> unread = notificationRepository.findUnreadByUserId(userId);
+        Instant now = Instant.now();
         unread.forEach(n -> {
             n.setRead(true);
-            n.setReadAt(Instant.now());
+            n.setReadAt(now);
         });
         notificationRepository.saveAll(unread);
     }
 
+
     public SseEmitter subscribe(Long userId) {
         SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
         emitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
-        
         emitter.onCompletion(() -> removeEmitter(userId, emitter));
         emitter.onTimeout(() -> removeEmitter(userId, emitter));
-        
         return emitter;
     }
 
-    private void removeEmitter(Long userId, SseEmitter emitter) {
-        List<SseEmitter> userEmitters = emitters.get(userId);
-        if (userEmitters != null) {
-            userEmitters.remove(emitter);
+
+    @Override
+    public void onMessage(Message message, byte[] pattern) {
+        try {
+            String body    = new String(message.getBody(), StandardCharsets.UTF_8);
+            String channel = new String(message.getChannel(), StandardCharsets.UTF_8);
+            Long userId    = Long.parseLong(channel.substring(PUBSUB_PREFIX.length()));
+
+            NotificationResponse notification = objectMapper.readValue(body, NotificationResponse.class);
+            emit(userId, notification);
+        } catch (Exception e) {
+            log.error("Failed to process Redis pub/sub notification message", e);
         }
     }
 
-    @Async
-    private void emit(Long userId, Notification notification) {
-        List<SseEmitter> userEmitters = emitters.get(userId);
-        if (userEmitters != null) {
-            for (SseEmitter emitter : userEmitters) {
-                try {
-                    emitter.send(notification);
-                } catch (Exception e) {
-                    emitter.complete();
-                    userEmitters.remove(emitter);
-                }
-            }
-        }
-    }
 
-    @Async
     protected void save(Long userId, String title, String message, String type, Long appointmentId) {
         Notification notification = Notification.builder()
                 .userId(userId)
@@ -142,18 +160,38 @@ public class NotificationService {
                 .appointmentId(appointmentId)
                 .referenceId(String.valueOf(appointmentId))
                 .build();
-        notificationRepository.save(notification);
-        emit(userId, notification);
-        log.debug("Notification saved and emitted for user [{}]: {}", userId, title);
+
+        cassandraOperations.insert(notification,
+                InsertOptions.builder().ttl(NOTIFICATION_TTL).build());
+
+        NotificationResponse payload = NotificationResponse.fromEntity(notification);
+        try {
+            stringRedisTemplate.convertAndSend(
+                    PUBSUB_PREFIX + userId,
+                    objectMapper.writeValueAsString(payload));
+        } catch (Exception e) {
+            log.error("Failed to publish notification to Redis pub/sub for user [{}]", userId, e);
+        }
+
+        log.debug("Notification saved and published for user [{}]: {}", userId, title);
     }
 
-    /** Delete notifications older than 30 days — runs nightly at 03:00 */
-    @Scheduled(cron = "0 0 3 * * *")
-    public void purgeExpiredNotifications() {
-        Instant cutoff = Instant.now().minus(30, ChronoUnit.DAYS);
-        boolean deleted = cassandraOperations.delete(
-                Query.query(Criteria.where("created_at").lt(cutoff)),
-                Notification.class);
-        log.info("Expired notification purge completed. Any rows deleted: {}", deleted);
+    private void emit(Long userId, NotificationResponse payload) {
+        List<SseEmitter> userEmitters = emitters.get(userId);
+        if (userEmitters == null || userEmitters.isEmpty()) return;
+
+        for (SseEmitter emitter : userEmitters) {
+            try {
+                emitter.send(payload);
+            } catch (Exception e) {
+                emitter.complete();
+                userEmitters.remove(emitter);
+            }
+        }
+    }
+
+    private void removeEmitter(Long userId, SseEmitter emitter) {
+        List<SseEmitter> userEmitters = emitters.get(userId);
+        if (userEmitters != null) userEmitters.remove(emitter);
     }
 }

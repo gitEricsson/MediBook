@@ -111,7 +111,6 @@ class AuditLogServiceTest {
     @Test
     @DisplayName("persist — no request context → ipAddress stored as null")
     void persist_noRequestContext_ipAddressIsNull() {
-        // RequestContextHolder has nothing set — simulates background thread / async context
         AuditEvent event = buildEvent(EVENT_ID, "X", ACTOR_ID, null, "T", "1", null);
 
         auditLogService.persist(event);

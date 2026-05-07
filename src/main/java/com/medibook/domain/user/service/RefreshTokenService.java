@@ -25,19 +25,28 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class RefreshTokenService {
 
-    private static final String PREFIX         = "refresh:";
-    private static final String REVOKED_PREFIX = "revoked:";
+    private static final String PREFIX               = "refresh:";
+    private static final String REVOKED_PREFIX       = "revoked:";
+    private static final String USER_SESSIONS_PREFIX = "user_sessions:";
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final JwtTokenProvider              tokenProvider;
 
 
+    @SuppressWarnings("unchecked")
     public String createRefreshToken(Long userId) {
-        String token = UUID.randomUUID().toString();
-        redisTemplate.opsForValue().set(
-                PREFIX + token,
-                String.valueOf(userId),
-                Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs()));
+        String   token  = UUID.randomUUID().toString();
+        Duration expiry = Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs());
+
+        redisTemplate.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) {
+                operations.opsForValue().set(PREFIX + token, String.valueOf(userId), expiry);
+                operations.opsForSet().add(USER_SESSIONS_PREFIX + userId, token);
+                operations.expire(USER_SESSIONS_PREFIX + userId, expiry);
+                return null;
+            }
+        });
         return token;
     }
 
@@ -73,6 +82,10 @@ public class RefreshTokenService {
                 operations.delete(PREFIX + oldToken);
                 operations.opsForValue().set(REVOKED_PREFIX + oldToken, "1", expiry);
                 operations.opsForValue().set(PREFIX + newToken, String.valueOf(userId), expiry);
+                // Maintain per-user session set for admin bulk revocation
+                operations.opsForSet().remove(USER_SESSIONS_PREFIX + userId, oldToken);
+                operations.opsForSet().add(USER_SESSIONS_PREFIX + userId, newToken);
+                operations.expire(USER_SESSIONS_PREFIX + userId, expiry);
                 return null;
             }
         });
@@ -82,10 +95,50 @@ public class RefreshTokenService {
 
 
     public void revoke(String token) {
-        redisTemplate.delete(PREFIX + token);
-        redisTemplate.opsForValue().set(
-                REVOKED_PREFIX + token, "1",
-                Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs()));
+        Long userId = null;
+        try {
+            Object stored = redisTemplate.opsForValue().get(PREFIX + token);
+            if (stored != null) userId = Long.parseLong(stored.toString());
+        } catch (Exception ignored) {}
+
+        final Long resolvedUserId = userId;
+        Duration expiry = Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs());
+        redisTemplate.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) {
+                operations.delete(PREFIX + token);
+                operations.opsForValue().set(REVOKED_PREFIX + token, "1", expiry);
+                if (resolvedUserId != null) {
+                    operations.opsForSet().remove(USER_SESSIONS_PREFIX + resolvedUserId, token);
+                }
+                return null;
+            }
+        });
+    }
+
+    /**
+     * Revokes all active refresh tokens for a user — used by admin force-logout.
+     */
+    @SuppressWarnings("unchecked")
+    public int revokeAllForUser(Long userId) {
+        java.util.Set<Object> tokens = redisTemplate.opsForSet().members(USER_SESSIONS_PREFIX + userId);
+        if (tokens == null || tokens.isEmpty()) return 0;
+
+        Duration expiry = Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs());
+        redisTemplate.executePipelined(new SessionCallback<Object>() {
+            @Override
+            public Object execute(RedisOperations operations) {
+                for (Object t : tokens) {
+                    String tok = t.toString();
+                    operations.delete(PREFIX + tok);
+                    operations.opsForValue().set(REVOKED_PREFIX + tok, "1", expiry);
+                }
+                operations.delete(USER_SESSIONS_PREFIX + userId);
+                return null;
+            }
+        });
+        log.info("Revoked {} session(s) for user [{}]", tokens.size(), userId);
+        return tokens.size();
     }
 
 

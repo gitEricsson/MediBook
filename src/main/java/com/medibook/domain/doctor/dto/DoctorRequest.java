@@ -1,5 +1,7 @@
 package com.medibook.domain.doctor.dto;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -23,4 +25,8 @@ public class DoctorRequest {
 
     @Size(max = 2000)
     private String bio;
+
+    @Min(value = 10, message = "Slot duration must be at least 10 minutes")
+    @Max(value = 120, message = "Slot duration cannot exceed 120 minutes")
+    private Integer slotDurationMins;
 }

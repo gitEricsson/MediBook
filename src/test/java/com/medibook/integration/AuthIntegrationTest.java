@@ -225,7 +225,6 @@ class AuthIntegrationTest {
     @Order(11)
     @DisplayName("POST /api/v1/auth/logout — authenticated user revokes session and gets 200")
     void logout_withFreshTokens_returns200() throws Exception {
-        // Re-login to get a fresh refresh token (the one from @Order(3) was rotated by @Order(5))
         LoginRequest req = new LoginRequest();
         req.setEmail("integration@test.com");
         req.setPassword("Password1!");
@@ -365,7 +364,6 @@ class AuthIntegrationTest {
     void twoFactor_missingOtp_returns422() throws Exception {
         TwoFactorVerifyRequest req = new TwoFactorVerifyRequest();
         req.setEmail("patient@medibook.com");
-        // otp intentionally not set — triggers @NotBlank
 
         mockMvc.perform(post("/api/v1/auth/2fa/verify")
                         .contentType(MediaType.APPLICATION_JSON)

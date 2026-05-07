@@ -77,7 +77,6 @@ public class AuthService {
             return TokenResponse.twoFactorChallenge();
         }
 
-        // UserPrincipal already holds all fields from the auth query — no second DB round-trip
         return issueTokenPair(auth);
     }
 
@@ -95,7 +94,6 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public TokenResponse refresh(RefreshTokenRequest request) {
-        // rotate() validates the token and returns both userId and the new token atomically
         var rotation = refreshTokenService.rotate(request.getRefreshToken());
 
         User user = userRepository.findById(rotation.userId())
@@ -119,7 +117,6 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public void forgotPassword(ForgotPasswordRequest request) {
-        // No enumeration: always 204 — only send email when user exists
         userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
             String token = passwordResetService.createToken(user.getId());
             passwordResetService.sendResetEmail(user.getEmail(), token);

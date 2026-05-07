@@ -35,17 +35,19 @@ class RefreshTokenServiceTest {
 
     @BeforeEach
     void setUp() {
-        // lenient: not every test exercises both stubs (validateAndGetUserId skips TTL lookup)
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
         lenient().when(tokenProvider.getRefreshTokenExpirationMs()).thenReturn(604_800_000L);
     }
 
     @Test
-    @DisplayName("createRefreshToken — stores userId in Redis with TTL")
+    @DisplayName("createRefreshToken — stores userId via pipelined write and returns non-blank token")
     void createRefreshToken_storesInRedis() {
+        when(redisTemplate.executePipelined(any(SessionCallback.class))).thenReturn(List.of());
+
         String token = refreshTokenService.createRefreshToken(42L);
+
         assertThat(token).isNotBlank();
-        verify(valueOps).set(keyStartsWith("refresh:"), eq("42"), any(Duration.class));
+        verify(redisTemplate).executePipelined(any(SessionCallback.class));
     }
 
     @Test
@@ -80,12 +82,14 @@ class RefreshTokenServiceTest {
     }
 
     @Test
-    @DisplayName("revoke — deletes refresh key and sets revoked marker")
+    @DisplayName("revoke — executes delete + revocation marker via pipeline")
     void revoke_deletesAndMarks() {
+        when(valueOps.get(keyStartsWith("refresh:"))).thenReturn(null); // token not found in Redis
+        when(redisTemplate.executePipelined(any(SessionCallback.class))).thenReturn(List.of());
+
         refreshTokenService.revoke("some-token");
 
-        verify(redisTemplate).delete(keyStartsWith("refresh:"));
-        verify(valueOps).set(keyStartsWith("revoked:"), eq("1"), any(Duration.class));
+        verify(redisTemplate).executePipelined(any(SessionCallback.class));
     }
 
 

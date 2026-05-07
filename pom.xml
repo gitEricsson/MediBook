@@ -29,6 +29,13 @@
 
   <dependencies>
 
+    <!-- ===== Dev Utilities ===== -->
+    <dependency>
+      <groupId>me.paulschwarz</groupId>
+      <artifactId>spring-dotenv</artifactId>
+      <version>4.0.0</version>
+    </dependency>
+
     <!-- ===== Web / Core ===== -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -267,8 +274,7 @@
             <configuration>
               <rules>
                 <requireJavaVersion>
-                  <version>[21,22)</version>
-                  <message>This project requires Java 21. Found: ${java.version}</message>
+                  <version>[21.0.0,22.0.0)</version>
                 </requireJavaVersion>
               </rules>
             </configuration>

@@ -64,7 +64,6 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 return;
             }
         } catch (Exception e) {
-            // Fail-open: Redis down must not block users
             log.warn("Rate limiter Redis error — allowing request through: {}", e.getMessage());
         }
 

@@ -73,8 +73,12 @@ public class PatientAppointmentController {
     @Operation(summary = "Get full visit detail")
     public ResponseEntity<ApiResponse<AppointmentResponse>> getMyAppointmentDetail(
             @PathVariable Long id, @CurrentUser UserPrincipal principal) {
-        // Additional auth check could be done in service or here to ensure it belongs to the patient
-        return ResponseEntity.ok(ApiResponse.ok(appointmentService.getById(id)));
+        AppointmentResponse appt = appointmentService.getById(id);
+        if (!appt.getPatientId().equals(principal.getId())) {
+            throw new com.medibook.common.exception.MediBookException(
+                    "Not authorized to view this appointment", org.springframework.http.HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+        return ResponseEntity.ok(ApiResponse.ok(appt));
     }
 
     @PostMapping("/appointments/{id}/cancel")

@@ -13,7 +13,6 @@ class PhiEncryptionServiceTest {
 
     @BeforeEach
     void setUp() {
-        // 32-char key (padded to 32 bytes internally)
         service = new PhiEncryptionService("medibook-phi-aes256-encryption-key!");
     }
 

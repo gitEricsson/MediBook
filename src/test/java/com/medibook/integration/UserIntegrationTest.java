@@ -1,7 +1,7 @@
 package com.medibook.integration;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.medibook.domain.notification.entity.Notification;
+import com.medibook.domain.notification.dto.NotificationResponse;
 import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.domain.user.dto.LoginRequest;
 import com.medibook.domain.user.entity.Role;
@@ -99,7 +99,6 @@ class UserIntegrationTest {
         patientToken = loginAndGetToken("user-it-patient@test.com", "Password1!");
         adminToken   = loginAndGetToken("user-it-admin@test.com",   "Password1!");
 
-        // Stub notification service so /notifications endpoints return clean empty lists
         when(notificationService.getRecent(anyLong())).thenReturn(List.of());
         when(notificationService.getUnread(anyLong())).thenReturn(List.of());
     }
@@ -260,9 +259,8 @@ class UserIntegrationTest {
     @Test @Order(16)
     @DisplayName("GET /api/v1/notifications/unread — notification service returns mock data")
     void getUnreadNotifications_returnsMockedData() throws Exception {
-        // Override mock to return one notification for this test
-        Notification n = Notification.builder()
-                .userId(patientUserId).title("Test").message("Test msg")
+        NotificationResponse n = NotificationResponse.builder()
+                .title("Test").message("Test msg")
                 .type("APPOINTMENT_BOOKED").build();
         when(notificationService.getUnread(anyLong())).thenReturn(List.of(n));
 

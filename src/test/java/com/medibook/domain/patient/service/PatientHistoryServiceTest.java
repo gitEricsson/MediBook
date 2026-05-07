@@ -120,7 +120,6 @@ class PatientHistoryServiceTest {
         when(recent.getDiagnosis()).thenReturn("Hypertension Stage 2");
 
         ConsultationNote older = mock(ConsultationNote.class);
-        // older would appear second in the list (repository returns DESC order)
 
         when(userRepository.findById(1L)).thenReturn(Optional.of(patient));
         when(profileRepository.findByUserId(1L)).thenReturn(Optional.empty());
@@ -146,7 +145,6 @@ class PatientHistoryServiceTest {
 
         PatientSummaryResponse response = patientHistoryService.getPatientSummary(1L);
 
-        // Must be zero-padded YYYY-MM-DD, not "2026-1-5"
         assertThat(response.getLastVisitDate()).isEqualTo("2026-01-05");
     }
 

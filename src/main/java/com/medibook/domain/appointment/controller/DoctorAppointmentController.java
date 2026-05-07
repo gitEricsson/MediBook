@@ -56,8 +56,12 @@ public class DoctorAppointmentController {
     @PostMapping("/appointments/{id}/call")
     @Operation(summary = "Get click-to-call URI")
     public ResponseEntity<ApiResponse<String>> callPatient(@PathVariable Long id) {
-        // Simplistic implementation for the click-to-call requirement
         AppointmentResponse appt = appointmentService.getById(id);
-        return ResponseEntity.ok(ApiResponse.ok("tel:+1234567890")); // In reality, fetch from patient profile
+        String phone = appointmentService.getPatientPhone(appt.getPatientId());
+        if (phone == null || phone.isBlank()) {
+            throw new com.medibook.common.exception.MediBookException(
+                    "Patient has no phone number on file", org.springframework.http.HttpStatus.NOT_FOUND, "PHONE_NOT_FOUND");
+        }
+        return ResponseEntity.ok(ApiResponse.ok("tel:" + phone));
     }
 }

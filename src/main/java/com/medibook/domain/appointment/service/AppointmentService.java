@@ -28,6 +28,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -50,10 +52,8 @@ public class AppointmentService {
     public AppointmentResponse book(Long patientId, AppointmentRequest request) {
         LocalDateTime endTime = request.getScheduledAt().plusMinutes(request.getDurationMins());
 
-        // 1. Validate Hold (if provided)
         holdService.validateHold(request.getDoctorId(), request.getScheduledAt(), request.getHoldId());
 
-        // 2. Double check conflicts
         if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt(), endTime)) {
             throw new MediBookException("Doctor is not available at the requested time",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
@@ -93,13 +93,23 @@ public class AppointmentService {
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
 
-        // Release the temporary Redis hold
         if (request.getHoldId() != null) {
-            holdService.releaseHold(request.getDoctorId(), request.getScheduledAt());
+            final Long doctorId = request.getDoctorId();
+            final java.time.LocalDateTime scheduledAt = request.getScheduledAt();
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        holdService.releaseHold(doctorId, scheduledAt);
+                    }
+                });
+            } else {
+                holdService.releaseHold(doctorId, scheduledAt);
+            }
         }
 
         eventProducer.publishAppointmentEvent(buildEvent(saved, "BOOKED"));
-        eventProducer.publishAuditEvent(buildAuditEvent(saved, patientId, "APPOINTMENT_BOOKED"));
+        eventProducer.publishAuditEvent(buildAuditEvent(saved, patientId, saved.getPatient().getEmail(), "APPOINTMENT_BOOKED"));
 
         log.info("Appointment [{}] booked by patient [{}] with doctor [{}]",
                 saved.getId(), patientId, request.getDoctorId());
@@ -125,12 +135,10 @@ public class AppointmentService {
                     HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
 
-        // Notice period logic for patient cancellations
         if (isPatient && !isAdmin) {
             CancellationPolicyResponse policy = getCancellationPolicy();
             LocalDateTime cutoff = appt.getScheduledAt().minusHours(policy.getNoticeHours());
             if (LocalDateTime.now().isAfter(cutoff)) {
-                // Return 422 to trigger fee warning sheet in UI
                 throw new MediBookException("Cancellation is within the " + policy.getNoticeHours() + "-hour notice period. A cancellation fee applies.",
                         HttpStatus.UNPROCESSABLE_ENTITY, "WITHIN_NOTICE_PERIOD");
             }
@@ -144,7 +152,7 @@ public class AppointmentService {
         try {
             Appointment saved = appointmentRepository.save(appt);
             eventProducer.publishAppointmentEvent(buildEvent(saved, "CANCELLED"));
-            eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), "APPOINTMENT_CANCELLED"));
+            eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_CANCELLED"));
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently. Please refresh.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
@@ -171,7 +179,6 @@ public class AppointmentService {
 
         appt.setScheduledAt(request.getNewStart());
         appt.setEndTime(request.getNewEnd());
-        // Duration assumes the diff is correct or client provides it. Here we calculate it.
         appt.setDurationMins((int) java.time.Duration.between(request.getNewStart(), request.getNewEnd()).toMinutes());
 
         try {
@@ -180,7 +187,7 @@ public class AppointmentService {
                 holdService.releaseHold(appt.getDoctor().getId(), request.getNewStart());
             }
             eventProducer.publishAppointmentEvent(buildEvent(saved, "RESCHEDULED"));
-            eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), "APPOINTMENT_RESCHEDULED"));
+            eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_RESCHEDULED"));
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
@@ -223,7 +230,6 @@ public class AppointmentService {
         Appointment appt = getAndValidate(id);
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
         
-        // Very basic ICS payload generator for the CTA
         return "BEGIN:VCALENDAR\n" +
                 "VERSION:2.0\n" +
                 "PRODID:-//MediBook//EN\n" +
@@ -238,7 +244,13 @@ public class AppointmentService {
                 "END:VCALENDAR";
     }
 
-    // Used by internal notification service to trigger email/SMS
+    @Transactional(readOnly = true)
+    public String getPatientPhone(Long patientId) {
+        return userRepository.findById(patientId)
+                .map(com.medibook.domain.user.entity.User::getPhone)
+                .orElse(null);
+    }
+
     @Transactional(readOnly = true)
     public void notify(Long id) {
         Appointment appt = getAndValidate(id);
@@ -266,11 +278,11 @@ public class AppointmentService {
                 .build();
     }
 
-    private AuditEvent buildAuditEvent(Appointment a, Long actorId, String action) {
+    private AuditEvent buildAuditEvent(Appointment a, Long actorId, String actorEmail, String action) {
         return AuditEvent.builder()
                 .action(action)
                 .actorId(actorId)
-                .actorEmail(a.getPatient().getEmail())
+                .actorEmail(actorEmail)
                 .resourceType("Appointment")
                 .resourceId(String.valueOf(a.getId()))
                 .detail("Action on appointment " + a.getId())

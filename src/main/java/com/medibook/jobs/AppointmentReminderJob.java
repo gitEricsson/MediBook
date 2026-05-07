@@ -27,8 +27,6 @@ public class AppointmentReminderJob {
 
     @Scheduled(fixedRate = 3_600_000, initialDelay = 60_000)  // every hour
     public void sendReminders() {
-        // Truncate to the current hour so the 1-hour window is deterministic regardless of
-        // when within the hour the job fires — prevents duplicate reminders on overlapping runs.
         LocalDateTime now  = LocalDateTime.now().truncatedTo(ChronoUnit.HOURS);
         LocalDateTime from = now.plusHours(23);
         LocalDateTime to   = now.plusHours(24);

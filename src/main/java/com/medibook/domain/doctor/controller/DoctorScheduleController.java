@@ -4,12 +4,18 @@ import com.medibook.common.response.ApiResponse;
 import com.medibook.domain.appointment.dto.AppointmentResponse;
 import com.medibook.domain.doctor.dto.ScheduleDayResponse;
 import com.medibook.domain.doctor.dto.ScheduleSummaryResponse;
+import com.medibook.domain.doctor.dto.WorkingHoursRequest;
+import com.medibook.domain.doctor.dto.WorkingHoursResponse;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.service.DoctorScheduleService;
+import com.medibook.domain.doctor.service.DoctorWorkingHoursService;
+import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -17,6 +23,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -27,16 +34,15 @@ import java.util.Map;
 @PreAuthorize("hasRole('DOCTOR')")
 public class DoctorScheduleController {
 
-    private final DoctorScheduleService scheduleService;
+    private final DoctorScheduleService       scheduleService;
+    private final DoctorWorkingHoursService   workingHoursService;
+    private final DoctorRepository            doctorRepository;
 
     @GetMapping
     @Operation(summary = "Get daily schedule")
     public ResponseEntity<ApiResponse<ScheduleDayResponse>> getDailySchedule(
             @CurrentUser UserPrincipal principal,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        // Assuming doctor ID is the same as User ID in our current simplified schema (or we fetch it inside service)
-        // Let's assume principal.getId() is used to find Doctor entity inside service. 
-        // For simplicity, we'll pass principal.getId() representing the doctorId for now.
         return ResponseEntity.ok(ApiResponse.ok(scheduleService.getDailySchedule(principal.getId(), date)));
     }
 
@@ -60,5 +66,28 @@ public class DoctorScheduleController {
     public ResponseEntity<ApiResponse<AppointmentResponse>> getUpNext(
             @CurrentUser UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(scheduleService.getUpNext(principal.getId())));
+    }
+
+    @GetMapping("/hours")
+    @Operation(summary = "Get own working hours")
+    public ResponseEntity<ApiResponse<List<WorkingHoursResponse>>> getMyHours(
+            @CurrentUser UserPrincipal principal) {
+        Long doctorId = resolveOwnDoctorId(principal);
+        return ResponseEntity.ok(ApiResponse.ok(workingHoursService.getByDoctorId(doctorId)));
+    }
+
+    @PutMapping("/hours")
+    @Operation(summary = "Set own working hours (replaces all)")
+    public ResponseEntity<ApiResponse<List<WorkingHoursResponse>>> setMyHours(
+            @CurrentUser UserPrincipal principal,
+            @Valid @RequestBody WorkingHoursRequest request) {
+        Long doctorId = resolveOwnDoctorId(principal);
+        return ResponseEntity.ok(ApiResponse.ok(workingHoursService.replaceAll(doctorId, request)));
+    }
+
+    private Long resolveOwnDoctorId(UserPrincipal principal) {
+        return doctorRepository.findByUserId(principal.getId())
+                .map(d -> d.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "userId", principal.getId()));
     }
 }

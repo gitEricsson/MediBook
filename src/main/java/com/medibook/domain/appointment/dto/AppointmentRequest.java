@@ -9,8 +9,15 @@ import lombok.Data;
 
 import java.time.LocalDateTime;
 
+import com.medibook.domain.appointment.entity.AppointmentType;
+
 @Data
 public class AppointmentRequest {
+
+    private String holdId;
+
+    @NotNull(message = "Appointment type is required")
+    private AppointmentType type = AppointmentType.IN_PERSON;
 
     @NotNull(message = "Doctor ID is required")
     private Long doctorId;

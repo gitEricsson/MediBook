@@ -69,4 +69,17 @@ public class Appointment extends AuditableEntity {
 
     @Column(name = "slot_key", insertable = false, updatable = false)
     private String slotKey;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "appointment_type", nullable = false, length = 20)
+    @Builder.Default
+    private AppointmentType type = AppointmentType.IN_PERSON;
+
+    @Column(name = "confirmation_code", unique = true, length = 20)
+    private String confirmationCode;
+
+    @Version
+    @Column(name = "version", nullable = false)
+    @Builder.Default
+    private Long version = 0L;
 }

@@ -20,6 +20,8 @@ public class AppointmentResponse {
     private LocalDateTime scheduledAt;
     private int durationMins;
     private AppointmentStatus status;
+    private AppointmentType type;
+    private String confirmationCode;
     private String reason;
     private String notes;
     private LocalDateTime createdAt;
@@ -35,6 +37,8 @@ public class AppointmentResponse {
                 .scheduledAt(a.getScheduledAt())
                 .durationMins(a.getDurationMins())
                 .status(a.getStatus())
+                .type(a.getType())
+                .confirmationCode(a.getConfirmationCode())
                 .reason(a.getReason())
                 .notes(a.getNotes())
                 .createdAt(a.getCreatedAt())

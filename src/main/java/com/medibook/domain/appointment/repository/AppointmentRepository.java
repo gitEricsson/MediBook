@@ -21,6 +21,12 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     Page<Appointment> findByPatientId(Long patientId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    Page<Appointment> findByPatientIdAndScheduledAtAfterOrderByScheduledAtAsc(Long patientId, LocalDateTime time, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    Page<Appointment> findByPatientIdAndScheduledAtBeforeOrderByScheduledAtDesc(Long patientId, LocalDateTime time, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Page<Appointment> findByDoctorId(Long doctorId, Pageable pageable);
 
     Page<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);
@@ -57,4 +63,20 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
            """)
     boolean existsConflict(Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
+
+    // Doctor Schedule Queries
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    List<Appointment> findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(Long doctorId, LocalDateTime startOfDay, LocalDateTime endOfDay);
+
+    @Query("""
+        SELECT COUNT(a) FROM Appointment a 
+        WHERE a.doctor.id = :doctorId 
+        AND a.scheduledAt BETWEEN :startOfDay AND :endOfDay 
+        AND a.status = :status
+    """)
+    long countByDoctorIdAndDateAndStatus(Long doctorId, LocalDateTime startOfDay, LocalDateTime endOfDay, AppointmentStatus status);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    Optional<Appointment> findFirstByDoctorIdAndScheduledAtAfterAndStatusOrderByScheduledAtAsc(Long doctorId, LocalDateTime now, AppointmentStatus status);
 }

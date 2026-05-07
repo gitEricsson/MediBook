@@ -77,11 +77,9 @@ class AuthFlowIntegrationTest {
     static String accessToken;
     static String refreshToken;
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Flow 1: Password Reset
     // register → POST /forgot-password (no-op email) → create token via service
     // → POST /reset-password with real token → login with new password succeeds
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     @Order(1)
@@ -190,11 +188,9 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("RESET_TOKEN_INVALID"));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Flow 2: Email Verification
     // register → create verify token via service → POST /email/verify
     // → GET /me shows active=true
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     @Order(6)
@@ -269,11 +265,9 @@ class AuthFlowIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("VERIFY_TOKEN_INVALID"));
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Flow 3: Two-Factor Authentication
     // register → enable 2FA via service → POST /login (twoFactorRequired=true)
     // → read OTP from Redis → POST /2fa/verify → full token pair
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     @Order(9)
@@ -364,10 +358,8 @@ class AuthFlowIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Flow 4: Refresh Token Lifecycle
     // login → use token → logout (revoke) → replay refresh token → 401
-    // ─────────────────────────────────────────────────────────────────────────
 
     @Test
     @Order(12)

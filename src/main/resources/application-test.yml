@@ -1,6 +1,6 @@
 spring:
   flyway:
-    enabled: false          # Testcontainers manages schema via init SQL
+    enabled: false
   jpa:
     hibernate:
       ddl-auto: create-drop
@@ -10,6 +10,16 @@ spring:
       schema-action: RECREATE
   kafka:
     bootstrap-servers: ${spring.embedded.kafka.brokers:localhost:9092}
+    listener:
+      auto-startup: false   # prevent Kafka consumer from connecting in integration tests
+
+app:
+  jwt:
+    secret: test-jwt-secret-for-medibook-integration-testing-secure-key-256bits
+    access-token-expiration-ms: 900000
+    refresh-token-expiration-ms: 604800000
+  phi:
+    encryption-key: medibook-phi-aes256-encryption-key!
 
 logging:
   level:

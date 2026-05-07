@@ -58,7 +58,6 @@ class AuthIntegrationTest {
     static String accessToken;
     static String refreshToken;
 
-    // ─── Register ────────────────────────────────────────────────────────────
 
     @Test
     @Order(1)
@@ -97,7 +96,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("EMAIL_TAKEN"));
     }
 
-    // ─── Login ───────────────────────────────────────────────────────────────
 
     @Test
     @Order(3)
@@ -138,7 +136,6 @@ class AuthIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ─── Refresh ─────────────────────────────────────────────────────────────
 
     @Test
     @Order(5)
@@ -153,7 +150,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.data.accessToken").isNotEmpty());
     }
 
-    // ─── Validation ──────────────────────────────────────────────────────────
 
     @Test
     @Order(6)
@@ -191,7 +187,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.errors[0].field").value("password"));
     }
 
-    // ─── Current User ────────────────────────────────────────────────────────
 
     @Test
     @Order(8)
@@ -215,7 +210,6 @@ class AuthIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ─── Logout ──────────────────────────────────────────────────────────────
 
     @Test
     @Order(10)
@@ -254,7 +248,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true));
     }
 
-    // ─── Email Resend ────────────────────────────────────────────────────────
 
     @Test
     @Order(12)
@@ -276,7 +269,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.success").value(true));
     }
 
-    // ─── Forgot Password ─────────────────────────────────────────────────────
 
     @Test
     @Order(14)
@@ -319,7 +311,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.errors[0].field").value("email"));
     }
 
-    // ─── Reset Password ──────────────────────────────────────────────────────
 
     @Test
     @Order(17)
@@ -352,7 +343,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.errors[0].field").value("newPassword"));
     }
 
-    // ─── Email Verify ────────────────────────────────────────────────────────
 
     @Test
     @Order(19)
@@ -368,7 +358,6 @@ class AuthIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("VERIFY_TOKEN_INVALID"));
     }
 
-    // ─── Two-Factor Verify ───────────────────────────────────────────────────
 
     @Test
     @Order(20)

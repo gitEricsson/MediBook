@@ -30,7 +30,8 @@ public class AppointmentTransitionService {
         Appointment appt = appointmentRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
 
-        if (!appt.getDoctor().getId().equals(doctorId)) {
+        // doctorId here is the User ID (from principal.getId()) — compare against the doctor's user, not entity ID
+        if (!appt.getDoctor().getUser().getId().equals(doctorId)) {
             throw new MediBookException("Not authorized to transition this appointment", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
 

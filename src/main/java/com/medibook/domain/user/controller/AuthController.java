@@ -26,7 +26,6 @@ public class AuthController {
     private final AuthService authService;
     private final UserService userService;
 
-    // ─── Register ────────────────────────────────────────────────────────────
 
     @PostMapping("/register")
     @Operation(summary = "Register a new patient account — returns tokens immediately")
@@ -40,7 +39,6 @@ public class AuthController {
                 .body(ApiResponse.created(authService.register(request)));
     }
 
-    // ─── Login ───────────────────────────────────────────────────────────────
 
     @PostMapping("/login")
     @Operation(summary = "Email/password login — returns token pair or 2FA challenge")
@@ -53,7 +51,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(authService.login(request)));
     }
 
-    // ─── 2FA ─────────────────────────────────────────────────────────────────
 
     @PostMapping("/2fa/verify")
     @Operation(summary = "Complete 2FA with the emailed OTP")
@@ -62,7 +59,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(authService.verifyTwoFactor(request)));
     }
 
-    // ─── Token Lifecycle ─────────────────────────────────────────────────────
 
     @PostMapping("/refresh")
     @Operation(summary = "Rotate refresh token and receive a new access token")
@@ -81,7 +77,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.noContent("Logged out successfully"));
     }
 
-    // ─── Current User ────────────────────────────────────────────────────────
 
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
@@ -92,7 +87,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok(userService.getUserById(principal.getId())));
     }
 
-    // ─── Password Reset ──────────────────────────────────────────────────────
 
     @PostMapping("/forgot-password")
     @Operation(summary = "Request a password reset link — always 204, no user enumeration")
@@ -114,7 +108,6 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.noContent("Password reset successfully"));
     }
 
-    // ─── Email Verification ──────────────────────────────────────────────────
 
     @PostMapping("/email/verify")
     @Operation(summary = "Verify email address using the token from the verification email")

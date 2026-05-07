@@ -35,4 +35,16 @@ public class Doctor extends AuditableEntity {
     @Column(name = "is_active")
     @Builder.Default
     private boolean isActive = true;
+
+    @Column(length = 255)
+    @Builder.Default
+    private String languages = "English";
+
+    @Column(name = "accepting_new", nullable = false)
+    @Builder.Default
+    private boolean acceptingNew = true;
+
+    @Column(name = "slot_duration_mins", nullable = false)
+    @Builder.Default
+    private int slotDurationMins = 30;
 }

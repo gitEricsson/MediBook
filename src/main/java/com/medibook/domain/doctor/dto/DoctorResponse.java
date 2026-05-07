@@ -19,6 +19,8 @@ public class DoctorResponse {
     private String bio;
     private Long departmentId;
     private String departmentName;
+    private String languages;
+    private boolean acceptingNew;
     private LocalDateTime createdAt;
 
     public static DoctorResponse fromEntity(Doctor d) {
@@ -32,6 +34,8 @@ public class DoctorResponse {
                 .bio(d.getBio())
                 .departmentId(d.getDepartment().getId())
                 .departmentName(d.getDepartment().getName())
+                .languages(d.getLanguages())
+                .acceptingNew(d.isAcceptingNew())
                 .createdAt(d.getCreatedAt())
                 .build();
     }

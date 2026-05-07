@@ -33,7 +33,6 @@ public class AuthService {
     private final PasswordResetService     passwordResetService;
     private final EmailVerificationService emailVerificationService;
 
-    // ─── Register ────────────────────────────────────────────────────────────
 
     @Transactional
     public TokenResponse register(RegisterRequest request) {
@@ -59,7 +58,6 @@ public class AuthService {
         return buildTokenResponse(saved);
     }
 
-    // ─── Login ───────────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public TokenResponse login(LoginRequest request) {
@@ -83,7 +81,6 @@ public class AuthService {
         return issueTokenPair(auth);
     }
 
-    // ─── Two-Factor ──────────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public TokenResponse verifyTwoFactor(TwoFactorVerifyRequest request) {
@@ -95,7 +92,6 @@ public class AuthService {
         return buildTokenResponse(user);
     }
 
-    // ─── Token Lifecycle ─────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public TokenResponse refresh(RefreshTokenRequest request) {
@@ -120,7 +116,6 @@ public class AuthService {
         refreshTokenService.revoke(refreshToken);
     }
 
-    // ─── Password Reset ──────────────────────────────────────────────────────
 
     @Transactional(readOnly = true)
     public void forgotPassword(ForgotPasswordRequest request) {
@@ -141,7 +136,6 @@ public class AuthService {
         log.info("Password reset completed for userId={}", userId);
     }
 
-    // ─── Email Verification ──────────────────────────────────────────────────
 
     @Transactional
     public void verifyEmail(EmailVerifyRequest request) {
@@ -164,7 +158,6 @@ public class AuthService {
         emailVerificationService.sendVerificationEmail(user.getEmail(), token);
     }
 
-    // ─── 2FA Toggle ──────────────────────────────────────────────────────────
 
     @Transactional
     public void enableTwoFactor(Long userId) {
@@ -175,7 +168,6 @@ public class AuthService {
         log.info("2FA enabled for userId={}", userId);
     }
 
-    // ─── Internal helpers ────────────────────────────────────────────────────
 
     /**
      * Issues a token pair from a fully-authenticated principal.

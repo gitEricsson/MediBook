@@ -59,7 +59,6 @@ public class AppointmentEventProducer {
                 });
     }
 
-    // ─── Fallbacks (CB open) ─────────────────────────────────────────────────
 
     private void publishFallback(AppointmentEvent event, Throwable t) {
         log.error("CircuitBreaker OPEN — AppointmentEvent dropped [{}]: {}", event.getEventId(), t.getMessage());

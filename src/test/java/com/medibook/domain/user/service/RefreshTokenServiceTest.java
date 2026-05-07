@@ -88,7 +88,6 @@ class RefreshTokenServiceTest {
         verify(valueOps).set(keyStartsWith("revoked:"), eq("1"), any(Duration.class));
     }
 
-    // ─── Rotate ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("rotate — valid token validates, pipelines revoke+issue, returns new RotationResult")

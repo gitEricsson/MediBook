@@ -60,7 +60,6 @@ class AuthServiceTest {
                 .build();
     }
 
-    // ─── Register ────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("register — success persists user and returns token pair with user data")
@@ -108,7 +107,6 @@ class AuthServiceTest {
                 .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.CONFLICT));
     }
 
-    // ─── Login ───────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("login — no 2FA, returns full JWT pair without extra DB query")
@@ -159,7 +157,6 @@ class AuthServiceTest {
         verify(emailOtpService).sendOtpEmail("patient@medibook.com", "123456");
     }
 
-    // ─── Refresh ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("refresh — valid token rotates atomically and issues new access token")
@@ -182,7 +179,6 @@ class AuthServiceTest {
         verify(refreshTokenService, never()).validateAndGetUserId(anyString());
     }
 
-    // ─── Logout ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("logout — delegates revoke to RefreshTokenService")
@@ -191,7 +187,6 @@ class AuthServiceTest {
         verify(refreshTokenService).revoke("some-token");
     }
 
-    // ─── Forgot Password ─────────────────────────────────────────────────────
 
     @Test
     @DisplayName("forgotPassword — existing user triggers reset email")
@@ -222,7 +217,6 @@ class AuthServiceTest {
         verify(passwordResetService, never()).sendResetEmail(anyString(), anyString());
     }
 
-    // ─── Email Verification ──────────────────────────────────────────────────
 
     @Test
     @DisplayName("resendVerificationEmail — already verified throws BAD_REQUEST")
@@ -257,7 +251,6 @@ class AuthServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── Verify Two-Factor ────────────────────────────────────────────────────
 
     @Test
     @DisplayName("verifyTwoFactor — valid OTP issues full token pair without extra DB query")
@@ -296,7 +289,6 @@ class AuthServiceTest {
         verify(userRepository, never()).findByEmail(anyString());
     }
 
-    // ─── Reset Password ──────────────────────────────────────────────────────
 
     @Test
     @DisplayName("resetPassword — valid token encodes new password and persists user")
@@ -333,7 +325,6 @@ class AuthServiceTest {
         verify(userRepository, never()).findById(anyLong());
     }
 
-    // ─── Verify Email ────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("verifyEmail — valid token flips user active=true and persists")
@@ -367,7 +358,6 @@ class AuthServiceTest {
         verify(userRepository, never()).findById(anyLong());
     }
 
-    // ─── Refresh (additional paths) ──────────────────────────────────────────
 
     @Test
     @DisplayName("refresh — user deleted between token rotation and DB lookup throws NOT_FOUND")
@@ -383,7 +373,6 @@ class AuthServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── Register (additional paths) ─────────────────────────────────────────
 
     @Test
     @DisplayName("register — email is normalised to lower-case before persistence")

@@ -53,6 +53,21 @@ public class User extends AuditableEntity {
     @Builder.Default
     private boolean twoFactorEnabled = false;
 
+    @Column(name = "email_notifications", nullable = false)
+    @Builder.Default
+    private boolean emailNotifications = true;
+
+    @Column(name = "sms_notifications", nullable = false)
+    @Builder.Default
+    private boolean smsNotifications = true;
+
+    @Column(nullable = false, length = 10)
+    @Builder.Default
+    private String locale = "en-US";
+
+    @Version
+    private Long version;
+
     public String getFullName() {
         return firstName + " " + lastName;
     }

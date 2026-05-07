@@ -43,7 +43,6 @@ public class EmailOtpService {
     @Value("${spring.mail.username}")
     private String fromAddress;
 
-    // ─── Generate & Store ────────────────────────────────────────────────────
 
     public String generateAndStore(String email) {
         String genKey = OTP_GEN_PREFIX + email;
@@ -65,7 +64,6 @@ public class EmailOtpService {
         return otp;
     }
 
-    // ─── Verify ──────────────────────────────────────────────────────────────
 
     public void verify(String email, String otp) {
         String codeKey = OTP_KEY_PREFIX + email;
@@ -95,7 +93,6 @@ public class EmailOtpService {
         redisTemplate.delete(failKey);
     }
 
-    // ─── Send Email ──────────────────────────────────────────────────────────
 
     @Async
     public void sendOtpEmail(String toEmail, String otp) {

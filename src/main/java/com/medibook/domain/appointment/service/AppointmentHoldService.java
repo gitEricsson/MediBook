@@ -72,6 +72,11 @@ public class AppointmentHoldService {
         log.info("Released hold for slot {}", slotKey);
     }
 
+    public boolean isSlotHeld(Long doctorId, LocalDateTime scheduledAt) {
+        String slotKey = buildSlotKey(doctorId, scheduledAt);
+        return Boolean.TRUE.equals(redisTemplate.hasKey(slotKey));
+    }
+
     private String buildSlotKey(Long doctorId, LocalDateTime scheduledAt) {
         return HOLD_PREFIX + doctorId + ":" + scheduledAt.format(formatter);
     }

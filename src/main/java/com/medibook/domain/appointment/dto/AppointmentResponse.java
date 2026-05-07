@@ -2,6 +2,7 @@ package com.medibook.domain.appointment.dto;
 
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
+import com.medibook.domain.appointment.entity.AppointmentType;
 import lombok.Builder;
 import lombok.Data;
 

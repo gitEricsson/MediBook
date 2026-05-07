@@ -20,6 +20,9 @@ public class UserResponse {
     private Role role;
     private boolean enabled;
     private boolean twoFactorEnabled;
+    private boolean emailNotifications;
+    private boolean smsNotifications;
+    private String locale;
     private LocalDateTime createdAt;
 
     public static UserResponse fromUser(User user) {
@@ -33,6 +36,9 @@ public class UserResponse {
                 .role(user.getRole())
                 .enabled(user.isEnabled())
                 .twoFactorEnabled(user.isTwoFactorEnabled())
+                .emailNotifications(user.isEmailNotifications())
+                .smsNotifications(user.isSmsNotifications())
+                .locale(user.getLocale())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

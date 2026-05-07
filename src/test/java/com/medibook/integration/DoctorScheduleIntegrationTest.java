@@ -167,7 +167,6 @@ class DoctorScheduleIntegrationTest {
                 .get("data").get("accessToken").asText();
     }
 
-    // ─── GET /api/v1/me/schedule ─────────────────────────────────────────────
 
     @Test @Order(1)
     @DisplayName("GET /api/v1/me/schedule — unauthenticated returns 401")
@@ -263,7 +262,6 @@ class DoctorScheduleIntegrationTest {
         assertThat(data.get("freeSlots").size()).isEqualTo(16);
     }
 
-    // ─── GET /api/v1/me/schedule/week ─────────────────────────────────────────
 
     @Test @Order(8)
     @DisplayName("GET /api/v1/me/schedule/week — unauthenticated returns 401")
@@ -309,7 +307,6 @@ class DoctorScheduleIntegrationTest {
         assertThat(data.get(testDate.toString()).asLong()).isEqualTo(1);
     }
 
-    // ─── GET /api/v1/me/schedule/summary ─────────────────────────────────────
 
     @Test @Order(12)
     @DisplayName("GET /api/v1/me/schedule/summary — unauthenticated returns 401")
@@ -341,7 +338,6 @@ class DoctorScheduleIntegrationTest {
                         org.hamcrest.Matchers.greaterThanOrEqualTo(0)));
     }
 
-    // ─── GET /api/v1/me/schedule/up-next ─────────────────────────────────────
 
     @Test @Order(15)
     @DisplayName("GET /api/v1/me/schedule/up-next — unauthenticated returns 401")

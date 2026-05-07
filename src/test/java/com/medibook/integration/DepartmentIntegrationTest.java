@@ -101,7 +101,6 @@ class DepartmentIntegrationTest {
                 .get("data").get("accessToken").asText();
     }
 
-    // ─── GET /api/v1/departments (public read) ────────────────────────────────
 
     @Test @Order(1)
     @DisplayName("GET /api/v1/departments — unauthenticated returns 401")
@@ -137,7 +136,6 @@ class DepartmentIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── GET /api/v1/admin/departments ───────────────────────────────────────
 
     @Test @Order(5)
     @DisplayName("GET /api/v1/admin/departments — patient role returns 403")
@@ -167,7 +165,6 @@ class DepartmentIntegrationTest {
                         org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
     }
 
-    // ─── POST /api/v1/admin/departments ──────────────────────────────────────
 
     @Test @Order(8)
     @DisplayName("POST /api/v1/admin/departments — patient role returns 403")
@@ -222,7 +219,6 @@ class DepartmentIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("NAME_EXISTS"));
     }
 
-    // ─── PATCH /api/v1/admin/departments/{id} ────────────────────────────────
 
     @Test @Order(12)
     @DisplayName("PATCH /api/v1/admin/departments/{id} — admin updates fields → 200")
@@ -238,7 +234,6 @@ class DepartmentIntegrationTest {
                 .andExpect(jsonPath("$.data.code").value("RADUPD"));
     }
 
-    // ─── POST /api/v1/admin/departments/{id}/deactivate ───────────────────────
 
     @Test @Order(13)
     @DisplayName("POST /api/v1/admin/departments/{id}/deactivate — sets department inactive")
@@ -263,7 +258,6 @@ class DepartmentIntegrationTest {
                 .andExpect(jsonPath("$.data[?(@.id == " + createdDeptId + ")]").doesNotExist());
     }
 
-    // ─── POST /api/v1/admin/departments/{id}/reactivate ───────────────────────
 
     @Test @Order(15)
     @DisplayName("POST /api/v1/admin/departments/{id}/reactivate — restores active status")
@@ -277,7 +271,6 @@ class DepartmentIntegrationTest {
                 .hasValueSatisfying(d -> assertThat(d.isActive()).isTrue());
     }
 
-    // ─── GET /api/v1/admin/departments/export.csv ────────────────────────────
 
     @Test @Order(16)
     @DisplayName("GET /api/v1/admin/departments/export.csv — returns text/csv with CSV headers")
@@ -301,7 +294,6 @@ class DepartmentIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private DepartmentRequest buildRequest(String name, String code, String description) {
         DepartmentRequest req = new DepartmentRequest();

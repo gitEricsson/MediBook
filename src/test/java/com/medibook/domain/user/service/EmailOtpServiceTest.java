@@ -38,7 +38,6 @@ class EmailOtpServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
-    // ─── generateAndStore ────────────────────────────────────────────────────
 
     @Test
     @DisplayName("generateAndStore — first request returns a 6-digit OTP and stores it in Redis")
@@ -89,7 +88,6 @@ class EmailOtpServiceTest {
         verify(valueOps, never()).set(keyStartsWith("otp:code:"), any(), any());
     }
 
-    // ─── verify ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("verify — correct OTP deletes both the code key and the fail counter")

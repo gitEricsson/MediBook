@@ -42,7 +42,6 @@ class NotificationServiceTest {
                 .build();
     }
 
-    // ─── sendAppointmentBooked ────────────────────────────────────────────────
 
     @Test
     @DisplayName("sendAppointmentBooked — saves one notification for patient and one for doctor")
@@ -71,7 +70,6 @@ class NotificationServiceTest {
                 .containsOnly(false);
     }
 
-    // ─── sendAppointmentConfirmed ─────────────────────────────────────────────
 
     @Test
     @DisplayName("sendAppointmentConfirmed — saves exactly one notification for the patient only")
@@ -85,7 +83,6 @@ class NotificationServiceTest {
         assertThat(saved.getType()).isEqualTo("APPOINTMENT_CONFIRMED");
     }
 
-    // ─── sendAppointmentCancelled ─────────────────────────────────────────────
 
     @Test
     @DisplayName("sendAppointmentCancelled — saves one notification for patient and one for doctor")
@@ -100,7 +97,6 @@ class NotificationServiceTest {
                 .containsOnly("APPOINTMENT_CANCELLED");
     }
 
-    // ─── getRecent / getUnread ────────────────────────────────────────────────
 
     @Test
     @DisplayName("getRecent — delegates to repository.findRecentByUserId and returns the list")
@@ -125,7 +121,6 @@ class NotificationServiceTest {
         verify(notificationRepository).findUnreadByUserId(1L);
     }
 
-    // ─── purgeExpiredNotifications ────────────────────────────────────────────
 
     @Test
     @DisplayName("purgeExpiredNotifications — calls CassandraOperations.delete with Notification class")

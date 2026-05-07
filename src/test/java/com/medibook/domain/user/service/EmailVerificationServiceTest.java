@@ -34,7 +34,6 @@ class EmailVerificationServiceTest {
         when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
-    // ─── createToken ─────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("createToken — returns a non-blank UUID-format token")
@@ -65,7 +64,6 @@ class EmailVerificationServiceTest {
         assertThat(first).isNotEqualTo(second);
     }
 
-    // ─── validateAndConsume ──────────────────────────────────────────────────
 
     @Test
     @DisplayName("validateAndConsume — valid token returns userId and atomically deletes the key")

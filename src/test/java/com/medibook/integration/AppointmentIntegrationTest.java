@@ -176,7 +176,6 @@ class AppointmentIntegrationTest {
         return r;
     }
 
-    // ─── Validation ──────────────────────────────────────────────────────────
 
     @Test
     @Order(1)
@@ -257,7 +256,6 @@ class AppointmentIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── Booking flow ─────────────────────────────────────────────────────────
 
     @Test
     @Order(7)
@@ -321,7 +319,6 @@ class AppointmentIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("SLOT_TAKEN"));
     }
 
-    // ─── Read ─────────────────────────────────────────────────────────────────
 
     @Test
     @Order(10)
@@ -369,7 +366,6 @@ class AppointmentIntegrationTest {
                 .andExpect(status().isUnauthorized());
     }
 
-    // ─── Cancellation Policy ─────────────────────────────────────────────────
 
     @Test
     @Order(14)
@@ -382,7 +378,6 @@ class AppointmentIntegrationTest {
                 .andExpect(jsonPath("$.data.feeApplies").value(true));
     }
 
-    // ─── Transition ───────────────────────────────────────────────────────────
 
     @Test
     @Order(15)
@@ -452,7 +447,6 @@ class AppointmentIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
     }
 
-    // ─── Cancel ───────────────────────────────────────────────────────────────
 
     @Test
     @Order(19)
@@ -546,7 +540,6 @@ class AppointmentIntegrationTest {
                 });
     }
 
-    // ─── Reschedule ───────────────────────────────────────────────────────────
 
     @Test
     @Order(23)
@@ -610,7 +603,6 @@ class AppointmentIntegrationTest {
                 .andExpect(jsonPath("$.errors[0].field").value("newEnd"));
     }
 
-    // ─── ICS Export ───────────────────────────────────────────────────────────
 
     @Test
     @Order(26)
@@ -629,7 +621,6 @@ class AppointmentIntegrationTest {
         assertThat(ics).contains("@medibook.com");
     }
 
-    // ─── Doctor endpoints ─────────────────────────────────────────────────────
 
     @Test
     @Order(27)
@@ -671,7 +662,6 @@ class AppointmentIntegrationTest {
                 .andExpect(status().isForbidden());
     }
 
-    // ─── Doctor schedule (smoke tests) ───────────────────────────────────────
 
     @Test
     @Order(31)
@@ -720,5 +710,47 @@ class AppointmentIntegrationTest {
         mockMvc.perform(get("/api/v1/me/schedule/up-next")
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isOk());
+    }
+
+
+    @Test
+    @Order(36)
+    @DisplayName("POST /api/v1/appointments/{id}/call — unauthenticated returns 401")
+    void callPatient_unauthenticated_returns401() throws Exception {
+        Assumptions.assumeTrue(appointmentId != null, "Booking must succeed first");
+        mockMvc.perform(post("/api/v1/appointments/" + appointmentId + "/call"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @Order(37)
+    @DisplayName("POST /api/v1/appointments/{id}/call — patient role returns 403")
+    void callPatient_patientRole_returns403() throws Exception {
+        Assumptions.assumeTrue(appointmentId != null, "Booking must succeed first");
+        mockMvc.perform(post("/api/v1/appointments/" + appointmentId + "/call")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @Order(38)
+    @DisplayName("POST /api/v1/appointments/{id}/call — non-existent appointment returns 404")
+    void callPatient_appointmentNotFound_returns404() throws Exception {
+        mockMvc.perform(post("/api/v1/appointments/999999/call")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @Order(39)
+    @DisplayName("POST /api/v1/appointments/{id}/call — doctor returns 200 with tel: URI")
+    void callPatient_doctorRole_returnsTelUri() throws Exception {
+        Assumptions.assumeTrue(appointmentId != null, "Booking must succeed first");
+        mockMvc.perform(post("/api/v1/appointments/" + appointmentId + "/call")
+                        .header("Authorization", "Bearer " + doctorToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.success").value(true))
+                .andExpect(jsonPath("$.data").value(
+                        org.hamcrest.Matchers.startsWith("tel:")));
     }
 }

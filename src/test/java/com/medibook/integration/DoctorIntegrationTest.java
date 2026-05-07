@@ -122,7 +122,6 @@ class DoctorIntegrationTest {
                 .get("data").get("accessToken").asText();
     }
 
-    // ─── GET /api/v1/doctors ─────────────────────────────────────────────────
 
     @Test @Order(1)
     @DisplayName("GET /api/v1/doctors — unauthenticated returns 401")
@@ -141,7 +140,6 @@ class DoctorIntegrationTest {
                         org.hamcrest.Matchers.greaterThanOrEqualTo(1)));
     }
 
-    // ─── GET /api/v1/doctors/{id} ─────────────────────────────────────────────
 
     @Test @Order(3)
     @DisplayName("GET /api/v1/doctors/{id} — existing returns doctor with fullName and department")
@@ -163,7 +161,6 @@ class DoctorIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── GET /api/v1/doctors/department/{id} ──────────────────────────────────
 
     @Test @Order(5)
     @DisplayName("GET /api/v1/doctors/department/{id} — returns doctors in department")
@@ -185,7 +182,6 @@ class DoctorIntegrationTest {
                 .andExpect(jsonPath("$.data.totalElements").value(0));
     }
 
-    // ─── POST /api/v1/doctors ─────────────────────────────────────────────────
 
     @Test @Order(7)
     @DisplayName("POST /api/v1/doctors — patient role returns 403")
@@ -244,7 +240,6 @@ class DoctorIntegrationTest {
                 .andExpect(jsonPath("$.errorCode").value("LICENSE_TAKEN"));
     }
 
-    // ─── PUT /api/v1/doctors/{id} ─────────────────────────────────────────────
 
     @Test @Order(11)
     @DisplayName("PUT /api/v1/doctors/{id} — patient role returns 403")
@@ -281,7 +276,6 @@ class DoctorIntegrationTest {
                 .andExpect(jsonPath("$.data.specialization").value("Doctor-Updated"));
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private DoctorRequest buildRequest(Long userId, Long deptId, String license, String spec) {
         DoctorRequest req = new DoctorRequest();

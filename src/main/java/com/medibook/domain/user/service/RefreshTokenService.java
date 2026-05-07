@@ -31,7 +31,6 @@ public class RefreshTokenService {
     private final RedisTemplate<String, Object> redisTemplate;
     private final JwtTokenProvider              tokenProvider;
 
-    // ─── Create ──────────────────────────────────────────────────────────────
 
     public String createRefreshToken(Long userId) {
         String token = UUID.randomUUID().toString();
@@ -42,7 +41,6 @@ public class RefreshTokenService {
         return token;
     }
 
-    // ─── Validate ────────────────────────────────────────────────────────────
 
     public Long validateAndGetUserId(String token) {
         if (isRevoked(token)) {
@@ -57,7 +55,6 @@ public class RefreshTokenService {
         return Long.parseLong(userId.toString());
     }
 
-    // ─── Rotate ──────────────────────────────────────────────────────────────
 
     /**
      * Atomically revokes {@code oldToken} and issues a new one.
@@ -83,7 +80,6 @@ public class RefreshTokenService {
         return new RotationResult(userId, newToken);
     }
 
-    // ─── Revoke ──────────────────────────────────────────────────────────────
 
     public void revoke(String token) {
         redisTemplate.delete(PREFIX + token);
@@ -92,7 +88,6 @@ public class RefreshTokenService {
                 Duration.ofMillis(tokenProvider.getRefreshTokenExpirationMs()));
     }
 
-    // ─── Support ─────────────────────────────────────────────────────────────
 
     private boolean isRevoked(String token) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(REVOKED_PREFIX + token));

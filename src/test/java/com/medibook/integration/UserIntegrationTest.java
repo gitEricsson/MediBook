@@ -116,7 +116,6 @@ class UserIntegrationTest {
                 .get("data").get("accessToken").asText();
     }
 
-    // ─── GET /api/v1/users/me ─────────────────────────────────────────────────
 
     @Test @Order(1)
     @DisplayName("GET /api/v1/users/me — unauthenticated returns 401")
@@ -136,7 +135,6 @@ class UserIntegrationTest {
                 .andExpect(jsonPath("$.data.password").doesNotExist());
     }
 
-    // ─── GET /api/v1/users/{id} ───────────────────────────────────────────────
 
     @Test @Order(3)
     @DisplayName("GET /api/v1/users/{id} — patient role returns 403")
@@ -164,7 +162,6 @@ class UserIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── GET /api/v1/users ───────────────────────────────────────────────────
 
     @Test @Order(6)
     @DisplayName("GET /api/v1/users — patient role returns 403")
@@ -185,7 +182,6 @@ class UserIntegrationTest {
                         org.hamcrest.Matchers.greaterThanOrEqualTo(3)));
     }
 
-    // ─── POST /api/v1/users/me/2fa/enable ────────────────────────────────────
 
     @Test @Order(8)
     @DisplayName("POST /api/v1/users/me/2fa/enable — unauthenticated returns 401")
@@ -206,7 +202,6 @@ class UserIntegrationTest {
                 .hasValueSatisfying(u -> assertThat(u.isTwoFactorEnabled()).isTrue());
     }
 
-    // ─── PATCH /api/v1/users/{id}/disable ────────────────────────────────────
 
     @Test @Order(10)
     @DisplayName("PATCH /api/v1/users/{id}/disable — patient role returns 403")
@@ -236,7 +231,6 @@ class UserIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── GET /api/v1/notifications ────────────────────────────────────────────
 
     @Test @Order(13)
     @DisplayName("GET /api/v1/notifications — unauthenticated returns 401")
@@ -253,7 +247,6 @@ class UserIntegrationTest {
                 .andExpect(jsonPath("$.data").isArray());
     }
 
-    // ─── GET /api/v1/notifications/unread ────────────────────────────────────
 
     @Test @Order(15)
     @DisplayName("GET /api/v1/notifications/unread — authenticated returns unread list")

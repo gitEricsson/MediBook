@@ -41,7 +41,6 @@ class AppointmentHoldServiceTest {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
-    // ─── holdSlot ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("holdSlot — SETNX succeeds, returns a non-blank UUID holdId")
@@ -107,7 +106,6 @@ class AppointmentHoldServiceTest {
                 any());
     }
 
-    // ─── validateHold ─────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("validateHold — null holdId skips validation, no Redis interaction")
@@ -162,7 +160,6 @@ class AppointmentHoldServiceTest {
                 });
     }
 
-    // ─── releaseHold ──────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("releaseHold — deletes the appt_hold: key from Redis")

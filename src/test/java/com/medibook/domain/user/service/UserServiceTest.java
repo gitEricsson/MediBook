@@ -43,7 +43,6 @@ class UserServiceTest {
                 .role(Role.ROLE_PATIENT).enabled(true).build();
     }
 
-    // ─── getUserById ──────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getUserById — existing user returns mapped UserResponse")
@@ -67,7 +66,6 @@ class UserServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── getAllUsers ──────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getAllUsers — returns paginated list mapped to UserResponse")
@@ -82,7 +80,6 @@ class UserServiceTest {
         assertThat(result.getContent().get(0).getEmail()).isEqualTo("alice@test.com");
     }
 
-    // ─── enableTwoFactor ─────────────────────────────────────────────────────
 
     @Test
     @DisplayName("enableTwoFactor — delegates to AuthService.enableTwoFactor with the same userId")
@@ -92,7 +89,6 @@ class UserServiceTest {
         verify(authService).enableTwoFactor(1L);
     }
 
-    // ─── disableUser ──────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("disableUser — sets enabled=false on the user and saves")
@@ -116,7 +112,6 @@ class UserServiceTest {
         verify(userRepository, never()).save(any());
     }
 
-    // ─── getByEmail ───────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getByEmail — existing email returns UserResponse")

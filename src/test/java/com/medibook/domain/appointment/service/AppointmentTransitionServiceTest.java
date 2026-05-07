@@ -60,7 +60,6 @@ class AppointmentTransitionServiceTest {
                 .build();
     }
 
-    // ─── Authorization & Not Found ────────────────────────────────────────────
 
     @Test
     @DisplayName("transition — appointment not found throws NOT_FOUND")
@@ -87,7 +86,6 @@ class AppointmentTransitionServiceTest {
         verify(appointmentRepository, never()).save(any());
     }
 
-    // ─── CONFIRMED → COMPLETED ───────────────────────────────────────────────
 
     @Test
     @DisplayName("transition CONFIRMED→COMPLETED — saves COMPLETED status and fires STATUS_CHANGED event")
@@ -106,7 +104,6 @@ class AppointmentTransitionServiceTest {
                 argThat(e -> "STATUS_CHANGED_TO_COMPLETED".equals(e.getEventType())));
     }
 
-    // ─── CONFIRMED → NO_SHOW ─────────────────────────────────────────────────
 
     @Test
     @DisplayName("transition CONFIRMED→NO_SHOW — saves NO_SHOW status and fires STATUS_CHANGED event")
@@ -124,7 +121,6 @@ class AppointmentTransitionServiceTest {
                 argThat(e -> "STATUS_CHANGED_TO_NO_SHOW".equals(e.getEventType())));
     }
 
-    // ─── Any state → CANCELLED ───────────────────────────────────────────────
 
     @Test
     @DisplayName("transition CONFIRMED→CANCELLED — stores cancellationReason and fires event")
@@ -153,7 +149,6 @@ class AppointmentTransitionServiceTest {
         assertThat(response).isNotNull();
     }
 
-    // ─── Invalid transitions ──────────────────────────────────────────────────
 
     @Test
     @DisplayName("transition PENDING→COMPLETED — throws INVALID_TRANSITION without saving")
@@ -218,7 +213,6 @@ class AppointmentTransitionServiceTest {
                 .satisfies(ex -> assertThat(((MediBookException) ex).getErrorCode()).isEqualTo("INVALID_TRANSITION"));
     }
 
-    // ─── Event payload ────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("transition — event type encodes the target status name exactly")
@@ -233,7 +227,6 @@ class AppointmentTransitionServiceTest {
                         && e.getPatientId().equals(appointment.getPatient().getId())));
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private TransitionRequest transitionReq(AppointmentStatus to, String reason) {
         TransitionRequest req = new TransitionRequest();

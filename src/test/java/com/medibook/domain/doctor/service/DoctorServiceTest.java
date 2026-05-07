@@ -54,7 +54,6 @@ class DoctorServiceTest {
                 .licenseNumber("LIC-001").specialization("Cardiology").bio("Experienced").build();
     }
 
-    // ─── getById ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getById — existing doctor returns response with user and department fields")
@@ -78,7 +77,6 @@ class DoctorServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── getAll ───────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getAll — returns paginated list of doctors")
@@ -93,7 +91,6 @@ class DoctorServiceTest {
         assertThat(result.getContent().get(0).getLicenseNumber()).isEqualTo("LIC-001");
     }
 
-    // ─── getByDepartment ──────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getByDepartment — returns doctors filtered by department")
@@ -108,7 +105,6 @@ class DoctorServiceTest {
         assertThat(result.getContent().get(0).getDepartmentId()).isEqualTo(10L);
     }
 
-    // ─── register ────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("register — success creates doctor with all fields from request")
@@ -172,7 +168,6 @@ class DoctorServiceTest {
         verify(doctorRepository, never()).save(any());
     }
 
-    // ─── update ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("update — success updates department, specialization, and bio")
@@ -213,7 +208,6 @@ class DoctorServiceTest {
         verify(doctorRepository, never()).save(any());
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private DoctorRequest buildRequest(Long userId, Long deptId, String license, String spec, String bio) {
         DoctorRequest req = new DoctorRequest();

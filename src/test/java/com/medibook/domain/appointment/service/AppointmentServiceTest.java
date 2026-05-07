@@ -177,7 +177,6 @@ class AppointmentServiceTest {
         assertTrue(ics.contains("MB-12345@medibook.com"));
     }
 
-    // ─── Book — additional paths ──────────────────────────────────────────────
 
     @Test
     void book_holdValidationFailure_propagatesException() {
@@ -310,7 +309,6 @@ class AppointmentServiceTest {
         verify(eventProducer).publishAuditEvent(argThat(e -> "APPOINTMENT_BOOKED".equals(e.getAction())));
     }
 
-    // ─── Cancel — additional paths ────────────────────────────────────────────
 
     @Test
     void cancel_alreadyCancelled_throwsBadRequest() {
@@ -400,7 +398,6 @@ class AppointmentServiceTest {
         verify(eventProducer).publishAuditEvent(argThat(e -> "APPOINTMENT_CANCELLED".equals(e.getAction())));
     }
 
-    // ─── Cancellation Policy ──────────────────────────────────────────────────
 
     @Test
     void getCancellationPolicy_readsNoticeHoursFromSystemConfig() {
@@ -421,7 +418,6 @@ class AppointmentServiceTest {
         assertTrue(policy.isFeeApplies());
     }
 
-    // ─── Reschedule ───────────────────────────────────────────────────────────
 
     @Test
     void reschedule_notPatient_throwsForbidden() {
@@ -513,7 +509,6 @@ class AppointmentServiceTest {
         assertEquals("CONCURRENT_MODIFICATION", ex.getErrorCode());
     }
 
-    // ─── Read ─────────────────────────────────────────────────────────────────
 
     @Test
     void getById_existing_returnsResponse() {
@@ -552,7 +547,6 @@ class AppointmentServiceTest {
         assertEquals(1, result.getTotalElements());
     }
 
-    // ─── ICS Generation ───────────────────────────────────────────────────────
 
     @Test
     void generateIcs_notFound_throwsResourceNotFoundException() {

@@ -149,7 +149,6 @@ class ConsultationNoteIntegrationTest {
         return req;
     }
 
-    // ─── POST /api/v1/consultation-notes/appointment/{id} ────────────────────
 
     @Test @Order(1)
     @DisplayName("POST .../appointment/{id} — patient role returns 403")
@@ -221,7 +220,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── GET /api/v1/consultation-notes/appointment/{id} ─────────────────────
 
     @Test @Order(6)
     @DisplayName("GET .../appointment/{id} — patient role returns 403")
@@ -251,7 +249,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    // ─── GET /api/v1/consultation-notes/my-history ───────────────────────────
 
     @Test @Order(9)
     @DisplayName("GET /api/v1/consultation-notes/my-history — unauthenticated returns 401")
@@ -270,7 +267,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(jsonPath("$.data[0].diagnosis").value("Hypertension Stage 2"));
     }
 
-    // ─── PUT /api/v1/consultation-notes/{id} ─────────────────────────────────
 
     @Test @Order(11)
     @DisplayName("PUT /api/v1/consultation-notes/{id} — patient role returns 403")

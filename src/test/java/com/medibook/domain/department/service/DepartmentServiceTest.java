@@ -40,7 +40,6 @@ class DepartmentServiceTest {
         inactiveDept = Department.builder().id(2L).name("Old Unit").code("OLD").isActive(false).build();
     }
 
-    // ─── getAllActive ─────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getAllActive — returns only isActive=true departments")
@@ -61,7 +60,6 @@ class DepartmentServiceTest {
         assertThat(departmentService.getAllActive()).isEmpty();
     }
 
-    // ─── getById ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getById — existing department returns mapped response")
@@ -84,7 +82,6 @@ class DepartmentServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── create ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("create — success saves department with uppercased code")
@@ -124,7 +121,6 @@ class DepartmentServiceTest {
         verify(departmentRepository, never()).save(any());
     }
 
-    // ─── update ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("update — success overwrites name, code (uppercased), and description")
@@ -203,7 +199,6 @@ class DepartmentServiceTest {
         verify(departmentRepository, never()).save(any());
     }
 
-    // ─── deactivate ───────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("deactivate — sets isActive=false and saves")
@@ -227,7 +222,6 @@ class DepartmentServiceTest {
         verify(departmentRepository, never()).save(any());
     }
 
-    // ─── reactivate ───────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("reactivate — sets isActive=true and saves")
@@ -251,7 +245,6 @@ class DepartmentServiceTest {
         verify(departmentRepository, never()).save(any());
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private DepartmentRequest buildRequest(String name, String code, String description) {
         DepartmentRequest req = new DepartmentRequest();

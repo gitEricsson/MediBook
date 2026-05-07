@@ -66,7 +66,6 @@ class ConsultationNoteServiceTest {
                 .build();
     }
 
-    // ─── create ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("create — success builds note from appointment and request, saves with PHI fields")
@@ -129,7 +128,6 @@ class ConsultationNoteServiceTest {
         assertThat(captor.getValue().getFollowUpDate()).isEqualTo(followUp);
     }
 
-    // ─── getByAppointment ─────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getByAppointment — existing note returns response")
@@ -151,7 +149,6 @@ class ConsultationNoteServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── getPatientHistory ────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getPatientHistory — returns list of notes ordered by createdAt DESC")
@@ -172,7 +169,6 @@ class ConsultationNoteServiceTest {
         assertThat(noteService.getPatientHistory(1L)).isEmpty();
     }
 
-    // ─── update ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("update — success overwrites all mutable fields")
@@ -203,7 +199,6 @@ class ConsultationNoteServiceTest {
         verify(noteRepository, never()).save(any());
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private ConsultationNoteRequest buildRequest(String diagnosis, String treatmentPlan,
                                                   String prescriptions, LocalDate followUp) {

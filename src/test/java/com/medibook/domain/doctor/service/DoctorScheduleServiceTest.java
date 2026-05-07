@@ -69,7 +69,6 @@ class DoctorScheduleServiceTest {
         completedAppt = appt(doctor, patient, DATE.atTime(13, 0), AppointmentStatus.COMPLETED);
     }
 
-    // ─── getDailySchedule — working hours ────────────────────────────────────
 
     @Test
     @DisplayName("getDailySchedule — no working hours configured uses default 09:00–17:00")
@@ -102,7 +101,6 @@ class DoctorScheduleServiceTest {
         assertThat(response.getFreeSlots()).hasSize(8);
     }
 
-    // ─── getDailySchedule — slot availability ─────────────────────────────────
 
     @Test
     @DisplayName("getDailySchedule — PENDING/CONFIRMED/COMPLETED appointments block their time slots")
@@ -178,7 +176,6 @@ class DoctorScheduleServiceTest {
         assertThat(response.getFreeSlots()).hasSize(15);
     }
 
-    // ─── getScheduleSummary ───────────────────────────────────────────────────
 
     @Test
     @DisplayName("getScheduleSummary — correctly maps COMPLETED/CONFIRMED/NO_SHOW counts")
@@ -258,7 +255,6 @@ class DoctorScheduleServiceTest {
         assertThat(response.getFreeSlots()).isGreaterThanOrEqualTo(0);
     }
 
-    // ─── getWeeklySummary ─────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getWeeklySummary — always returns exactly 7 entries starting from weekOf")
@@ -309,7 +305,6 @@ class DoctorScheduleServiceTest {
         assertThat(result.values()).containsOnly(2L);
     }
 
-    // ─── getUpNext ────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("getUpNext — no upcoming CONFIRMED appointment returns null")
@@ -348,7 +343,6 @@ class DoctorScheduleServiceTest {
                 eq(DOCTOR_ID), any(LocalDateTime.class), eq(AppointmentStatus.CONFIRMED));
     }
 
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private Appointment appt(Doctor doctor, User patient, LocalDateTime scheduledAt, AppointmentStatus status) {
         return Appointment.builder()

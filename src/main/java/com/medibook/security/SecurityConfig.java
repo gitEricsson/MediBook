@@ -49,7 +49,9 @@ public class SecurityConfig {
             "/api/v1/auth/email/verify",
             "/swagger-ui/**",
             "/v3/api-docs/**",
-            "/actuator/health/**"
+            "/actuator/health/**",
+            "/health",
+            "/version"
     };
 
     @Bean

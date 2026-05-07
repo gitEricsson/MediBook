@@ -1,10 +1,10 @@
-# ─── Build output ────────────────────────────────────────────────────────────
+# ─── Build output 
 target/
 !.mvn/wrapper/maven-wrapper.jar
 !**/src/main/**/target/
 !**/src/test/**/target/
 
-# ─── IDE ─────────────────────────────────────────────────────────────────────
+# ─── IDE 
 .idea/
 *.iml
 *.iws
@@ -14,28 +14,28 @@ target/
 *.swo
 *.DS_Store
 
-# ─── Spring Boot ─────────────────────────────────────────────────────────────
+# ─── Spring Boot 
 *.log
 logs/
 spring.log
 
-# ─── Secrets — NEVER commit ──────────────────────────────────────────────────
+# ─── Secrets — NEVER commit 
 .env
 *.env
 application-prod.yml
 **/secrets/
 
-# ─── Docker ──────────────────────────────────────────────────────────────────
+# ─── Docker 
 docker/volumes/
 
-# ─── Maven wrapper ───────────────────────────────────────────────────────────
+# ─── Maven wrapper 
 .mvn/wrapper/maven-wrapper.properties
 
-# ─── Jacoco ──────────────────────────────────────────────────────────────────
+# ─── Jacoco 
 **/jacoco.exec
 **/site/jacoco/
 
-# ─── OS ──────────────────────────────────────────────────────────────────────
+# ─── OS 
 Thumbs.db
 ehthumbs.db
 Desktop.ini

@@ -40,7 +40,7 @@ public class ConsultationNote extends AuditableEntity {
     @Column(name = "follow_up_date")
     private LocalDate followUpDate;
 
-    @Column(name = "phi_version", length = 10)
+    @Column(name = "phi_version", nullable = false, length = 10)
     @Builder.Default
     private String phiVersion = "v1";
 }

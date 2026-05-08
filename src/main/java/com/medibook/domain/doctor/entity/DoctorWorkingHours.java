@@ -18,7 +18,7 @@ public class DoctorWorkingHours {
     @JoinColumn(name = "doctor_id", nullable = false)
     private Doctor doctor;
 
-    @Column(name = "day_of_week", nullable = false)
+    @Column(name = "day_of_week", nullable = false, columnDefinition = "TINYINT")
     private Integer dayOfWeek; // 1=Mon..7=Sun
 
     @Column(name = "start_time", nullable = false)

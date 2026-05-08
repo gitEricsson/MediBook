@@ -1,13 +1,12 @@
-# ─── Build Stage ─────────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS builder
+# ─── Build Stage 
+FROM maven:3.9.6-eclipse-temurin-21-alpine AS builder
 WORKDIR /app
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN ./mvnw dependency:go-offline -q
+COPY pom.xml .
+RUN mvn dependency:go-offline -q
 COPY src ./src
-RUN ./mvnw clean package -DskipTests -q
+RUN mvn clean package -DskipTests -q
 
-# ─── Runtime Stage ────────────────────────────────────────────────────────────
+# ─── Runtime Stage 
 FROM eclipse-temurin:21-jre-alpine AS runtime
 WORKDIR /app
 

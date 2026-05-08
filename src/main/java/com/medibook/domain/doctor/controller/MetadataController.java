@@ -24,11 +24,7 @@ public class MetadataController {
     private final DepartmentService departmentService;
     private final DoctorRepository doctorRepository;
 
-    @GetMapping("/departments")
-    @Operation(summary = "Get list of departments for filters")
-    public ResponseEntity<ApiResponse<List<DepartmentResponse>>> getDepartments() {
-        return ResponseEntity.ok(ApiResponse.ok(departmentService.getAllActive()));
-    }
+
 
     @GetMapping("/specialisations")
     @Operation(summary = "Get distinct specialisations from active doctors")

@@ -26,7 +26,7 @@ public class DoctorSearchController {
 
     private final DoctorSearchService doctorSearchService;
 
-    @GetMapping
+    @GetMapping("/search")
     @Operation(summary = "Search doctors with filters")
     public ResponseEntity<ApiResponse<Page<DoctorResponse>>> searchDoctors(
             @RequestParam(required = false) String q,
@@ -38,12 +38,6 @@ public class DoctorSearchController {
             Pageable pageable) {
         return ResponseEntity.ok(ApiResponse.ok(doctorSearchService.searchDoctors(
                 q, departmentId, specialisation, availability, visitType, acceptingNew, pageable)));
-    }
-
-    @GetMapping("/{id}")
-    @Operation(summary = "Get doctor profile details")
-    public ResponseEntity<ApiResponse<DoctorResponse>> getDoctorById(@PathVariable Long id) {
-        return ResponseEntity.ok(ApiResponse.ok(doctorSearchService.getDoctorById(id)));
     }
 
     @GetMapping("/{id}/availability")

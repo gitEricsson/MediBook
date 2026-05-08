@@ -14,7 +14,7 @@ import java.util.concurrent.Executor;
  * this executor is used for @Async methods needing explicit pool sizing.
  */
 @Configuration
-@EnableAsync
+@EnableAsync(proxyTargetClass = true)
 public class AsyncConfig implements AsyncConfigurer {
 
     @Bean(name = "taskExecutor")

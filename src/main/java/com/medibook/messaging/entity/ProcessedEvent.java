@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 public class ProcessedEvent {
 
     @Id
-    @Column(name = "event_id", length = 36)
+    @Column(name = "event_id", columnDefinition = "CHAR(36)")
     private String eventId;
 
     @Column(name = "event_type", nullable = false, length = 100)

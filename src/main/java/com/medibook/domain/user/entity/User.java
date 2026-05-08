@@ -38,6 +38,7 @@ public class User extends AuditableEntity {
 
     @Column(length = 50, nullable = false)
     @Enumerated(EnumType.STRING)
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
     @Builder.Default
     private Role role = Role.ROLE_PATIENT;
 

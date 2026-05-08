@@ -1,22 +1,26 @@
 spring:
+  aop:
+    proxy-target-class: true
   datasource:
-    url: jdbc:mysql://localhost:3306/medibook_dev?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: medibook
-    password: medibook
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:medibook}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${DB_USER:medibook}
+    password: ${DB_PASSWORD:medibook}
   jpa:
     show-sql: true
+    hibernate:
+      ddl-auto: validate
   data:
     cassandra:
-      contact-points: localhost
-      port: 9042
+      contact-points: ${CASSANDRA_HOST:localhost}
+      port: ${CASSANDRA_PORT:9042}
     redis:
-      host: localhost
-      port: 6379
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
   kafka:
-    bootstrap-servers: localhost:9092
+    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
   mail:
-    host: localhost
-    port: 1025  # MailHog for local dev
+    host: ${MAIL_HOST:localhost}
+    port: ${MAIL_PORT:1025}  # MailHog for local dev
 
 logging:
   level:

@@ -1,8 +1,7 @@
-version: "3.9"
 
 services:
 
-  # ─── Application ──────────────────────────────────────────────────────────
+  # ─── Application 
   app:
     build:
       context: .
@@ -14,20 +13,25 @@ services:
       SPRING_PROFILES_ACTIVE: dev
       DB_HOST: mysql
       DB_PORT: 3306
-      DB_NAME: medibook
-      DB_USER: medibook
-      DB_PASSWORD: medibook
+      DB_NAME: ${DB_NAME:-medibook}
+      DB_USER: ${DB_USER:-medibook}
+      DB_PASSWORD: ${DB_PASSWORD:-medibook}
       CASSANDRA_HOST: cassandra
       CASSANDRA_PORT: 9042
-      CASSANDRA_KEYSPACE: medibook
-      CASSANDRA_DATACENTER: datacenter1
+      CASSANDRA_KEYSPACE: ${CASSANDRA_KEYSPACE:-medibook}
+      CASSANDRA_DATACENTER: ${CASSANDRA_DATACENTER:-datacenter1}
+      CASSANDRA_USER: ${CASSANDRA_USER:-cassandra}
+      CASSANDRA_PASSWORD: ${CASSANDRA_PASSWORD:-cassandra}
       REDIS_HOST: redis
       REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
       KAFKA_BROKERS: kafka:9092
       MAIL_HOST: mailhog
       MAIL_PORT: 1025
-      JWT_SECRET: ${JWT_SECRET:-medibook-super-secret-key-must-be-at-least-256-bits-long-for-hs256}
-      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-medibook-phi-aes256-encryption-key!}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      JWT_SECRET: ${JWT_SECRET}
+      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY}
     depends_on:
       mysql:
         condition: service_healthy
@@ -39,30 +43,42 @@ services:
         condition: service_healthy
     networks:
       - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
     restart: unless-stopped
 
-  # ─── MySQL ────────────────────────────────────────────────────────────────
+  # ─── MySQL 
   mysql:
     image: mysql:8.2
     container_name: medibook-mysql
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: medibook
-      MYSQL_USER: medibook
-      MYSQL_PASSWORD: medibook
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-medibook}
+      MYSQL_USER: ${DB_USER:-medibook}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-medibook}
     volumes:
       - mysql-data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-umedibook", "-pmedibook"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u$${DB_USER:-medibook}", "-p$${DB_PASSWORD:-medibook}"]
       interval: 10s
       timeout: 5s
       retries: 10
     networks:
       - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
 
-  # ─── Cassandra ────────────────────────────────────────────────────────────
+  # ─── Cassandra 
   cassandra:
     image: cassandra:4.1
     container_name: medibook-cassandra
@@ -81,8 +97,14 @@ services:
       start_period: 60s
     networks:
       - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 1024M
 
-  # ─── Redis ────────────────────────────────────────────────────────────────
+  # ─── Redis 
   redis:
     image: redis:7.2-alpine
     container_name: medibook-redis
@@ -99,7 +121,7 @@ services:
     networks:
       - medibook-net
 
-  # ─── Zookeeper ────────────────────────────────────────────────────────────
+  # ─── Zookeeper
   zookeeper:
     image: confluentinc/cp-zookeeper:7.6.0
     container_name: medibook-zookeeper
@@ -109,7 +131,7 @@ services:
     networks:
       - medibook-net
 
-  # ─── Kafka ────────────────────────────────────────────────────────────────
+  # ─── Kafka
   kafka:
     image: confluentinc/cp-kafka:7.6.0
     container_name: medibook-kafka
@@ -134,8 +156,14 @@ services:
       - zookeeper
     networks:
       - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
 
-  # ─── Kafka UI ─────────────────────────────────────────────────────────────
+  # ─── Kafka UI
   kafka-ui:
     image: provectuslabs/kafka-ui:latest
     container_name: medibook-kafka-ui
@@ -149,7 +177,7 @@ services:
     networks:
       - medibook-net
 
-  # ─── MailHog (Dev email catcher) ──────────────────────────────────────────
+  # ─── MailHog (Dev email catcher)
   mailhog:
     image: mailhog/mailhog:latest
     container_name: medibook-mailhog

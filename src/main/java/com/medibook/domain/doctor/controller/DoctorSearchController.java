@@ -40,6 +40,12 @@ public class DoctorSearchController {
                 q, departmentId, specialisation, availability, visitType, acceptingNew, pageable)));
     }
 
+    @GetMapping("/{id}/profile")
+    @Operation(summary = "Get doctor profile details")
+    public ResponseEntity<ApiResponse<DoctorResponse>> getDoctorById(@PathVariable Long id) {
+        return ResponseEntity.ok(ApiResponse.ok(doctorSearchService.getDoctorById(id)));
+    }
+
     @GetMapping("/{id}/availability")
     @Operation(summary = "Get doctor availability slot grid")
     public ResponseEntity<ApiResponse<AvailabilityGridResponse>> getAvailability(

@@ -28,6 +28,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -40,15 +43,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 /**
  * Integration tests for DoctorScheduleController.
  *
- * Verifies HTTP layer: auth enforcement, request validation, response structure.
- * Also tests with real appointment data (after fixing the controller to use
- * the doctor entity ID correctly via DoctorRepository.findByUserId).
- *
- * NOTE: The controller currently passes principal.getId() (User ID) as doctorId.
- * This means schedule data will only appear if User ID == Doctor entity ID,
- * which can happen when the doctor is the first entity saved. Tests that need
- * real appointment data use a workaround by saving the doctor entity first and
- * relying on auto-increment to produce a predictable ID.
+ * Verifies HTTP layer: auth enforcement, request validation, response structure,
+ * and real appointment data via working hours and appointment fixtures.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
@@ -58,17 +54,29 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("DoctorSchedule Integration Tests")
 class DoctorScheduleIntegrationTest {
 
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.2")
+            .withDatabaseName("medibook_schedule_it")
+            .withUsername("test").withPassword("test")
+            .withStartupTimeout(java.time.Duration.ofMinutes(5));
+
+    @SuppressWarnings("resource")
+    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.2-alpine"))
+            .withExposedPorts(6379)
+            .withStartupTimeout(java.time.Duration.ofMinutes(5));
+
+    static {
+        System.setProperty("api.version", "1.41");
+        mysql.start();
+        redis.start();
+    }
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:mysql://medibook-mysql:3306/medibook_db");
-        registry.add("spring.datasource.username", () -> "medibook");
-        registry.add("spring.datasource.password", () -> "medibook");
-        registry.add("spring.data.redis.host", () -> "medibook-redis");
-        registry.add("spring.data.redis.port", () -> 6379);
-        registry.add("spring.data.cassandra.contact-points", () -> "medibook-cassandra");
-        registry.add("spring.data.cassandra.local-datacenter", () -> "datacenter1");
-        registry.add("spring.kafka.bootstrap-servers", () -> "kafka:9092");
+        registry.add("spring.datasource.url",      mysql::getJdbcUrl);
+        registry.add("spring.datasource.username", mysql::getUsername);
+        registry.add("spring.datasource.password", mysql::getPassword);
+        registry.add("spring.data.redis.host",     redis::getHost);
+        registry.add("spring.data.redis.port",     () -> redis.getMappedPort(6379));
     }
 
     @MockBean AppointmentEventProducer eventProducer;

@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -40,7 +41,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final int      API_LIMIT   = 100;
     private static final Duration WINDOW      = Duration.ofMinutes(1);
 
+    @Value("${rate-limit.enabled:true}")
+    private boolean enabled;
+
     private final RedisTemplate<String, Object> redisTemplate;
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return !enabled;
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,

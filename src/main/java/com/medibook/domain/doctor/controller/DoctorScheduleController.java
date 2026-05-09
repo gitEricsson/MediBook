@@ -43,7 +43,7 @@ public class DoctorScheduleController {
     public ResponseEntity<ApiResponse<ScheduleDayResponse>> getDailySchedule(
             @CurrentUser UserPrincipal principal,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
-        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getDailySchedule(principal.getId(), date)));
+        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getDailySchedule(resolveOwnDoctorId(principal), date)));
     }
 
     @GetMapping("/week")
@@ -51,21 +51,21 @@ public class DoctorScheduleController {
     public ResponseEntity<ApiResponse<Map<String, Long>>> getWeeklySummary(
             @CurrentUser UserPrincipal principal,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate weekOf) {
-        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getWeeklySummary(principal.getId(), weekOf)));
+        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getWeeklySummary(resolveOwnDoctorId(principal), weekOf)));
     }
 
     @GetMapping("/summary")
     @Operation(summary = "Get today's schedule summary")
     public ResponseEntity<ApiResponse<ScheduleSummaryResponse>> getTodaySummary(
             @CurrentUser UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getScheduleSummary(principal.getId(), LocalDate.now())));
+        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getScheduleSummary(resolveOwnDoctorId(principal), LocalDate.now())));
     }
 
     @GetMapping("/up-next")
     @Operation(summary = "Get next upcoming appointment")
     public ResponseEntity<ApiResponse<AppointmentResponse>> getUpNext(
             @CurrentUser UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getUpNext(principal.getId())));
+        return ResponseEntity.ok(ApiResponse.ok(scheduleService.getUpNext(resolveOwnDoctorId(principal))));
     }
 
     @GetMapping("/hours")

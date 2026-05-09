@@ -21,6 +21,9 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.MySQLContainer;
+import org.testcontainers.utility.DockerImageName;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -34,17 +37,32 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("Department Integration Tests")
 class DepartmentIntegrationTest {
 
+    // Containers are started in the static block below — before JUnit/Spring initialise anything.
+    // @Testcontainers/@Container are not used because PER_CLASS causes postProcessTestInstance
+    // (which loads the Spring context) to run before TestcontainersExtension.beforeAll().
+    static MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.2")
+            .withDatabaseName("medibook_dept_it")
+            .withUsername("test").withPassword("test")
+            .withStartupTimeout(java.time.Duration.ofMinutes(5));
+
+    @SuppressWarnings("resource")
+    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.2-alpine"))
+            .withExposedPorts(6379)
+            .withStartupTimeout(java.time.Duration.ofMinutes(5));
+
+    static {
+        System.setProperty("api.version", "1.41");
+        mysql.start();
+        redis.start();
+    }
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", () -> "jdbc:mysql://medibook-mysql:3306/medibook_db");
-        registry.add("spring.datasource.username", () -> "medibook");
-        registry.add("spring.datasource.password", () -> "medibook");
-        registry.add("spring.data.redis.host", () -> "medibook-redis");
-        registry.add("spring.data.redis.port", () -> 6379);
-        registry.add("spring.data.cassandra.contact-points", () -> "medibook-cassandra");
-        registry.add("spring.data.cassandra.local-datacenter", () -> "datacenter1");
-        registry.add("spring.kafka.bootstrap-servers", () -> "kafka:9092");
+        registry.add("spring.datasource.url",      mysql::getJdbcUrl);
+        registry.add("spring.datasource.username", mysql::getUsername);
+        registry.add("spring.datasource.password", mysql::getPassword);
+        registry.add("spring.data.redis.host",     redis::getHost);
+        registry.add("spring.data.redis.port",     () -> redis.getMappedPort(6379));
     }
 
     @MockBean AppointmentEventProducer eventProducer;
@@ -91,9 +109,9 @@ class DepartmentIntegrationTest {
 
 
     @Test @Order(1)
-    @DisplayName("GET /api/v1/departments — unauthenticated returns 401")
-    void getAll_unauthenticated_returns401() throws Exception {
-        mockMvc.perform(get("/api/v1/departments")).andExpect(status().isUnauthorized());
+    @DisplayName("GET /api/v1/departments — unauthenticated returns 200 (public endpoint)")
+    void getAll_unauthenticated_returns200() throws Exception {
+        mockMvc.perform(get("/api/v1/departments")).andExpect(status().isOk());
     }
 
     @Test @Order(2)

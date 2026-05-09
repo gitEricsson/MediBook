@@ -22,7 +22,7 @@
     <jjwt.version>0.12.5</jjwt.version>
     <resilience4j.version>2.2.0</resilience4j.version>
     <mapstruct.version>1.5.5.Final</mapstruct.version>
-    <lombok.version>1.18.36</lombok.version>
+    <lombok.version>1.18.32</lombok.version>
     <testcontainers.version>1.19.7</testcontainers.version>
     <springdoc.version>2.5.0</springdoc.version>
   </properties>

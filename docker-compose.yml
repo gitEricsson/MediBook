@@ -187,6 +187,22 @@ services:
     networks:
       - medibook-net
 
+  # ─── Tests (Run with: docker-compose run --rm test mvn clean test)
+  test:
+    image: maven:3.9.6-eclipse-temurin-21-jammy
+    container_name: medibook-test
+    volumes:
+      - .:/app
+      # Mount maven cache so dependencies aren't downloaded every time
+      - ~/.m2:/root/.m2
+      # Mount Docker socket so Testcontainers can spawn databases
+      - /var/run/docker.sock:/var/run/docker.sock
+    working_dir: /app
+    environment:
+      - TESTCONTAINERS_HOST_OVERRIDE=host.docker.internal
+    networks:
+      - medibook-net
+
 volumes:
   mysql-data:
   cassandra-data:

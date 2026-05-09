@@ -22,7 +22,7 @@
     <jjwt.version>0.12.5</jjwt.version>
     <resilience4j.version>2.2.0</resilience4j.version>
     <mapstruct.version>1.5.5.Final</mapstruct.version>
-    <lombok.version>1.18.36</lombok.version>
+    <lombok.version>1.18.46</lombok.version>
     <testcontainers.version>1.19.7</testcontainers.version>
     <springdoc.version>2.5.0</springdoc.version>
   </properties>
@@ -194,6 +194,17 @@
     </dependency>
     <dependency>
       <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.github.docker-java</groupId>
+      <artifactId>docker-java-transport-httpclient5</artifactId>
+      <version>3.3.6</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
       <artifactId>mysql</artifactId>
       <scope>test</scope>
     </dependency>
@@ -246,6 +257,7 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
+        <version>3.13.0</version>
         <configuration>
           <release>21</release>
           <annotationProcessorPaths>
@@ -274,7 +286,7 @@
             <configuration>
               <rules>
                 <requireJavaVersion>
-                  <version>[21.0.0,22.0.0)</version>
+                  <version>[21.0.0,)</version>
                 </requireJavaVersion>
               </rules>
             </configuration>
@@ -285,11 +297,14 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-surefire-plugin</artifactId>
+        <version>3.3.0</version>
         <configuration>
           <argLine>
+            @{argLine}
             --add-opens java.base/java.lang=ALL-UNNAMED
             --add-opens java.base/java.util=ALL-UNNAMED
             --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+            --enable-native-access=ALL-UNNAMED
           </argLine>
         </configuration>
       </plugin>

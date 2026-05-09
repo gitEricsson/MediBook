@@ -8,7 +8,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 
 @SpringBootApplication
 @EnableCaching
-@EnableAsync
+@EnableAsync(proxyTargetClass = true)
 @EnableScheduling
 public class MediBookApplication {
 

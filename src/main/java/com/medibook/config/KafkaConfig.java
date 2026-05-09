@@ -30,6 +30,9 @@ public class KafkaConfig {
     @Value("${spring.kafka.bootstrap-servers}")
     private String bootstrapServers;
 
+    @Value("${spring.kafka.listener.auto-startup:true}")
+    private boolean listenerAutoStartup;
+
     @Bean
     public KafkaTemplate<String, Object> kafkaTemplate() {
         return new KafkaTemplate<>(producerFactory());
@@ -53,6 +56,7 @@ public class KafkaConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(appointmentConsumerFactory());
         factory.setConcurrency(3);
+        factory.setAutoStartup(listenerAutoStartup);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
         return factory;
@@ -71,6 +75,7 @@ public class KafkaConfig {
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(auditConsumerFactory());
         factory.setConcurrency(2);
+        factory.setAutoStartup(listenerAutoStartup);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
         return factory;

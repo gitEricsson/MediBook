@@ -29,6 +29,13 @@
 
   <dependencies>
 
+    <!-- ===== Dev Utilities ===== -->
+    <dependency>
+      <groupId>me.paulschwarz</groupId>
+      <artifactId>spring-dotenv</artifactId>
+      <version>4.0.0</version>
+    </dependency>
+
     <!-- ===== Web / Core ===== -->
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -240,8 +247,7 @@
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <configuration>
-          <source>21</source>
-          <target>21</target>
+          <release>21</release>
           <annotationProcessorPaths>
             <path>
               <groupId>org.projectlombok</groupId>
@@ -254,6 +260,37 @@
               <version>${mapstruct.version}</version>
             </path>
           </annotationProcessorPaths>
+        </configuration>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-enforcer-plugin</artifactId>
+        <version>3.4.1</version>
+        <executions>
+          <execution>
+            <id>enforce-java-21</id>
+            <goals><goal>enforce</goal></goals>
+            <configuration>
+              <rules>
+                <requireJavaVersion>
+                  <version>[21.0.0,22.0.0)</version>
+                </requireJavaVersion>
+              </rules>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <argLine>
+            --add-opens java.base/java.lang=ALL-UNNAMED
+            --add-opens java.base/java.util=ALL-UNNAMED
+            --add-opens java.base/java.lang.reflect=ALL-UNNAMED
+          </argLine>
         </configuration>
       </plugin>
 

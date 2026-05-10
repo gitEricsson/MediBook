@@ -41,20 +41,20 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final int      API_LIMIT   = 100;
     private static final Duration WINDOW      = Duration.ofMinutes(1);
 
-    @Value("${rate-limit.enabled:true}")
-    private boolean enabled;
-
     private final RedisTemplate<String, Object> redisTemplate;
 
-    @Override
-    protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !enabled;
-    }
+    @Value("${medibook.rate-limit.enabled:true}")
+    private boolean enabled;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
                                     HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
+        if (!enabled) {
+            chain.doFilter(request, response);
+            return;
+        }
+
         String path = request.getRequestURI();
         String ip   = resolveClientIp(request);
 

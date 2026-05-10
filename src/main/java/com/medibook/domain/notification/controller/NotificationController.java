@@ -20,7 +20,7 @@ import java.util.List;
 import java.util.UUID;
 
 @RestController
-@RequestMapping("/api/v1/me/notifications")
+@RequestMapping({"/api/v1/me/notifications", "/api/v1/notifications"})
 @RequiredArgsConstructor
 @Tag(name = "Notifications", description = "Current user notification inbox")
 @SecurityRequirement(name = "bearerAuth")
@@ -37,6 +37,13 @@ public class NotificationController {
                 ? notificationService.getUnread(principal.getId())
                 : notificationService.getRecent(principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(list));
+    }
+
+    @GetMapping("/unread")
+    @Operation(summary = "Get unread notifications")
+    public ResponseEntity<ApiResponse<List<NotificationResponse>>> getUnreadNotifications(
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(notificationService.getUnread(principal.getId())));
     }
 
     @PostMapping("/{id}/read")

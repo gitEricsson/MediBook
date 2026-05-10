@@ -1,10 +1,8 @@
 package com.medibook.integration;
-
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.domain.appointment.dto.AppointmentRequest;
 import com.medibook.domain.appointment.entity.AppointmentType;
 import com.medibook.domain.consultation.dto.ConsultationNoteRequest;
-import com.medibook.domain.consultation.repository.ConsultationNoteRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
@@ -16,27 +14,17 @@ import com.medibook.domain.user.repository.UserRepository;
 import com.medibook.messaging.producer.AppointmentEventProducer;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
-import org.testcontainers.containers.GenericContainer;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.utility.DockerImageName;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
-
 /**
  * Integration tests for ConsultationNoteController.
  *
@@ -44,93 +32,52 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * consultation notes. PHI fields (diagnosis, treatmentPlan) are encrypted at
  * rest and decrypted transparently via PhiAttributeConverter.
  */
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@AutoConfigureMockMvc
-@ActiveProfiles("test")
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 @TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 @DisplayName("ConsultationNote Integration Tests")
-class ConsultationNoteIntegrationTest {
-
-    @SuppressWarnings("resource")
-    static MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.2"))
-            .withDatabaseName("medibook_test")
-            .withUsername("test")
-            .withPassword("test")
-            .withStartupTimeout(java.time.Duration.ofMinutes(5));
-
-    @SuppressWarnings("resource")
-    static GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.2-alpine"))
-            .withExposedPorts(6379)
-            .withStartupTimeout(java.time.Duration.ofMinutes(5));
-
-    static {
-        System.setProperty("api.version", "1.41");
-        mysql.start();
-        redis.start();
-    }
-
-    @DynamicPropertySource
-    static void overrideProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url",      mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host",     redis::getHost);
-        registry.add("spring.data.redis.port",     () -> redis.getMappedPort(6379));
-    }
-
-
+class ConsultationNoteIntegrationTest extends IntegrationTestSupport {
+    @MockBean AppointmentEventProducer eventProducer;
     @Autowired MockMvc                   mockMvc;
     @Autowired ObjectMapper              objectMapper;
     @Autowired UserRepository            userRepository;
     @Autowired DepartmentRepository      departmentRepository;
     @Autowired DoctorRepository          doctorRepository;
-    @Autowired ConsultationNoteRepository noteRepository;
+    @Autowired JdbcTemplate              jdbcTemplate;
     @Autowired PasswordEncoder           passwordEncoder;
-
     String patientToken;
     String doctorToken;
     Long   appointmentId;
     Long   noteId;
     Long   doctorEntityId;
-
     @BeforeAll
     void setUpFixtures() throws Exception {
         Department dept = departmentRepository.save(
                 Department.builder().name("Notes-Cardiology").code("NTCD").build());
-
         User patientUser = userRepository.save(User.builder()
                 .email("notes-patient@test.com").password(passwordEncoder.encode("Password1!"))
                 .firstName("Alice").lastName("Notes").role(Role.ROLE_PATIENT).build());
-
         User docUser = userRepository.save(User.builder()
                 .email("notes-doctor@test.com").password(passwordEncoder.encode("Password1!"))
                 .firstName("Bob").lastName("Notes").role(Role.ROLE_DOCTOR).build());
-
         Doctor doctor = doctorRepository.save(Doctor.builder()
                 .user(docUser).department(dept).licenseNumber("LIC-NOTES-001")
                 .specialization("Cardiology").build());
         doctorEntityId = doctor.getId();
-
         patientToken = loginAndGetToken("notes-patient@test.com", "Password1!");
         doctorToken  = loginAndGetToken("notes-doctor@test.com",  "Password1!");
-
         AppointmentRequest apptReq = new AppointmentRequest();
         apptReq.setDoctorId(doctorEntityId);
         apptReq.setScheduledAt(LocalDateTime.now().plusDays(5).withMinute(0).withSecond(0).withNano(0));
         apptReq.setType(AppointmentType.IN_PERSON);
         apptReq.setDurationMins(30);
-
         MvcResult bookResult = mockMvc.perform(post("/api/v1/appointments")
                         .header("Authorization", "Bearer " + patientToken)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(apptReq)))
                 .andExpect(status().isCreated()).andReturn();
-
         appointmentId = objectMapper.readTree(bookResult.getResponse().getContentAsString())
                 .get("data").get("id").asLong();
     }
-
     private String loginAndGetToken(String email, String password) throws Exception {
         LoginRequest req = new LoginRequest();
         req.setEmail(email);
@@ -142,7 +89,6 @@ class ConsultationNoteIntegrationTest {
         return objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("data").get("accessToken").asText();
     }
-
     private ConsultationNoteRequest buildNoteRequest(String diagnosis, String treatmentPlan) {
         ConsultationNoteRequest req = new ConsultationNoteRequest();
         req.setDiagnosis(diagnosis);
@@ -151,8 +97,6 @@ class ConsultationNoteIntegrationTest {
         req.setFollowUpDate(LocalDate.now().plusMonths(1));
         return req;
     }
-
-
     @Test @Order(1)
     @DisplayName("POST .../appointment/{id} — patient role returns 403")
     void create_patientRole_returns403() throws Exception {
@@ -162,7 +106,6 @@ class ConsultationNoteIntegrationTest {
                         .content(objectMapper.writeValueAsString(buildNoteRequest("dx", "tx"))))
                 .andExpect(status().isForbidden());
     }
-
     @Test @Order(2)
     @DisplayName("POST .../appointment/{id} — missing diagnosis returns 422")
     void create_missingDiagnosis_returns422() throws Exception {
@@ -175,7 +118,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errors[0].field").value("diagnosis"));
     }
-
     @Test @Order(3)
     @DisplayName("POST .../appointment/{id} — doctor creates note → 201, PHI fields stored & decrypted on read")
     void create_doctorSuccess_returns201WithPhiDecrypted() throws Exception {
@@ -192,14 +134,14 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(jsonPath("$.data.doctorName").value("Bob Notes"))
                 .andExpect(jsonPath("$.data.followUpDate").isNotEmpty())
                 .andReturn();
-
         noteId = objectMapper.readTree(result.getResponse().getContentAsString())
                 .get("data").get("id").asLong();
-
-        var rawNote = noteRepository.findById(noteId).orElseThrow();
-        assertThat(rawNote.getDiagnosis()).isNotEqualTo("Hypertension Stage 2"); // encrypted in DB
+        String rawDiagnosis = jdbcTemplate.queryForObject(
+                "select diagnosis from consultation_notes where id = ?",
+                String.class,
+                noteId);
+        assertThat(rawDiagnosis).isNotEqualTo("Hypertension Stage 2"); // encrypted in DB
     }
-
     @Test @Order(4)
     @DisplayName("POST .../appointment/{id} — duplicate note returns 409 NOTE_EXISTS")
     void create_duplicate_returns409() throws Exception {
@@ -211,7 +153,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.errorCode").value("NOTE_EXISTS"));
     }
-
     @Test @Order(5)
     @DisplayName("POST .../appointment/{id} — appointment not found returns 404")
     void create_appointmentNotFound_returns404() throws Exception {
@@ -221,8 +162,6 @@ class ConsultationNoteIntegrationTest {
                         .content(objectMapper.writeValueAsString(buildNoteRequest("dx", "tx"))))
                 .andExpect(status().isNotFound());
     }
-
-
     @Test @Order(6)
     @DisplayName("GET .../appointment/{id} — patient role returns 403")
     void getByAppointment_patientRole_returns403() throws Exception {
@@ -230,7 +169,6 @@ class ConsultationNoteIntegrationTest {
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isForbidden());
     }
-
     @Test @Order(7)
     @DisplayName("GET .../appointment/{id} — doctor returns 200 with decrypted PHI")
     void getByAppointment_doctor_returns200WithDecryptedPhi() throws Exception {
@@ -242,7 +180,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(jsonPath("$.data.diagnosis").value("Hypertension Stage 2"))
                 .andExpect(jsonPath("$.data.treatmentPlan").value("Amlodipine 5mg"));
     }
-
     @Test @Order(8)
     @DisplayName("GET .../appointment/{id} — no note returns 404")
     void getByAppointment_notFound_returns404() throws Exception {
@@ -250,15 +187,12 @@ class ConsultationNoteIntegrationTest {
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isNotFound());
     }
-
-
     @Test @Order(9)
     @DisplayName("GET /api/v1/consultation-notes/my-history — unauthenticated returns 401")
     void getMyHistory_unauthenticated_returns401() throws Exception {
         mockMvc.perform(get("/api/v1/consultation-notes/my-history"))
                 .andExpect(status().isUnauthorized());
     }
-
     @Test @Order(10)
     @DisplayName("GET /api/v1/consultation-notes/my-history — patient sees own consultation history")
     void getMyHistory_patient_returnsHistory() throws Exception {
@@ -268,8 +202,6 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(jsonPath("$.data").isArray())
                 .andExpect(jsonPath("$.data[0].diagnosis").value("Hypertension Stage 2"));
     }
-
-
     @Test @Order(11)
     @DisplayName("PUT /api/v1/consultation-notes/{id} — patient role returns 403")
     void update_patientRole_returns403() throws Exception {
@@ -280,14 +212,12 @@ class ConsultationNoteIntegrationTest {
                         .content(objectMapper.writeValueAsString(buildNoteRequest("new dx", "new tx"))))
                 .andExpect(status().isForbidden());
     }
-
     @Test @Order(12)
     @DisplayName("PUT /api/v1/consultation-notes/{id} — doctor updates note → 200, PHI fields updated")
     void update_doctor_returns200WithUpdatedFields() throws Exception {
         Assumptions.assumeTrue(noteId != null);
         ConsultationNoteRequest req = buildNoteRequest("Updated Hypertension", "Amlodipine 10mg");
         req.setFollowUpDate(LocalDate.now().plusMonths(3));
-
         mockMvc.perform(put("/api/v1/consultation-notes/" + noteId)
                         .header("Authorization", "Bearer " + doctorToken)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -296,14 +226,12 @@ class ConsultationNoteIntegrationTest {
                 .andExpect(jsonPath("$.data.diagnosis").value("Updated Hypertension"))
                 .andExpect(jsonPath("$.data.treatmentPlan").value("Amlodipine 10mg"));
     }
-
     @Test @Order(13)
     @DisplayName("PUT /api/v1/consultation-notes/{id} — missing treatmentPlan returns 422")
     void update_missingTreatmentPlan_returns422() throws Exception {
         Assumptions.assumeTrue(noteId != null);
         ConsultationNoteRequest req = new ConsultationNoteRequest();
         req.setDiagnosis("Valid diagnosis");
-
         mockMvc.perform(put("/api/v1/consultation-notes/" + noteId)
                         .header("Authorization", "Bearer " + doctorToken)
                         .contentType(MediaType.APPLICATION_JSON)

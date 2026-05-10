@@ -36,10 +36,12 @@ class DepartmentIntegrationTest extends IntegrationTestSupport {
     void setUp() throws Exception {
         userRepository.save(User.builder()
                 .email("dept-patient@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Alice").lastName("P").role(Role.ROLE_PATIENT).build());
+                .firstName("Alice").lastName("P").role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         userRepository.save(User.builder()
                 .email("dept-admin@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Carol").lastName("A").role(Role.ROLE_ADMIN).build());
+                .firstName("Carol").lastName("A").role(Role.ROLE_ADMIN)
+                .enabled(true).isActive(true).build());
         Department seed = departmentRepository.save(
                 Department.builder().name("Seed Department").code("SEED").build());
         seedDeptId = seed.getId();

@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 @Component
 public class JwtTokenProvider {
 
+    private static final int MIN_HMAC_SECRET_BYTES = 64;
+
     private final SecretKey secretKey;
     private final long accessTokenExpirationMs;
     private final long refreshTokenExpirationMs;
@@ -25,6 +27,18 @@ public class JwtTokenProvider {
             @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.access-token-expiration-ms}") long accessTokenExpirationMs,
             @Value("${app.jwt.refresh-token-expiration-ms}") long refreshTokenExpirationMs) {
+        if (secret == null || secret.isBlank()) {
+            throw new IllegalStateException("JWT secret must be configured");
+        }
+        if (secret.getBytes(StandardCharsets.UTF_8).length < MIN_HMAC_SECRET_BYTES) {
+            throw new IllegalStateException("JWT secret must be at least 64 bytes for HS512 signing");
+        }
+        if (accessTokenExpirationMs <= 0 || refreshTokenExpirationMs <= 0) {
+            throw new IllegalStateException("JWT token expiration values must be positive");
+        }
+        if (refreshTokenExpirationMs <= accessTokenExpirationMs) {
+            throw new IllegalStateException("JWT refresh token expiration must be greater than access token expiration");
+        }
         this.secretKey = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
         this.accessTokenExpirationMs = accessTokenExpirationMs;
         this.refreshTokenExpirationMs = refreshTokenExpirationMs;

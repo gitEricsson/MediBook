@@ -10,6 +10,7 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
+import com.medibook.security.UserPrincipal;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
@@ -98,6 +99,41 @@ public class DoctorService {
                 doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+    }
+
+    @CacheEvict(value = "doctors", key = "#id")
+    @Transactional
+    public DoctorResponse update(Long id, DoctorRequest request, UserPrincipal principal) {
+        Doctor doctor = doctorRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
+        ensureCanManageDoctor(doctor, principal);
+        return updateLoaded(doctor, request);
+    }
+
+    private DoctorResponse updateLoaded(Doctor doctor, DoctorRequest request) {
+        Department dept = departmentRepository.findById(request.getDepartmentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
+
+        doctor.setDepartment(dept);
+        doctor.setSpecialization(request.getSpecialization());
+        doctor.setBio(request.getBio());
+        if (request.getSlotDurationMins() != null) {
+            doctor.setSlotDurationMins(request.getSlotDurationMins());
+        }
+        doctor.setSearchVector(buildSearchVector(
+                doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
+
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+    }
+
+    private void ensureCanManageDoctor(Doctor doctor, UserPrincipal principal) {
+        if (principal.hasRole("ROLE_ADMIN")) {
+            return;
+        }
+        if (!doctor.getUser().getId().equals(principal.getId())) {
+            throw new MediBookException("Not authorized to manage this doctor profile",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
     }
 
     private String buildSearchVector(String firstName, String lastName, String specialization) {

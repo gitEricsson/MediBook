@@ -55,10 +55,12 @@ class ConsultationNoteIntegrationTest extends IntegrationTestSupport {
                 Department.builder().name("Notes-Cardiology").code("NTCD").build());
         User patientUser = userRepository.save(User.builder()
                 .email("notes-patient@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Alice").lastName("Notes").role(Role.ROLE_PATIENT).build());
+                .firstName("Alice").lastName("Notes").role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         User docUser = userRepository.save(User.builder()
                 .email("notes-doctor@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Bob").lastName("Notes").role(Role.ROLE_DOCTOR).build());
+                .firstName("Bob").lastName("Notes").role(Role.ROLE_DOCTOR)
+                .enabled(true).isActive(true).build());
         Doctor doctor = doctorRepository.save(Doctor.builder()
                 .user(docUser).department(dept).licenseNumber("LIC-NOTES-001")
                 .specialization("Cardiology").build());

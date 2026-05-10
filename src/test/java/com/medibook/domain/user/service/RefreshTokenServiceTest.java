@@ -98,6 +98,7 @@ class RefreshTokenServiceTest {
     void rotate_valid_invalidatesOldAndReturnsNewToken() {
         when(redisTemplate.hasKey(keyStartsWith("revoked:"))).thenReturn(false);
         when(valueOps.get(keyStartsWith("refresh:"))).thenReturn("42");
+        when(valueOps.setIfAbsent(keyStartsWith("refresh_lock:"), eq("1"), any(Duration.class))).thenReturn(true);
         when(redisTemplate.executePipelined(any(SessionCallback.class))).thenReturn(List.of());
 
         RefreshTokenService.RotationResult result = refreshTokenService.rotate("old-token");
@@ -110,6 +111,7 @@ class RefreshTokenServiceTest {
     @Test
     @DisplayName("rotate — revoked token throws TOKEN_REVOKED before touching pipeline")
     void rotate_revokedToken_throws() {
+        when(valueOps.setIfAbsent(keyStartsWith("refresh_lock:"), eq("1"), any(Duration.class))).thenReturn(true);
         when(redisTemplate.hasKey(keyStartsWith("revoked:"))).thenReturn(true);
 
         assertThatThrownBy(() -> refreshTokenService.rotate("revoked-token"))
@@ -121,6 +123,7 @@ class RefreshTokenServiceTest {
     @Test
     @DisplayName("rotate — expired (missing) token throws TOKEN_INVALID before touching pipeline")
     void rotate_expiredToken_throws() {
+        when(valueOps.setIfAbsent(keyStartsWith("refresh_lock:"), eq("1"), any(Duration.class))).thenReturn(true);
         when(redisTemplate.hasKey(keyStartsWith("revoked:"))).thenReturn(false);
         when(valueOps.get(keyStartsWith("refresh:"))).thenReturn(null);
 

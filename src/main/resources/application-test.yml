@@ -21,7 +21,7 @@ spring:
     properties:
       hibernate:
         dialect: org.hibernate.dialect.H2Dialect
-    show-sql: true
+    show-sql: false
 
   data:
     cassandra:
@@ -62,3 +62,8 @@ medibook:
 logging:
   level:
     com.medibook: DEBUG
+
+management:
+  endpoint:
+    health:
+      validate-group-membership: false

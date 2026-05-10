@@ -6,6 +6,8 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 
@@ -47,6 +49,7 @@ public class Appointment extends AuditableEntity {
     private int durationMins = 30;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 30)
     @Builder.Default
     private AppointmentStatus status = AppointmentStatus.PENDING;
@@ -71,6 +74,7 @@ public class Appointment extends AuditableEntity {
     private String slotKey;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "appointment_type", nullable = false, length = 20)
     @Builder.Default
     private AppointmentType type = AppointmentType.IN_PERSON;

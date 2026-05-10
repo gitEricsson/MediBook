@@ -176,6 +176,13 @@ management:
   endpoint:
     health:
       show-details: when-authorized
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis,kafka
+        liveness:
+          include: livenessState
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging:
@@ -184,4 +191,4 @@ logging:
     org.springframework.security: INFO
     org.hibernate.SQL: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

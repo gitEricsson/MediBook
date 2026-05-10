@@ -17,7 +17,6 @@ import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -54,7 +53,6 @@ public class NotificationService implements MessageListener {
     }
 
 
-    @Async
     public void sendAppointmentBooked(AppointmentEvent event) {
         save(event.getPatientId(), "Appointment Booked",
                 "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is booked.",
@@ -64,14 +62,12 @@ public class NotificationService implements MessageListener {
                 "APPOINTMENT_BOOKED", event.getAppointmentId());
     }
 
-    @Async
     public void sendAppointmentConfirmed(AppointmentEvent event) {
         save(event.getPatientId(), "Appointment Confirmed",
                 "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is confirmed.",
                 "APPOINTMENT_CONFIRMED", event.getAppointmentId());
     }
 
-    @Async
     public void sendAppointmentCancelled(AppointmentEvent event) {
         save(event.getPatientId(), "Appointment Cancelled",
                 "Your appointment on " + event.getScheduledAt() + " has been cancelled.",
@@ -79,6 +75,12 @@ public class NotificationService implements MessageListener {
         save(event.getDoctorId(), "Appointment Cancelled",
                 "Appointment with " + event.getPatientName() + " on " + event.getScheduledAt() + " has been cancelled.",
                 "APPOINTMENT_CANCELLED", event.getAppointmentId());
+    }
+
+    public void sendAppointmentReminder(AppointmentEvent event) {
+        save(event.getPatientId(), "Appointment Reminder",
+                "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is tomorrow.",
+                "APPOINTMENT_REMINDER", event.getAppointmentId());
     }
 
 

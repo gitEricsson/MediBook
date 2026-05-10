@@ -32,17 +32,19 @@ public class ConsultationNoteController {
     @Operation(summary = "Create a consultation note for an appointment (Doctor/Admin)")
     public ResponseEntity<ApiResponse<ConsultationNoteResponse>> create(
             @PathVariable Long appointmentId,
-            @Valid @RequestBody ConsultationNoteRequest request) {
+            @Valid @RequestBody ConsultationNoteRequest request,
+            @CurrentUser UserPrincipal principal) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.created(noteService.create(appointmentId, request)));
+                .body(ApiResponse.created(noteService.create(appointmentId, request, principal)));
     }
 
     @GetMapping("/appointment/{appointmentId}")
     @PreAuthorize("hasAnyRole('DOCTOR','ADMIN')")
     @Operation(summary = "Get consultation note by appointment (Doctor/Admin)")
     public ResponseEntity<ApiResponse<ConsultationNoteResponse>> getByAppointment(
-            @PathVariable Long appointmentId) {
-        return ResponseEntity.ok(ApiResponse.ok(noteService.getByAppointment(appointmentId)));
+            @PathVariable Long appointmentId,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(noteService.getByAppointment(appointmentId, principal)));
     }
 
     @GetMapping("/my-history")
@@ -57,7 +59,8 @@ public class ConsultationNoteController {
     @Operation(summary = "Update a consultation note (Doctor/Admin)")
     public ResponseEntity<ApiResponse<ConsultationNoteResponse>> update(
             @PathVariable Long id,
-            @Valid @RequestBody ConsultationNoteRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(noteService.update(id, request)));
+            @Valid @RequestBody ConsultationNoteRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(noteService.update(id, request, principal)));
     }
 }

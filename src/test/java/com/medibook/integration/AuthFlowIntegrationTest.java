@@ -53,6 +53,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
         var tree = objectMapper.readTree(result.getResponse().getContentAsString());
         userId = tree.get("data").get("user").get("id").asLong();
         assertThat(userId).isPositive();
+        activateUser("reset-flow@test.com");
     }
     @Test
     @Order(2)
@@ -138,7 +139,6 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
                 .andReturn();
         var tree = objectMapper.readTree(registerResult.getResponse().getContentAsString());
         Long verifyUserId = tree.get("data").get("user").get("id").asLong();
-        accessToken       = tree.get("data").get("accessToken").asText();
         String verifyToken = emailVerificationService.createToken(verifyUserId);
         EmailVerifyRequest verifyReq = new EmailVerifyRequest();
         verifyReq.setToken(verifyToken);
@@ -149,6 +149,17 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.success").value(true));
         User user = userRepository.findByEmail("verify-flow@test.com").orElseThrow();
         assertThat(user.isActive()).isTrue();
+
+        LoginRequest loginReq = new LoginRequest();
+        loginReq.setEmail("verify-flow@test.com");
+        loginReq.setPassword("Password1!");
+        MvcResult loginResult = mockMvc.perform(post("/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(loginReq)))
+                .andExpect(status().isOk())
+                .andReturn();
+        accessToken = objectMapper.readTree(loginResult.getResponse().getContentAsString())
+                .get("data").get("accessToken").asText();
     }
     @Test
     @Order(7)
@@ -196,6 +207,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
                 .andReturn();
         var tree = objectMapper.readTree(registerResult.getResponse().getContentAsString());
         Long twoFaUserId = tree.get("data").get("user").get("id").asLong();
+        activateUser("twofa-flow@test.com");
         authService.enableTwoFactor(twoFaUserId);
         LoginRequest loginReq = new LoginRequest();
         loginReq.setEmail("twofa-flow@test.com");
@@ -264,6 +276,7 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(reg)))
                 .andExpect(status().isCreated());
+        activateUser("lifecycle-flow@test.com");
         LoginRequest loginReq = new LoginRequest();
         loginReq.setEmail("lifecycle-flow@test.com");
         loginReq.setPassword("Password1!");
@@ -299,5 +312,12 @@ class AuthFlowIntegrationTest extends IntegrationTestSupport {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"refreshToken\":\"" + refreshToken + "\"}"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    private void activateUser(String email) {
+        User user = userRepository.findByEmail(email).orElseThrow();
+        user.setActive(true);
+        user.setEnabled(true);
+        userRepository.save(user);
     }
 }

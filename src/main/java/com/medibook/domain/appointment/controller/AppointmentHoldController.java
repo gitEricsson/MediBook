@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/v1/appointments/holds")
@@ -35,11 +36,13 @@ public class AppointmentHoldController {
     }
 
     @DeleteMapping("/{holdId}")
+    @PreAuthorize("hasRole('PATIENT')")
     @Operation(summary = "Release a hold manually")
     public ResponseEntity<ApiResponse<Void>> releaseHold(
             @PathVariable String holdId,
             @RequestParam Long doctorId,
             @RequestParam String scheduledAt) {
-        return ResponseEntity.ok(ApiResponse.ok(null));
+        holdService.releaseHold(doctorId, LocalDateTime.parse(scheduledAt), holdId);
+        return ResponseEntity.ok(ApiResponse.noContent("Hold released"));
     }
 }

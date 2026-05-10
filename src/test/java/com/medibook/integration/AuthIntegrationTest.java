@@ -1,6 +1,7 @@
 package com.medibook.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.domain.user.dto.*;
+import com.medibook.domain.user.repository.UserRepository;
 import com.medibook.common.response.ApiResponse;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -16,6 +17,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AuthIntegrationTest extends IntegrationTestSupport {
     @Autowired MockMvc mockMvc;
     @Autowired ObjectMapper objectMapper;
+    @Autowired UserRepository userRepository;
     static String accessToken;
     static String refreshToken;
     @Test
@@ -33,7 +35,7 @@ class AuthIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data.user.email").value("integration@test.com"))
-                .andExpect(jsonPath("$.data.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.data.accessToken").doesNotExist())
                 .andExpect(jsonPath("$.data.user.password").doesNotExist());
     }
     @Test
@@ -55,6 +57,7 @@ class AuthIntegrationTest extends IntegrationTestSupport {
     @Order(3)
     @DisplayName("POST /api/v1/auth/login — valid credentials return JWT pair")
     void login_success() throws Exception {
+        activateUser("integration@test.com");
         LoginRequest req = new LoginRequest();
         req.setEmail("integration@test.com");
         req.setPassword("Password1!");
@@ -159,6 +162,7 @@ class AuthIntegrationTest extends IntegrationTestSupport {
     @Order(11)
     @DisplayName("POST /api/v1/auth/logout — authenticated user revokes session and gets 200")
     void logout_withFreshTokens_returns200() throws Exception {
+        activateUser("integration@test.com");
         LoginRequest req = new LoginRequest();
         req.setEmail("integration@test.com");
         req.setPassword("Password1!");
@@ -179,18 +183,24 @@ class AuthIntegrationTest extends IntegrationTestSupport {
     }
     @Test
     @Order(12)
-    @DisplayName("POST /api/v1/auth/email/resend — missing token returns 401")
-    void resendVerification_withoutAuth_returns401() throws Exception {
-        mockMvc.perform(post("/api/v1/auth/email/resend"))
-                .andExpect(status().isUnauthorized());
+    @DisplayName("POST /api/v1/auth/email/resend — public resend returns 200")
+    void resendVerification_withoutAuth_returns200() throws Exception {
+        ForgotPasswordRequest req = new ForgotPasswordRequest();
+        req.setEmail("integration@test.com");
+        mockMvc.perform(post("/api/v1/auth/email/resend")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
+                .andExpect(status().isOk());
     }
     @Test
     @Order(13)
-    @DisplayName("POST /api/v1/auth/email/resend — authenticated unverified user receives 200")
-    void resendVerification_withAuth_returns200() throws Exception {
-        Assumptions.assumeTrue(accessToken != null, "Login must succeed first");
+    @DisplayName("POST /api/v1/auth/email/resend — unknown email still returns 200")
+    void resendVerification_unknownEmail_returns200() throws Exception {
+        ForgotPasswordRequest req = new ForgotPasswordRequest();
+        req.setEmail("unknown@test.com");
         mockMvc.perform(post("/api/v1/auth/email/resend")
-                        .header("Authorization", "Bearer " + accessToken))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(req)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
     }
@@ -293,5 +303,14 @@ class AuthIntegrationTest extends IntegrationTestSupport {
                 .andExpect(status().isUnprocessableEntity())
                 .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"))
                 .andExpect(jsonPath("$.errors[0].field").value("otp"));
+    }
+
+    private void activateUser(String email) {
+        userRepository.findByEmail(email).ifPresent(user -> {
+            if (!user.isActive()) {
+                user.setActive(true);
+                userRepository.save(user);
+            }
+        });
     }
 }

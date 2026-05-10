@@ -122,12 +122,10 @@ public class AuthController {
     }
 
     @PostMapping("/email/resend")
-    @PreAuthorize("isAuthenticated()")
-    @SecurityRequirement(name = "bearerAuth")
     @Operation(summary = "Resend the email verification link")
     public ResponseEntity<ApiResponse<Void>> resendVerification(
-            @CurrentUser UserPrincipal principal) {
-        authService.resendVerificationEmail(principal.getId());
+            @Valid @RequestBody ForgotPasswordRequest request) {
+        authService.resendVerificationEmail(request);
         return ResponseEntity.ok(ApiResponse.noContent("Verification email sent"));
     }
 }

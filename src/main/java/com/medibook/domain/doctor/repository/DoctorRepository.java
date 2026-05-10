@@ -1,10 +1,12 @@
 package com.medibook.domain.doctor.repository;
 
 import com.medibook.domain.doctor.entity.Doctor;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -26,6 +28,10 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long>, JpaSpecif
     @Query("SELECT d FROM Doctor d JOIN FETCH d.user JOIN FETCH d.department WHERE d.id = :id")
     Optional<Doctor> findByIdWithDetails(Long id);
 
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT d FROM Doctor d JOIN FETCH d.user JOIN FETCH d.department WHERE d.id = :id")
+    Optional<Doctor> findByIdWithDetailsForUpdate(Long id);
+
     /**
      * Full-text search against the denormalized search_vector column.
      * Uses MySQL BOOLEAN MODE so callers can append "*" for prefix matching.
@@ -34,4 +40,13 @@ public interface DoctorRepository extends JpaRepository<Doctor, Long>, JpaSpecif
     @Query(value = "SELECT id FROM doctors WHERE MATCH(search_vector) AGAINST(:query IN BOOLEAN MODE) AND is_active = true LIMIT 200",
            nativeQuery = true)
     List<Long> findIdsByFullText(@Param("query") String query);
+
+    @Query("""
+           SELECT DISTINCT d.specialization FROM Doctor d
+           WHERE d.isActive = true
+           AND d.specialization IS NOT NULL
+           AND d.specialization <> ''
+           ORDER BY d.specialization
+           """)
+    List<String> findDistinctActiveSpecializations();
 }

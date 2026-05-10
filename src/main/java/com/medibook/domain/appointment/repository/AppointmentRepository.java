@@ -40,6 +40,13 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            """)
     Optional<Appointment> findByIdWithDetails(Long id);
 
+    @Query("""
+           SELECT COUNT(a) > 0 FROM Appointment a
+           WHERE a.doctor.user.id = :doctorUserId
+           AND a.patient.id = :patientId
+           """)
+    boolean existsDoctorPatientRelationship(Long doctorUserId, Long patientId);
+
     /** Used by reminder job — upcoming appointments in the next window */
     @Query("""
            SELECT a FROM Appointment a
@@ -61,6 +68,16 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
            """)
     boolean existsConflict(Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
+
+    @Query("""
+           SELECT COUNT(a) > 0 FROM Appointment a
+           WHERE a.id <> :appointmentId
+           AND a.doctor.id = :doctorId
+           AND a.scheduledAt < :endTime
+           AND a.endTime > :scheduledAt
+           AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
+           """)
+    boolean existsConflictExcluding(Long appointmentId, Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
 
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})

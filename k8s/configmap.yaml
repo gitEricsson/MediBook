@@ -20,6 +20,8 @@ metadata:
 type: Opaque
 stringData:
   db-host: "medibook-mysql"
+  db-name: "medibook"
+  db-user: "medibook"
   db-password: "CHANGE_ME"
   jwt-secret: "CHANGE_ME_256_BIT_SECRET"
   phi-encryption-key: "CHANGE_ME_32_CHAR_AES_KEY_!!!!!!"

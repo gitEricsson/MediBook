@@ -2,7 +2,9 @@ package com.medibook.jobs;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -22,8 +24,21 @@ public class OtpCleanupJob {
     @Scheduled(cron = "0 0 2 * * ?")   // 02:00 daily
     public void cleanExpiredOtps() {
         log.info("OtpCleanupJob: Redis TTL handles expiry — verifying OTP key count");
-        Long otpKeyCount = redisTemplate.keys("otp:*") != null
-                ? redisTemplate.keys("otp:*").size() : 0L;
+        long otpKeyCount = countKeys("otp:*");
         log.info("OtpCleanupJob: active OTP keys in Redis = {}", otpKeyCount);
+    }
+
+    private long countKeys(String pattern) {
+        return redisTemplate.execute((RedisCallback<Long>) connection -> {
+            long count = 0L;
+            try (var cursor = connection.scan(
+                    ScanOptions.scanOptions().match(pattern).count(500).build())) {
+                while (cursor.hasNext()) {
+                    cursor.next();
+                    count++;
+                }
+            }
+            return count;
+        });
     }
 }

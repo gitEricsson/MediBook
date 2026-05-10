@@ -5,7 +5,7 @@ services:
   # ─── Application ──────────────────────────────────────────────────────────
   app:
     build:
-      context: .
+      context: ..
       dockerfile: Dockerfile
     container_name: medibook-app
     ports:
@@ -26,8 +26,8 @@ services:
       KAFKA_BROKERS: kafka:9092
       MAIL_HOST: mailhog
       MAIL_PORT: 1025
-      JWT_SECRET: ${JWT_SECRET:-medibook-super-secret-key-must-be-at-least-256-bits-long-for-hs256}
-      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-medibook-phi-aes256-encryption-key!}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:?PHI_ENCRYPTION_KEY is required}
     depends_on:
       mysql:
         condition: service_healthy
@@ -115,6 +115,7 @@ services:
     container_name: medibook-kafka
     ports:
       - "9092:9092"
+      - "29092:29092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181

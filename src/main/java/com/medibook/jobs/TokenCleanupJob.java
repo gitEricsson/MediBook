@@ -1,9 +1,10 @@
 package com.medibook.jobs;
 
-import com.medibook.domain.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -22,8 +23,21 @@ public class TokenCleanupJob {
 
     @Scheduled(cron = "0 0 3 ? * SUN")   // Sunday 03:00
     public void cleanRevokedTokens() {
-        var revokedKeys = redisTemplate.keys("revoked:*");
-        long count = revokedKeys != null ? revokedKeys.size() : 0;
+        long count = countKeys("revoked:*");
         log.info("TokenCleanupJob: {} revoked token records in Redis (TTL-managed)", count);
+    }
+
+    private long countKeys(String pattern) {
+        return redisTemplate.execute((RedisCallback<Long>) connection -> {
+            long count = 0L;
+            try (var cursor = connection.scan(
+                    ScanOptions.scanOptions().match(pattern).count(500).build())) {
+                while (cursor.hasNext()) {
+                    cursor.next();
+                    count++;
+                }
+            }
+            return count;
+        });
     }
 }

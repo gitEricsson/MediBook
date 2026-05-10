@@ -2,6 +2,8 @@ package com.medibook.config;
 
 import com.medibook.messaging.event.AppointmentEvent;
 import com.medibook.messaging.event.AuditEvent;
+import org.apache.kafka.clients.admin.AdminClient;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
@@ -9,6 +11,8 @@ import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Profile;
@@ -24,6 +28,7 @@ import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 @Configuration
 @Profile("!test")
@@ -45,6 +50,11 @@ public class KafkaConfig {
         configProps.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
         configProps.put(ProducerConfig.ACKS_CONFIG, "all");
         configProps.put(ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, true);
+        configProps.put(ProducerConfig.RETRIES_CONFIG, 5);
+        configProps.put(ProducerConfig.REQUEST_TIMEOUT_MS_CONFIG, 5_000);
+        configProps.put(ProducerConfig.DELIVERY_TIMEOUT_MS_CONFIG, 15_000);
+        configProps.put(ProducerConfig.MAX_BLOCK_MS_CONFIG, 5_000);
+        configProps.put(ProducerConfig.LINGER_MS_CONFIG, 5);
         return new DefaultKafkaProducerFactory<>(configProps);
     }
 
@@ -98,7 +108,7 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic appointmentEventsDltTopic() {
-        return TopicBuilder.name("appointment.events.DLT").partitions(1).replicas(1).build();
+        return TopicBuilder.name("appointment.events.DLT").partitions(3).replicas(1).build();
     }
 
     @Bean
@@ -108,12 +118,29 @@ public class KafkaConfig {
 
     @Bean
     public NewTopic auditEventsDltTopic() {
-        return TopicBuilder.name("audit.events.DLT").partitions(1).replicas(1).build();
+        return TopicBuilder.name("audit.events.DLT").partitions(3).replicas(1).build();
     }
 
     @Bean
     public NewTopic notificationTopic() {
         return TopicBuilder.name("notification.events").partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public HealthIndicator kafkaHealthIndicator() {
+        return () -> {
+            Map<String, Object> props = Map.of(
+                    AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers,
+                    AdminClientConfig.REQUEST_TIMEOUT_MS_CONFIG, "3000",
+                    AdminClientConfig.DEFAULT_API_TIMEOUT_MS_CONFIG, "3000"
+            );
+            try (AdminClient adminClient = AdminClient.create(props)) {
+                int brokerCount = adminClient.describeCluster().nodes().get(3, TimeUnit.SECONDS).size();
+                return Health.up().withDetail("brokers", brokerCount).build();
+            } catch (Exception ex) {
+                return Health.down(ex).build();
+            }
+        };
     }
 
     private Map<String, Object> baseConsumerProps() {

@@ -56,6 +56,7 @@ public class UserService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
         user.setEnabled(false);
         userRepository.save(user);
+        refreshTokenService.revokeAllForUser(userId);
     }
 
     @Transactional(readOnly = true)

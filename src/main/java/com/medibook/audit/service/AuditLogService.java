@@ -2,11 +2,13 @@ package com.medibook.audit.service;
 
 import com.medibook.audit.entity.AuditLog;
 import com.medibook.audit.repository.AuditLogRepository;
+import com.medibook.common.web.CorrelationIdFilter;
 import com.medibook.messaging.event.AuditEvent;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
@@ -34,7 +36,7 @@ public class AuditLogService {
                 .entityType(event.getResourceType())
                 .entityId(event.getResourceId())
                 .ipAddress(resolveClientIp())
-                .correlationId(null)
+                .correlationId(MDC.get(CorrelationIdFilter.MDC_KEY))
                 .build();
 
         auditLogRepository.save(logEntry);

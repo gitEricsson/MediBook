@@ -54,20 +54,20 @@ public class AppointmentService {
 
         holdService.validateHold(request.getDoctorId(), request.getScheduledAt(), request.getHoldId());
 
-        if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt(), endTime)) {
-            throw new MediBookException("Doctor is not available at the requested time",
-                    HttpStatus.CONFLICT, "SLOT_TAKEN");
-        }
-
         User patient = userRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", patientId));
 
-        Doctor doctor = doctorRepository.findByIdWithDetails(request.getDoctorId())
+        Doctor doctor = doctorRepository.findByIdWithDetailsForUpdate(request.getDoctorId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", request.getDoctorId()));
 
         if (!doctor.isActive()) {
             throw new MediBookException("Doctor is not currently accepting appointments",
                     HttpStatus.CONFLICT, "DOCTOR_INACTIVE");
+        }
+
+        if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt(), endTime)) {
+            throw new MediBookException("Doctor is not available at the requested time",
+                    HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
 
         String confirmationCode = "MB-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
@@ -108,8 +108,12 @@ public class AppointmentService {
             }
         }
 
-        eventProducer.publishAppointmentEvent(buildEvent(saved, "BOOKED"));
-        eventProducer.publishAuditEvent(buildAuditEvent(saved, patientId, saved.getPatient().getEmail(), "APPOINTMENT_BOOKED"));
+        AppointmentEvent appointmentEvent = buildEvent(saved, "BOOKED");
+        AuditEvent auditEvent = buildAuditEvent(saved, patientId, saved.getPatient().getEmail(), "APPOINTMENT_BOOKED");
+        afterCommit(() -> {
+            eventProducer.publishAppointmentEvent(appointmentEvent);
+            eventProducer.publishAuditEvent(auditEvent);
+        });
 
         log.info("Appointment [{}] booked by patient [{}] with doctor [{}]",
                 saved.getId(), patientId, request.getDoctorId());
@@ -151,8 +155,12 @@ public class AppointmentService {
 
         try {
             Appointment saved = appointmentRepository.save(appt);
-            eventProducer.publishAppointmentEvent(buildEvent(saved, "CANCELLED"));
-            eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_CANCELLED"));
+            AppointmentEvent appointmentEvent = buildEvent(saved, "CANCELLED");
+            AuditEvent auditEvent = buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_CANCELLED");
+            afterCommit(() -> {
+                eventProducer.publishAppointmentEvent(appointmentEvent);
+                eventProducer.publishAuditEvent(auditEvent);
+            });
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently. Please refresh.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
@@ -171,9 +179,18 @@ public class AppointmentService {
             throw new MediBookException("Cannot reschedule a completed or cancelled appointment", HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
 
-        holdService.validateHold(appt.getDoctor().getId(), request.getNewStart(), request.getHoldId());
+        if (!request.getNewStart().isBefore(request.getNewEnd())) {
+            throw new MediBookException("New end time must be after new start time",
+                    HttpStatus.BAD_REQUEST, "INVALID_TIME_RANGE");
+        }
 
-        if (appointmentRepository.existsConflict(appt.getDoctor().getId(), request.getNewStart(), request.getNewEnd())) {
+        Long doctorId = appt.getDoctor().getId();
+        doctorRepository.findByIdWithDetailsForUpdate(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
+
+        holdService.validateHold(doctorId, request.getNewStart(), request.getHoldId());
+
+        if (appointmentRepository.existsConflictExcluding(appt.getId(), doctorId, request.getNewStart(), request.getNewEnd())) {
             throw new MediBookException("New slot is taken", HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
 
@@ -186,8 +203,12 @@ public class AppointmentService {
             if (request.getHoldId() != null) {
                 holdService.releaseHold(appt.getDoctor().getId(), request.getNewStart());
             }
-            eventProducer.publishAppointmentEvent(buildEvent(saved, "RESCHEDULED"));
-            eventProducer.publishAuditEvent(buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_RESCHEDULED"));
+            AppointmentEvent appointmentEvent = buildEvent(saved, "RESCHEDULED");
+            AuditEvent auditEvent = buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_RESCHEDULED");
+            afterCommit(() -> {
+                eventProducer.publishAppointmentEvent(appointmentEvent);
+                eventProducer.publishAuditEvent(auditEvent);
+            });
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
@@ -214,6 +235,28 @@ public class AppointmentService {
     }
 
     @Transactional(readOnly = true)
+    public AppointmentResponse getByIdForDoctor(Long id, UserPrincipal principal) {
+        Appointment appointment = getAndValidate(id);
+        ensureDoctorOwnsAppointment(appointment, principal);
+        return AppointmentResponse.fromEntity(appointment);
+    }
+
+    @Transactional(readOnly = true)
+    public String getPatientPhoneForDoctor(Long appointmentId, UserPrincipal principal) {
+        Appointment appointment = getAndValidate(appointmentId);
+        ensureDoctorOwnsAppointment(appointment, principal);
+        return appointment.getPatient().getPhone();
+    }
+
+    @Transactional(readOnly = true)
+    public void ensureDoctorCanAccessPatient(Long doctorUserId, Long patientId) {
+        if (!appointmentRepository.existsDoctorPatientRelationship(doctorUserId, patientId)) {
+            throw new MediBookException("Not authorized to access this patient",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+    }
+
+    @Transactional(readOnly = true)
     public Page<AppointmentResponse> getUpcomingByPatient(Long patientId, Pageable pageable) {
         return appointmentRepository.findByPatientIdAndScheduledAtAfterOrderByScheduledAtAsc(patientId, LocalDateTime.now(), pageable)
                 .map(AppointmentResponse::fromEntity);
@@ -228,7 +271,7 @@ public class AppointmentService {
     @Transactional(readOnly = true)
     public String generateIcs(Long id) {
         Appointment appt = getAndValidate(id);
-        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss'Z'");
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
         
         return "BEGIN:VCALENDAR\n" +
                 "VERSION:2.0\n" +
@@ -238,8 +281,8 @@ public class AppointmentService {
                 "DTSTAMP:" + LocalDateTime.now().format(dtf) + "\n" +
                 "DTSTART:" + appt.getScheduledAt().format(dtf) + "\n" +
                 "DTEND:" + appt.getEndTime().format(dtf) + "\n" +
-                "SUMMARY:MediBook Appointment with Dr. " + appt.getDoctor().getUser().getFullName() + "\n" +
-                "DESCRIPTION:Reason: " + appt.getReason() + "\n" +
+                "SUMMARY:" + escapeIcsText("MediBook Appointment with Dr. " + appt.getDoctor().getUser().getFullName()) + "\n" +
+                "DESCRIPTION:" + escapeIcsText("Reason: " + (appt.getReason() == null ? "" : appt.getReason())) + "\n" +
                 "END:VEVENT\n" +
                 "END:VCALENDAR";
     }
@@ -260,6 +303,13 @@ public class AppointmentService {
     private Appointment getAndValidate(Long id) {
         return appointmentRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
+    }
+
+    private void ensureDoctorOwnsAppointment(Appointment appointment, UserPrincipal principal) {
+        if (!appointment.getDoctor().getUser().getId().equals(principal.getId())) {
+            throw new MediBookException("Not authorized to access this appointment",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
     }
 
     private AppointmentEvent buildEvent(Appointment a, String type) {
@@ -287,5 +337,27 @@ public class AppointmentService {
                 .resourceId(String.valueOf(a.getId()))
                 .detail("Action on appointment " + a.getId())
                 .build();
+    }
+
+    private String escapeIcsText(String value) {
+        return value
+                .replace("\\", "\\\\")
+                .replace("\n", "\\n")
+                .replace("\r", "")
+                .replace(",", "\\,")
+                .replace(";", "\\;");
+    }
+
+    private void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override
+                public void afterCommit() {
+                    action.run();
+                }
+            });
+        } else {
+            action.run();
+        }
     }
 }

@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+concurrency:
+  group: medibook-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Maven test matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: fallback
+            command: mvn -B -Dmedibook.integration.docker=false test
+          - name: docker-integration
+            command: mvn -B -Dmedibook.integration.docker=true '-Dtest=*IntegrationTest' test
+          - name: flyway-validation
+            command: mvn -B -Dmedibook.integration.docker=true -Dmedibook.integration.schema=flyway '-Dtest=*IntegrationTest' test
+          - name: verify
+            command: mvn -B -Dmedibook.integration.docker=false verify
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run ${{ matrix.name }}
+        run: ${{ matrix.command }}

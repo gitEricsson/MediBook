@@ -27,6 +27,7 @@ public class PhiEncryptionService {
     private static final String ALGORITHM = "AES/GCM/NoPadding";
     private static final int GCM_IV_LENGTH = 12;
     private static final int GCM_TAG_LENGTH = 128; // bits
+    private static final int MIN_RAW_KEY_LENGTH = 32;
 
     private final SecretKey secretKey;
     private final SecureRandom secureRandom = new SecureRandom();
@@ -37,6 +38,9 @@ public class PhiEncryptionService {
     public PhiEncryptionService(@Value("${app.phi.encryption-key}") String rawKey) {
         if (rawKey == null || rawKey.isBlank()) {
             throw new IllegalStateException("PHI_ENCRYPTION_KEY environment variable must be set");
+        }
+        if (rawKey.length() < MIN_RAW_KEY_LENGTH) {
+            throw new IllegalStateException("PHI_ENCRYPTION_KEY must be at least 32 characters");
         }
         try {
             SecretKeyFactory factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256");

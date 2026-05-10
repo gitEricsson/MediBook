@@ -22,7 +22,6 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -86,12 +85,13 @@ public class DoctorSearchService {
 
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
 
-        Set<LocalDateTime> bookedSlots = appointmentRepository
+        List<Appointment> bookedAppointments = appointmentRepository
                 .findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                         doctorId, from.atStartOfDay(), to.plusDays(1).atStartOfDay())
                 .stream()
-                .map(Appointment::getScheduledAt)
-                .collect(Collectors.toSet());
+                .filter(a -> a.getStatus() != com.medibook.domain.appointment.entity.AppointmentStatus.CANCELLED)
+                .filter(a -> a.getStatus() != com.medibook.domain.appointment.entity.AppointmentStatus.NO_SHOW)
+                .toList();
 
         List<LocalDateTime> allSlotStarts = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
@@ -121,7 +121,7 @@ public class DoctorSearchService {
                     LocalDateTime end   = start.plusMinutes(slotDuration); // fixed: was hardcoded 30
 
                     String status = "OPEN";
-                    if (bookedSlots.contains(start)) {
+                    if (overlapsAnyAppointment(start, end, bookedAppointments)) {
                         status = "TAKEN";
                     } else if (heldSlots.contains(start)) {
                         status = "HELD";
@@ -139,5 +139,14 @@ public class DoctorSearchService {
         }
 
         return AvailabilityGridResponse.builder().days(days).build();
+    }
+
+    private boolean overlapsAnyAppointment(LocalDateTime start, LocalDateTime end, List<Appointment> appointments) {
+        return appointments.stream().anyMatch(a -> {
+            LocalDateTime appointmentEnd = a.getEndTime() != null
+                    ? a.getEndTime()
+                    : a.getScheduledAt().plusMinutes(a.getDurationMins());
+            return a.getScheduledAt().isBefore(end) && appointmentEnd.isAfter(start);
+        });
     }
 }

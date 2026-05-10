@@ -20,7 +20,7 @@ import java.util.Set;
 /**
  * Per-IP rate limiter backed by Redis fixed-window counters.
  *
- * Auth-sensitive paths (login, register, forgot-password) → 5 req/min per IP.
+     * Auth-sensitive paths → 5 req/min per IP.
  * All other API paths → 100 req/min per IP.
  *
  * Redis unavailability is treated as a pass-through (fail-open) to avoid
@@ -34,7 +34,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
     private static final Set<String> AUTH_SENSITIVE_PATHS = Set.of(
             "/api/v1/auth/login",
             "/api/v1/auth/register",
-            "/api/v1/auth/forgot-password"
+            "/api/v1/auth/forgot-password",
+            "/api/v1/auth/reset-password",
+            "/api/v1/auth/2fa/verify",
+            "/api/v1/auth/refresh",
+            "/api/v1/auth/email/verify",
+            "/api/v1/auth/email/resend"
     );
 
     private static final int      AUTH_LIMIT  = 5;
@@ -45,6 +50,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Value("${medibook.rate-limit.enabled:true}")
     private boolean enabled;
+
+    @Value("${medibook.rate-limit.trust-forwarded-headers:false}")
+    private boolean trustForwardedHeaders;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -80,13 +88,15 @@ public class RateLimitFilter extends OncePerRequestFilter {
     }
 
     private String resolveClientIp(HttpServletRequest request) {
-        String forwarded = request.getHeader("X-Forwarded-For");
-        if (forwarded != null && !forwarded.isBlank()) {
-            return forwarded.split(",")[0].trim();
-        }
-        String realIp = request.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp.trim();
+        if (trustForwardedHeaders) {
+            String forwarded = request.getHeader("X-Forwarded-For");
+            if (forwarded != null && !forwarded.isBlank()) {
+                return forwarded.split(",")[0].trim();
+            }
+            String realIp = request.getHeader("X-Real-IP");
+            if (realIp != null && !realIp.isBlank()) {
+                return realIp.trim();
+            }
         }
         return request.getRemoteAddr();
     }

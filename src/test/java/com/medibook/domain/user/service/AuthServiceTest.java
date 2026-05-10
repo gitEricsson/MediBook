@@ -56,13 +56,14 @@ class AuthServiceTest {
                 .lastName("Doe")
                 .role(Role.ROLE_PATIENT)
                 .enabled(true)
+                .isActive(true)
                 .twoFactorEnabled(false)
                 .build();
     }
 
 
     @Test
-    @DisplayName("register — success persists user and returns token pair with user data")
+    @DisplayName("register — success persists user and returns profile without issuing tokens")
     void register_success() {
         RegisterRequest req = new RegisterRequest();
         req.setEmail("new@medibook.com");
@@ -70,25 +71,22 @@ class AuthServiceTest {
         req.setFirstName("Jane");
         req.setLastName("Smith");
 
-        when(userRepository.existsByEmail("new@medibook.com")).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase("new@medibook.com")).thenReturn(false);
         when(passwordEncoder.encode(any())).thenReturn("encoded");
         when(userRepository.save(any())).thenReturn(testUser);
         when(emailVerificationService.createToken(anyLong())).thenReturn("verify-token");
-        when(tokenProvider.generateAccessTokenFromUserId(anyLong(), anyString(), anyString()))
-                .thenReturn("access-token");
-        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
-        when(refreshTokenService.createRefreshToken(anyLong())).thenReturn("refresh-token");
 
         TokenResponse response = authService.register(req);
 
-        assertThat(response.getAccessToken()).isEqualTo("access-token");
-        assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
+        assertThat(response.getAccessToken()).isNull();
+        assertThat(response.getRefreshToken()).isNull();
         assertThat(response.getUser()).isNotNull();
         assertThat(response.getUser().getEmail()).isEqualTo(testUser.getEmail());
-        assertThat(response.getTokenType()).isEqualTo("Bearer");
+        assertThat(response.getTokenType()).isNull();
         verify(userRepository).save(any(User.class));
         verify(emailVerificationService).createToken(testUser.getId());
         verify(emailVerificationService).sendVerificationEmail(eq(testUser.getEmail()), eq("verify-token"));
+        verify(refreshTokenService, never()).createRefreshToken(anyLong());
     }
 
     @Test
@@ -100,7 +98,7 @@ class AuthServiceTest {
         req.setFirstName("Jane");
         req.setLastName("Smith");
 
-        when(userRepository.existsByEmail("patient@medibook.com")).thenReturn(true);
+        when(userRepository.existsByEmailIgnoreCase("patient@medibook.com")).thenReturn(true);
 
         assertThatThrownBy(() -> authService.register(req))
                 .isInstanceOf(MediBookException.class)
@@ -304,6 +302,7 @@ class AuthServiceTest {
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         assertThat(captor.getValue().getPassword()).isEqualTo("new-encoded");
+        verify(refreshTokenService).revokeAllForUser(1L);
     }
 
     @Test
@@ -381,14 +380,10 @@ class AuthServiceTest {
         req.setFirstName("Jane");
         req.setLastName("Smith");
 
-        when(userRepository.existsByEmail("UPPER@MEDIBOOK.COM")).thenReturn(false);
+        when(userRepository.existsByEmailIgnoreCase("upper@medibook.com")).thenReturn(false);
         when(passwordEncoder.encode(any())).thenReturn("encoded");
         when(userRepository.save(any())).thenReturn(testUser);
         when(emailVerificationService.createToken(anyLong())).thenReturn("verify-token");
-        when(tokenProvider.generateAccessTokenFromUserId(anyLong(), anyString(), anyString()))
-                .thenReturn("access-token");
-        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
-        when(refreshTokenService.createRefreshToken(anyLong())).thenReturn("refresh-token");
 
         authService.register(req);
 

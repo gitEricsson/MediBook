@@ -7,6 +7,8 @@ import com.medibook.domain.doctor.dto.WorkingHoursRequest;
 import com.medibook.domain.doctor.dto.WorkingHoursResponse;
 import com.medibook.domain.doctor.service.DoctorService;
 import com.medibook.domain.doctor.service.DoctorWorkingHoursService;
+import com.medibook.security.CurrentUser;
+import com.medibook.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -64,8 +66,10 @@ public class DoctorController {
     @PreAuthorize("hasAnyRole('ADMIN', 'DOCTOR')")
     @Operation(summary = "Update doctor profile (Admin or own Doctor)")
     public ResponseEntity<ApiResponse<DoctorResponse>> update(
-            @PathVariable Long id, @Valid @RequestBody DoctorRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(doctorService.update(id, request)));
+            @PathVariable Long id,
+            @Valid @RequestBody DoctorRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(doctorService.update(id, request, principal)));
     }
 
     @GetMapping("/{id}/hours")
@@ -79,7 +83,8 @@ public class DoctorController {
     @Operation(summary = "Replace all working hours for a doctor (Admin or own Doctor)")
     public ResponseEntity<ApiResponse<List<WorkingHoursResponse>>> setHours(
             @PathVariable Long id,
-            @Valid @RequestBody WorkingHoursRequest request) {
-        return ResponseEntity.ok(ApiResponse.ok(workingHoursService.replaceAll(id, request)));
+            @Valid @RequestBody WorkingHoursRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(workingHoursService.replaceAll(id, request, principal)));
     }
 }

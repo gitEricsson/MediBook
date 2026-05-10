@@ -6,8 +6,11 @@ import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.doctor.dto.ScheduleDayResponse;
 import com.medibook.domain.doctor.dto.ScheduleSummaryResponse;
+import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.entity.DoctorWorkingHours;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
+import com.medibook.common.exception.ResourceNotFoundException;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ public class DoctorScheduleService {
 
     private final AppointmentRepository appointmentRepository;
     private final DoctorWorkingHoursRepository workingHoursRepository;
+    private final DoctorRepository doctorRepository;
 
     @Bulkhead(name = "doctorSchedule")
     @CircuitBreaker(name = "doctorSchedule")
@@ -38,6 +42,9 @@ public class DoctorScheduleService {
     public ScheduleDayResponse getDailySchedule(Long doctorId, LocalDate date) {
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay = date.atTime(23, 59, 59);
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
+        int slotDuration = doctor.getSlotDurationMins();
 
         List<Appointment> appointments = appointmentRepository
                 .findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(doctorId, startOfDay, endOfDay);
@@ -57,18 +64,24 @@ public class DoctorScheduleService {
         LocalTime current = workStart;
         while (current.isBefore(workEnd)) {
             final LocalTime slotTime = current;
-            boolean isTaken = appointments.stream().anyMatch(a -> 
-                a.getScheduledAt().toLocalTime().equals(slotTime) && 
-                a.getStatus() != AppointmentStatus.CANCELLED && 
-                a.getStatus() != AppointmentStatus.NO_SHOW
-            );
+            LocalDateTime slotStart = date.atTime(slotTime);
+            LocalDateTime slotEnd = slotStart.plusMinutes(slotDuration);
+            boolean isTaken = appointments.stream().anyMatch(a -> {
+                LocalDateTime appointmentEnd = a.getEndTime() != null
+                        ? a.getEndTime()
+                        : a.getScheduledAt().plusMinutes(a.getDurationMins());
+                return a.getStatus() != AppointmentStatus.CANCELLED &&
+                        a.getStatus() != AppointmentStatus.NO_SHOW &&
+                        a.getScheduledAt().isBefore(slotEnd) &&
+                        appointmentEnd.isAfter(slotStart);
+            });
             if (!isTaken) {
                 freeSlots.add(ScheduleDayResponse.TimeSlot.builder()
                         .start(slotTime)
-                        .end(slotTime.plusMinutes(30))
+                        .end(slotTime.plusMinutes(slotDuration))
                         .build());
             }
-            current = current.plusMinutes(30);
+            current = current.plusMinutes(slotDuration);
         }
 
         return ScheduleDayResponse.builder()
@@ -84,6 +97,9 @@ public class DoctorScheduleService {
     public ScheduleSummaryResponse getScheduleSummary(Long doctorId, LocalDate date) {
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay = date.atTime(23, 59, 59);
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
+        int slotDuration = doctor.getSlotDurationMins();
 
         long done = appointmentRepository.countByDoctorIdAndDateAndStatus(doctorId, startOfDay, endOfDay, AppointmentStatus.COMPLETED);
         long upcoming = appointmentRepository.countByDoctorIdAndDateAndStatus(doctorId, startOfDay, endOfDay, AppointmentStatus.CONFIRMED);
@@ -91,9 +107,9 @@ public class DoctorScheduleService {
         
         int dayOfWeek = date.getDayOfWeek().getValue();
         List<DoctorWorkingHours> hoursList = workingHoursRepository.findByDoctorIdAndDayOfWeek(doctorId, dayOfWeek);
-        long totalPossibleSlots = 16; // Default 8 hours * 2 slots
+        long totalPossibleSlots = 480 / slotDuration; // Default 8-hour day
         if (!hoursList.isEmpty()) {
-            totalPossibleSlots = java.time.Duration.between(hoursList.get(0).getStartTime(), hoursList.get(0).getEndTime()).toMinutes() / 30;
+            totalPossibleSlots = java.time.Duration.between(hoursList.get(0).getStartTime(), hoursList.get(0).getEndTime()).toMinutes() / slotDuration;
         }
         
         long taken = appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(doctorId, startOfDay, endOfDay)

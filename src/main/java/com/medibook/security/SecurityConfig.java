@@ -75,7 +75,7 @@ public class SecurityConfig {
             )
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
-                .requestMatchers(HttpMethod.GET, "/api/v1/departments/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/v1/metadata/**").permitAll()
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 // GET doctor search and availability is open to all authenticated users (patients need it to book).
                 // Write operations (POST register, PUT update) are further protected by @PreAuthorize in the controller.

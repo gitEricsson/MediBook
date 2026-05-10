@@ -39,5 +39,5 @@ docker/volumes/
 Thumbs.db
 ehthumbs.db
 Desktop.ini
-
+/Endpoints
 /notes.md

@@ -2,7 +2,6 @@ package com.medibook.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.domain.user.dto.*;
 import com.medibook.domain.user.repository.UserRepository;
-import com.medibook.common.response.ApiResponse;
 import org.junit.jupiter.api.*;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;

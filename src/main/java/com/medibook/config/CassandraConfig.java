@@ -12,7 +12,11 @@ import java.util.List;
 
 @Configuration
 @Profile("!test")
-@EnableCassandraRepositories(basePackages = "com.medibook.audit.repository,com.medibook.domain.notification.repository")
+@EnableCassandraRepositories(basePackages = {
+        "com.medibook.audit.repository",
+        "com.medibook.domain.notification.repository",
+        "com.medibook.domain.telemedicine.repository"
+})
 public class CassandraConfig extends AbstractCassandraConfiguration {
 
     @Value("${spring.data.cassandra.keyspace-name}")
@@ -54,6 +58,10 @@ public class CassandraConfig extends AbstractCassandraConfiguration {
 
     @Override
     public String[] getEntityBasePackages() {
-        return new String[] { "com.medibook.audit.entity", "com.medibook.domain.notification.entity" };
+        return new String[] {
+                "com.medibook.audit.entity",
+                "com.medibook.domain.notification.entity",
+                "com.medibook.domain.telemedicine.entity"
+        };
     }
 }

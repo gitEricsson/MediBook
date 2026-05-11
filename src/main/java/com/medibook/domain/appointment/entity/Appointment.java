@@ -3,6 +3,7 @@ package com.medibook.domain.appointment.entity;
 import com.medibook.common.audit.AuditableEntity;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
+import com.medibook.domain.schedule.entity.AppointmentSeries;
 import com.medibook.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -81,6 +82,10 @@ public class Appointment extends AuditableEntity {
 
     @Column(name = "confirmation_code", unique = true, length = 20)
     private String confirmationCode;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "series_id")
+    private AppointmentSeries series;
 
     @Version
     @Column(name = "version", nullable = false)

@@ -73,6 +73,19 @@ public class DoctorService {
         if (request.getSlotDurationMins() != null) {
             builder.slotDurationMins(request.getSlotDurationMins());
         }
+        if (request.getYearsOfExperience() != null) {
+            builder.yearsOfExperience(request.getYearsOfExperience());
+        }
+        if (request.getConsultationFee() != null) {
+            builder.consultationFee(request.getConsultationFee());
+        }
+        if (request.getGender() != null) {
+            builder.gender(request.getGender());
+        }
+        if (request.getLanguages() != null) {
+            builder.languages(request.getLanguages());
+        }
+        builder.telemedicineEnabled(request.isTelemedicineEnabled());
 
         Doctor doctor = builder.build();
         doctor.setSearchVector(buildSearchVector(user.getFirstName(), user.getLastName(), request.getSpecialization()));
@@ -85,20 +98,7 @@ public class DoctorService {
     public DoctorResponse update(Long id, DoctorRequest request) {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
-
-        Department dept = departmentRepository.findById(request.getDepartmentId())
-                .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
-
-        doctor.setDepartment(dept);
-        doctor.setSpecialization(request.getSpecialization());
-        doctor.setBio(request.getBio());
-        if (request.getSlotDurationMins() != null) {
-            doctor.setSlotDurationMins(request.getSlotDurationMins());
-        }
-        doctor.setSearchVector(buildSearchVector(
-                doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
-
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        return updateLoaded(doctor, request);
     }
 
     @CacheEvict(value = "doctors", key = "#id")
@@ -120,6 +120,19 @@ public class DoctorService {
         if (request.getSlotDurationMins() != null) {
             doctor.setSlotDurationMins(request.getSlotDurationMins());
         }
+        if (request.getYearsOfExperience() != null) {
+            doctor.setYearsOfExperience(request.getYearsOfExperience());
+        }
+        if (request.getConsultationFee() != null) {
+            doctor.setConsultationFee(request.getConsultationFee());
+        }
+        if (request.getGender() != null) {
+            doctor.setGender(request.getGender());
+        }
+        if (request.getLanguages() != null) {
+            doctor.setLanguages(request.getLanguages());
+        }
+        doctor.setTelemedicineEnabled(request.isTelemedicineEnabled());
         doctor.setSearchVector(buildSearchVector(
                 doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
 

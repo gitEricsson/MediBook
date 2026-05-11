@@ -93,4 +93,39 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Optional<Appointment> findFirstByDoctorIdAndScheduledAtAfterAndStatusOrderByScheduledAtAsc(Long doctorId, LocalDateTime now, AppointmentStatus status);
+
+    @Query("""
+        SELECT a.status, COUNT(a), SUM(0) FROM Appointment a
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY a.status
+        """)
+    List<Object[]> countByStatusBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT d.name, COUNT(a) FROM Appointment a
+        JOIN a.doctor doc JOIN doc.department d
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY d.name
+        """)
+    List<Object[]> countByDepartmentBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT a.type, COUNT(a) FROM Appointment a
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY a.type
+        """)
+    List<Object[]> countByTypeBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT doc.id, CONCAT(u.firstName, ' ', u.lastName), COUNT(a),
+               SUM(CASE WHEN a.status = 'COMPLETED' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END),
+               doc.averageRating
+        FROM Appointment a
+        JOIN a.doctor doc JOIN doc.user u
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY doc.id, u.firstName, u.lastName, doc.averageRating
+        ORDER BY COUNT(a) DESC
+        """)
+    List<Object[]> getDoctorUtilizationStats(LocalDateTime from, LocalDateTime to);
 }

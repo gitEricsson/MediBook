@@ -2,6 +2,7 @@ package com.medibook.config;
 
 import com.medibook.audit.repository.AuditLogRepository;
 import com.medibook.domain.notification.repository.NotificationRepository;
+import com.medibook.domain.telemedicine.repository.CassandraChatMessageRepository;
 import org.mockito.Mockito;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +40,11 @@ public class TestCassandraConfig {
     @Bean
     public NotificationRepository notificationRepository() {
         return Mockito.mock(NotificationRepository.class);
+    }
+
+    @Bean
+    public CassandraChatMessageRepository cassandraChatMessageRepository() {
+        return Mockito.mock(CassandraChatMessageRepository.class);
     }
 
     @Bean

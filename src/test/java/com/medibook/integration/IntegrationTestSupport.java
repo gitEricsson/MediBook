@@ -92,7 +92,12 @@ abstract class IntegrationTestSupport {
             registry.add("spring.datasource.driver-class-name", MYSQL::getDriverClassName);
             registry.add("spring.jpa.database-platform", () -> "org.hibernate.dialect.MySQLDialect");
             registry.add("spring.jpa.properties.hibernate.dialect", () -> "org.hibernate.dialect.MySQLDialect");
+            
+            // Override Flyway credentials to match Testcontainer
             registry.add("spring.flyway.enabled", () -> SCHEMA_MODE == SchemaMode.FLYWAY);
+            registry.add("spring.flyway.user", MYSQL::getUsername);
+            registry.add("spring.flyway.password", MYSQL::getPassword);
+            
             registry.add("spring.jpa.hibernate.ddl-auto",
                     () -> SCHEMA_MODE == SchemaMode.FLYWAY ? "validate" : "create-drop");
             registry.add("spring.data.redis.host", REDIS::getHost);

@@ -4,35 +4,16 @@ spring:
       - org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration
       - org.springframework.boot.autoconfigure.data.cassandra.CassandraDataAutoConfiguration
       - org.springframework.boot.autoconfigure.data.cassandra.CassandraRepositoriesAutoConfiguration
+      - org.springframework.boot.autoconfigure.kafka.KafkaAutoConfiguration
 
-  datasource:
-    url: jdbc:h2:mem:medibook_it;MODE=MySQL;DATABASE_TO_UPPER=false;DB_CLOSE_DELAY=-1
-    username: sa
-    password:
-    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
 
   flyway:
     enabled: false
-
-  jpa:
-    database-platform: org.hibernate.dialect.H2Dialect
-    hibernate:
-      ddl-auto: create-drop
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.H2Dialect
-    show-sql: true
-
-  data:
-    cassandra:
-      contact-points: localhost
-      port: 9042
-      keyspace-name: medibook
-      local-datacenter: datacenter1
-      schema-action: RECREATE
-    redis:
-      host: localhost
-      port: 6379
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -44,8 +25,6 @@ spring:
   mail:
     host: localhost
     port: 1025
-    username: test@medibook.local
-    password: test
 
 app:
   jwt:
@@ -54,10 +33,6 @@ app:
     refresh-token-expiration-ms: 604800000
   phi:
     encryption-key: medibook-phi-aes256-encryption-key!
-
-medibook:
-  rate-limit:
-    enabled: false
 
 logging:
   level:

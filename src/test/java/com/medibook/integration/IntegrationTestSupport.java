@@ -7,36 +7,36 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
+@Testcontainers
 public abstract class IntegrationTestSupport {
 
-    static final MySQLContainer<?> mysql = new MySQLContainer<>(DockerImageName.parse("mysql:8.2"))
-            .withDatabaseName("medibook_it")
-            .withUsername("test")
-            .withPassword("test")
-            .withStartupTimeout(java.time.Duration.ofMinutes(5));
+    @Container
+    static final MySQLContainer<?> mysql =
+            new MySQLContainer<>("mysql:8.0.36")
+                    .withDatabaseName("medibook_it")
+                    .withUsername("test")
+                    .withPassword("test");
 
-    @SuppressWarnings("resource")
-    static final GenericContainer<?> redis = new GenericContainer<>(DockerImageName.parse("redis:7.2-alpine"))
-            .withExposedPorts(6379)
-            .withStartupTimeout(java.time.Duration.ofMinutes(5));
-
-    static {
-        System.setProperty("api.version", "1.41");
-        mysql.start();
-        redis.start();
-    }
+    @Container
+    static final GenericContainer<?> redis =
+            new GenericContainer<>("redis:7.2-alpine")
+                    .withExposedPorts(6379);
 
     @DynamicPropertySource
     static void overrideProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url",      mysql::getJdbcUrl);
+
+        registry.add("spring.datasource.url", mysql::getJdbcUrl);
         registry.add("spring.datasource.username", mysql::getUsername);
         registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.data.redis.host",     redis::getHost);
-        registry.add("spring.data.redis.port",     () -> redis.getMappedPort(6379));
+
+        registry.add("spring.data.redis.host", redis::getHost);
+        registry.add("spring.data.redis.port",
+                () -> redis.getMappedPort(6379));
     }
 }

@@ -83,6 +83,45 @@ public class NotificationService implements MessageListener {
                 "APPOINTMENT_REMINDER", event.getAppointmentId());
     }
 
+    public void sendPaymentSucceeded(Long patientId, String providerRef, String amount, String currency) {
+        save(patientId, "Payment Successful",
+                String.format("Your payment of %s %s (ref: %s) was processed successfully.", amount, currency, providerRef),
+                "PAYMENT_SUCCEEDED", null);
+    }
+
+    public void sendPaymentFailed(Long patientId, String providerRef) {
+        save(patientId, "Payment Failed",
+                "Your payment (ref: " + providerRef + ") could not be processed. Please try again or use a different payment method.",
+                "PAYMENT_FAILED", null);
+    }
+
+    public void sendRefundIssued(Long patientId, String amount, String currency) {
+        save(patientId, "Refund Issued",
+                String.format("A refund of %s %s has been processed and will appear in your account within 3–7 business days.", amount, currency),
+                "REFUND_ISSUED", null);
+    }
+
+    public void sendReviewApproved(Long patientId, String doctorName) {
+        save(patientId, "Review Published",
+                "Your review for Dr. " + doctorName + " has been approved and is now visible.",
+                "REVIEW_APPROVED", null);
+    }
+
+    public void sendWaitlistPromoted(Long patientId, Long appointmentId, String doctorName, Object scheduledAt) {
+        save(patientId, "Waitlist: Slot Available!",
+                "Good news! A slot with Dr. " + doctorName + " on " + scheduledAt + " opened up and has been reserved for you.",
+                "WAITLIST_PROMOTED", appointmentId);
+    }
+
+    public void sendTelemedicineSessionReady(Long patientId, Long doctorId, Long appointmentId) {
+        save(patientId, "Video Consultation Ready",
+                "Your telemedicine session is ready. Click to join.",
+                "TELEMEDICINE_READY", appointmentId);
+        save(doctorId, "Patient Waiting",
+                "A patient is waiting for the telemedicine session.",
+                "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+    }
+
 
     public List<NotificationResponse> getRecent(Long userId) {
         return notificationRepository.findRecentByUserId(userId).stream()

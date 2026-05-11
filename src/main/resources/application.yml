@@ -110,6 +110,33 @@ app:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
+  payment:
+    paystack:
+      enabled: true
+      secret-key: ${PAYSTACK_SECRET_KEY:}
+      base-url: https://api.paystack.co
+    flutterwave:
+      enabled: ${FLUTTERWAVE_ENABLED:false}
+      secret-key: ${FLUTTERWAVE_SECRET_KEY:}
+      base-url: https://api.flutterwave.com/v3
+    stripe:
+      enabled: ${STRIPE_ENABLED:false}
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+  intelligence:
+    nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:stub}
+    claude-api:
+      key: ${CLAUDE_API_KEY:}
+      max-tokens: 512
+  telemedicine:
+    provider: ${TELEMEDICINE_PROVIDER:stub}
+    daily-co:
+      api-key: ${DAILY_CO_API_KEY:}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      api-key: ${TWILIO_API_KEY:}
+      api-secret: ${TWILIO_API_SECRET:}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:
@@ -157,6 +184,33 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 20s
         sliding-window-size: 10
+      paystackProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      flutterwaveProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      stripeProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      videoRoomProvider:
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 5
+      clinicalNlpProvider:
+        failure-rate-threshold: 60
+        slow-call-duration-threshold: 10s
+        wait-duration-in-open-state: 120s
+        sliding-window-size: 5
 
 # ─── Springdoc / Swagger ────────────────────────────────────────────────────
 springdoc:
@@ -167,12 +221,12 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
 
-# ─── Actuator ───────────────────────────────────────────────────────────────
+# ─── Actuator / Prometheus ──────────────────────────────────────────────────
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics
   endpoint:
     health:
       show-details: when-authorized
@@ -183,6 +237,17 @@ management:
           include: readinessState,db,redis,kafka
         liveness:
           include: livenessState
+    prometheus:
+      enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s
+    tags:
+      application: medibook
+      env: ${spring.profiles.active:default}
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging:

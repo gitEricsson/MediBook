@@ -80,9 +80,10 @@ public class RedisConfig {
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(config)
-                .withCacheConfiguration("doctors", config.entryTtl(Duration.ofMinutes(30)))
-                .withCacheConfiguration("departments", config.entryTtl(Duration.ofHours(1)))
+                .withCacheConfiguration("doctors",      config.entryTtl(Duration.ofMinutes(30)))
+                .withCacheConfiguration("departments",  config.entryTtl(Duration.ofHours(1)))
                 .withCacheConfiguration("appointments", config.entryTtl(Duration.ofMinutes(5)))
+                .withCacheConfiguration("analytics",    config.entryTtl(Duration.ofMinutes(15)))
                 .build();
     }
 

@@ -47,9 +47,14 @@ public class SecurityConfig {
             "/api/v1/auth/reset-password",
             "/api/v1/auth/email/verify",
             "/api/v1/auth/email/resend",
+            // Payment provider webhooks must be accessible without a JWT token
+            "/api/v1/payments/webhooks/**",
+            // FHIR endpoints used by interop systems
+            "/api/v1/fhir/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/actuator/health/**",
+            "/actuator/prometheus",
             "/health",
             "/version"
     };

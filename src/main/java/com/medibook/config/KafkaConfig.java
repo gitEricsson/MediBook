@@ -2,6 +2,7 @@ package com.medibook.config;
 
 import com.medibook.messaging.event.AppointmentEvent;
 import com.medibook.messaging.event.AuditEvent;
+import com.medibook.messaging.event.PaymentEvent;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -102,6 +103,19 @@ public class KafkaConfig {
     }
 
     @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, PaymentEvent> paymentKafkaListenerContainerFactory(
+            KafkaTemplate<String, Object> kafkaTemplate) {
+        ConcurrentKafkaListenerContainerFactory<String, PaymentEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
+                baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(PaymentEvent.class)));
+        factory.setConcurrency(2);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
+        return factory;
+    }
+
+    @Bean
     public NewTopic appointmentEventsTopic() {
         return TopicBuilder.name("appointment.events").partitions(3).replicas(1).build();
     }
@@ -125,6 +139,14 @@ public class KafkaConfig {
     public NewTopic notificationTopic() {
         return TopicBuilder.name("notification.events").partitions(3).replicas(1).build();
     }
+
+    @Bean public NewTopic notificationEventsDltTopic()  { return TopicBuilder.name("notification.events.DLT").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic paymentEventsTopic()          { return TopicBuilder.name("payment.events").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic paymentEventsDltTopic()       { return TopicBuilder.name("payment.events.DLT").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic telemedicineEventsTopic()     { return TopicBuilder.name("telemedicine.events").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic reviewEventsTopic()           { return TopicBuilder.name("review.events").partitions(2).replicas(1).build(); }
+    @Bean public NewTopic waitlistEventsTopic()         { return TopicBuilder.name("waitlist.events").partitions(2).replicas(1).build(); }
+    @Bean public NewTopic consentEventsTopic()          { return TopicBuilder.name("consent.events").partitions(2).replicas(1).build(); }
 
     @Bean
     public HealthIndicator kafkaHealthIndicator() {

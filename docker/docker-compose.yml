@@ -29,6 +29,13 @@ services:
       # both values for any shared, staging, or production-like environment.
       JWT_SECRET: ${JWT_SECRET:-medibook-local-dev-jwt-secret-change-before-shared-use-64-bytes-minimum}
       PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-medibook-local-dev-phi-encryption-key}
+      # ─── Monnify (disabled by default; override in .env for sandbox testing) ───
+      MONNIFY_ENABLED: ${MONNIFY_ENABLED:-false}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-https://sandbox.monnify.com}
+      MONNIFY_REDIRECT_URL: ${MONNIFY_REDIRECT_URL:-http://localhost:3000/payment/callback}
     depends_on:
       mysql:
         condition: service_healthy

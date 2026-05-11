@@ -51,6 +51,9 @@ public class SecurityConfig {
             "/api/v1/payments/webhooks/**",
             // FHIR endpoints used by interop systems
             "/api/v1/fhir/**",
+            // WebSocket upgrade: HTTP auth is not used here.
+            // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.
+            "/ws/**",
             "/swagger-ui/**",
             "/v3/api-docs/**",
             "/actuator/health/**",

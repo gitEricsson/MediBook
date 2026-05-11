@@ -138,6 +138,14 @@ app:
       enabled: ${STRIPE_ENABLED:false}
       secret-key: ${STRIPE_SECRET_KEY:}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    monnify:
+      enabled: ${MONNIFY_ENABLED:false}
+      api-key: ${MONNIFY_API_KEY:}
+      secret-key: ${MONNIFY_SECRET_KEY:}
+      contract-code: ${MONNIFY_CONTRACT_CODE:}
+      # Sandbox: https://sandbox.monnify.com  |  Live: https://api.monnify.com
+      base-url: ${MONNIFY_BASE_URL:https://sandbox.monnify.com}
+      redirect-url: ${MONNIFY_REDIRECT_URL:http://localhost:3000/payment/callback}
   intelligence:
     nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:stub}
     claude-api:
@@ -214,6 +222,12 @@ resilience4j:
       stripeProvider:
         failure-rate-threshold: 50
         slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      monnifyProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 8s
         wait-duration-in-open-state: 60s
         sliding-window-size: 10
         permitted-number-of-calls-in-half-open-state: 3

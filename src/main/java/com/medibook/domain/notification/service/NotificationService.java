@@ -17,34 +17,46 @@ import org.springframework.data.redis.connection.MessageListener;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
+/**
+ * Notification lifecycle service.
+ *
+ * Flow:
+ *   1. Domain event (e.g. AppointmentEvent) arrives via Kafka consumer.
+ *   2. save() inserts the Notification into Cassandra (durable, 30-day TTL).
+ *   3. save() publishes the serialised payload to Redis Pub/Sub channel
+ *      "notifications:user:{userId}" — this is the horizontal-scalability mechanism.
+ *      Every backend replica is subscribed to this pattern.
+ *   4. onMessage() fires on all replicas.  The replica that holds the user's
+ *      WebSocket connection delivers the notification via STOMP.
+ *      The others silently no-op (convertAndSendToUser is a no-op if the user
+ *      has no active session on this instance).
+ *   5. If the user is offline, the notification remains queryable via REST.
+ */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService implements MessageListener {
 
-    private static final Duration   NOTIFICATION_TTL    = Duration.ofDays(30);
-    private static final String     PUBSUB_PREFIX       = "notifications:user:";
+    private static final Duration NOTIFICATION_TTL = Duration.ofDays(30);
+    private static final String   PUBSUB_PREFIX     = "notifications:user:";
+    private static final String   WS_DESTINATION    = "/queue/notifications";
 
-    private final NotificationRepository          notificationRepository;
-    private final CassandraOperations             cassandraOperations;
-    private final StringRedisTemplate             stringRedisTemplate;
-    private final RedisMessageListenerContainer   listenerContainer;
-    private final ObjectMapper                    objectMapper;
-
-    private final Map<Long, List<SseEmitter>> emitters = new ConcurrentHashMap<>();
+    private final NotificationRepository        notificationRepository;
+    private final CassandraOperations           cassandraOperations;
+    private final StringRedisTemplate           stringRedisTemplate;
+    private final RedisMessageListenerContainer listenerContainer;
+    private final ObjectMapper                  objectMapper;
+    private final SimpMessagingTemplate         messagingTemplate;
 
     @PostConstruct
     public void registerPubSubListener() {
@@ -52,6 +64,7 @@ public class NotificationService implements MessageListener {
         log.info("Registered Redis pub/sub listener on pattern {}*", PUBSUB_PREFIX);
     }
 
+    // ─── Domain notification senders ────────────────────────────────────────
 
     public void sendAppointmentBooked(AppointmentEvent event) {
         save(event.getPatientId(), "Appointment Booked",
@@ -122,6 +135,7 @@ public class NotificationService implements MessageListener {
                 "TELEMEDICINE_PATIENT_WAITING", appointmentId);
     }
 
+    // ─── REST query methods ──────────────────────────────────────────────────
 
     public List<NotificationResponse> getRecent(Long userId) {
         return notificationRepository.findRecentByUserId(userId).stream()
@@ -164,15 +178,7 @@ public class NotificationService implements MessageListener {
         notificationRepository.saveAll(unread);
     }
 
-
-    public SseEmitter subscribe(Long userId) {
-        SseEmitter emitter = new SseEmitter(Long.MAX_VALUE);
-        emitters.computeIfAbsent(userId, k -> new CopyOnWriteArrayList<>()).add(emitter);
-        emitter.onCompletion(() -> removeEmitter(userId, emitter));
-        emitter.onTimeout(() -> removeEmitter(userId, emitter));
-        return emitter;
-    }
-
+    // ─── Redis Pub/Sub inbound handler ──────────────────────────────────────
 
     @Override
     public void onMessage(Message message, byte[] pattern) {
@@ -182,12 +188,13 @@ public class NotificationService implements MessageListener {
             Long userId    = Long.parseLong(channel.substring(PUBSUB_PREFIX.length()));
 
             NotificationResponse notification = objectMapper.readValue(body, NotificationResponse.class);
-            emit(userId, notification);
+            deliverViaWebSocket(userId, notification);
         } catch (Exception e) {
             log.error("Failed to process Redis pub/sub notification message", e);
         }
     }
 
+    // ─── Persistence + Redis fan-out ────────────────────────────────────────
 
     protected void save(Long userId, String title, String message, String type, Long appointmentId) {
         Notification notification = Notification.builder()
@@ -202,37 +209,35 @@ public class NotificationService implements MessageListener {
                 .referenceId(String.valueOf(appointmentId))
                 .build();
 
+        // 1. Persist first — REST fallback remains available even if WS/Redis fails
         cassandraOperations.insert(notification,
                 InsertOptions.builder().ttl(NOTIFICATION_TTL).build());
 
+        // 2. Publish to Redis Pub/Sub for cross-instance fan-out
         NotificationResponse payload = NotificationResponse.fromEntity(notification);
         try {
             stringRedisTemplate.convertAndSend(
                     PUBSUB_PREFIX + userId,
                     objectMapper.writeValueAsString(payload));
         } catch (Exception e) {
-            log.error("Failed to publish notification to Redis pub/sub for user [{}]", userId, e);
+            log.error("Redis pub/sub publish failed for user [{}]; notification still persisted", userId, e);
         }
 
-        log.debug("Notification saved and published for user [{}]: {}", userId, title);
+        log.debug("Notification saved and published; userId={} type={}", userId, type);
     }
 
-    private void emit(Long userId, NotificationResponse payload) {
-        List<SseEmitter> userEmitters = emitters.get(userId);
-        if (userEmitters == null || userEmitters.isEmpty()) return;
+    // ─── WebSocket delivery (best-effort) ───────────────────────────────────
 
-        for (SseEmitter emitter : userEmitters) {
-            try {
-                emitter.send(payload);
-            } catch (Exception e) {
-                emitter.complete();
-                userEmitters.remove(emitter);
-            }
+    private void deliverViaWebSocket(Long userId, NotificationResponse payload) {
+        try {
+            messagingTemplate.convertAndSendToUser(
+                    String.valueOf(userId),
+                    WS_DESTINATION,
+                    payload);
+            log.debug("WebSocket notification delivered; userId={} type={}", userId, payload.getType());
+        } catch (Exception e) {
+            // Best-effort: user may be offline; notification is already in Cassandra
+            log.debug("WebSocket delivery skipped; userId={} (user likely offline): {}", userId, e.getMessage());
         }
-    }
-
-    private void removeEmitter(Long userId, SseEmitter emitter) {
-        List<SseEmitter> userEmitters = emitters.get(userId);
-        if (userEmitters != null) userEmitters.remove(emitter);
     }
 }

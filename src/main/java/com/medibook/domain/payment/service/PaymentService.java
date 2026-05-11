@@ -284,22 +284,38 @@ public class PaymentService {
         }
     }
 
+    /**
+     * Called by WebhookProcessingService when a webhook confirms a payment as successful.
+     * Marks the invoice paid and publishes the payment event via the outbox pattern.
+     */
+    @Transactional
+    public void handleSuccessfulWebhookPayment(Payment payment) {
+        markInvoicePaid(payment);
+        publishPaymentEvent(payment, "SUCCEEDED");
+    }
+
     private PaymentStatus mapProviderStatus(String status, com.medibook.domain.payment.entity.PaymentProvider provider) {
         return switch (provider) {
             case PAYSTACK -> switch (status.toLowerCase()) {
-                case "success" -> PaymentStatus.SUCCESSFUL;
-                case "failed" -> PaymentStatus.FAILED;
-                default -> PaymentStatus.PENDING;
+                case "success"               -> PaymentStatus.SUCCESSFUL;
+                case "failed"                -> PaymentStatus.FAILED;
+                default                      -> PaymentStatus.PENDING;
             };
             case FLUTTERWAVE -> switch (status.toLowerCase()) {
-                case "successful" -> PaymentStatus.SUCCESSFUL;
-                case "failed" -> PaymentStatus.FAILED;
-                default -> PaymentStatus.PENDING;
+                case "successful"            -> PaymentStatus.SUCCESSFUL;
+                case "failed"                -> PaymentStatus.FAILED;
+                default                      -> PaymentStatus.PENDING;
             };
             case STRIPE -> switch (status.toLowerCase()) {
-                case "succeeded" -> PaymentStatus.SUCCESSFUL;
-                case "failed" -> PaymentStatus.FAILED;
-                default -> PaymentStatus.PENDING;
+                case "succeeded"             -> PaymentStatus.SUCCESSFUL;
+                case "failed"                -> PaymentStatus.FAILED;
+                default                      -> PaymentStatus.PENDING;
+            };
+            case MONNIFY -> switch (status.toUpperCase()) {
+                case "PAID", "OVERPAID"      -> PaymentStatus.SUCCESSFUL;
+                case "FAILED", "EXPIRED"     -> PaymentStatus.FAILED;
+                case "CANCELLED"             -> PaymentStatus.CANCELLED;
+                default                      -> PaymentStatus.PENDING;
             };
         };
     }

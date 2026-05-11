@@ -2,6 +2,10 @@ spring:
   application:
     name: medibook
 
+  cassandra:
+    request:
+      timeout: ${CASSANDRA_REQUEST_TIMEOUT:15s}
+
   # ─── Java 21 Virtual Threads ────────────────────────────────────────────
   threads:
     virtual:
@@ -9,9 +13,9 @@ spring:
 
   # ─── MySQL / HikariCP ───────────────────────────────────────────────────
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:medibook}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USER:medibook}
-    password: ${DB_PASSWORD:medibook}
+    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:localhost}}:${MEDIBOOK_DB_PORT:${DB_PORT:3306}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MEDIBOOK_DB_USER:${DB_USER:medibook}}
+    password: ${MEDIBOOK_DB_PASSWORD:${DB_PASSWORD:medibook}}
     hikari:
       pool-name: MediBook-HikariCP
       maximum-pool-size: 20
@@ -41,6 +45,8 @@ spring:
   # ─── Cassandra ──────────────────────────────────────────────────────────
   data:
     cassandra:
+      repositories:
+        type: none
       keyspace-name: ${CASSANDRA_KEYSPACE:medibook}
       contact-points: ${CASSANDRA_HOST:localhost}
       port: ${CASSANDRA_PORT:9042}
@@ -49,6 +55,8 @@ spring:
       password: ${CASSANDRA_PASSWORD:cassandra}
       schema-action: CREATE_IF_NOT_EXISTS
     redis:
+      repositories:
+        enabled: false
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
@@ -62,7 +70,7 @@ spring:
 
   # ─── Kafka ──────────────────────────────────────────────────────────────
   kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    bootstrap-servers: ${MEDIBOOK_KAFKA_BROKERS:${KAFKA_BROKERS:localhost:9092}}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -110,6 +118,13 @@ app:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
+  bootstrap:
+    super-admin:
+      email: ${SUPER_ADMIN_EMAIL:}
+      password: ${SUPER_ADMIN_PASSWORD:}
+      first-name: ${SUPER_ADMIN_FIRST_NAME:Super}
+      last-name: ${SUPER_ADMIN_LAST_NAME:Admin}
+      phone: ${SUPER_ADMIN_PHONE:}
   payment:
     paystack:
       enabled: true

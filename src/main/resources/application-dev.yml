@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:medibook_dev}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USER:medibook}
-    password: ${DB_PASSWORD:medibook}
+    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:localhost}}:${MEDIBOOK_DB_PORT:${DB_PORT:3307}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MEDIBOOK_DB_USER:${DB_USER:medibook}}
+    password: ${MEDIBOOK_DB_PASSWORD:${DB_PASSWORD:medibook}}
   jpa:
     show-sql: true
   data:
@@ -13,7 +13,7 @@ spring:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    bootstrap-servers: ${MEDIBOOK_KAFKA_BROKERS:${KAFKA_BROKERS:localhost:29092}}
   mail:
     host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}  # MailHog for local dev
@@ -25,6 +25,25 @@ spring:
           auth: false
           starttls:
             enable: false
+
+# ─── Dev-only secrets (never use in production) ─────────────────────────────
+app:
+  jwt:
+    secret: ${JWT_SECRET:dev-jwt-secret-replace-in-prod-must-be-256-bits-long-for-hs256!!}
+  phi:
+    encryption-key: ${PHI_ENCRYPTION_KEY:dev-phi-key-replace-in-prod-min32chars!!}
+
+  # ─── Super Admin bootstrap defaults for local dev ───────────────────────────
+  bootstrap:
+    super-admin:
+      email: ${SUPER_ADMIN_EMAIL:superadmin@medibook.local}
+      password: ${SUPER_ADMIN_PASSWORD:Password123!}
+      first-name: ${SUPER_ADMIN_FIRST_NAME:Super}
+      last-name: ${SUPER_ADMIN_LAST_NAME:Admin}
+
+  # ─── Demo seed data ──────────────────────────────────────────────────────────
+  seed:
+    enabled: ${SEED_DATA_ENABLED:true}
 
 logging:
   level:

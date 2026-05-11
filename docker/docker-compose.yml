@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   # ─── Application ──────────────────────────────────────────────────────────
@@ -26,13 +24,16 @@ services:
       KAFKA_BROKERS: kafka:9092
       MAIL_HOST: mailhog
       MAIL_PORT: 1025
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:?PHI_ENCRYPTION_KEY is required}
+      # Dev-only defaults keep this local Compose stack runnable even when the
+      # caller's shell/IDE does not load the project root .env file. Override
+      # both values for any shared, staging, or production-like environment.
+      JWT_SECRET: ${JWT_SECRET:-medibook-local-dev-jwt-secret-change-before-shared-use-64-bytes-minimum}
+      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-medibook-local-dev-phi-encryption-key}
     depends_on:
       mysql:
         condition: service_healthy
-      cassandra:
-        condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       kafka:
@@ -54,8 +55,9 @@ services:
       MYSQL_PASSWORD: medibook
     volumes:
       - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-umedibook", "-pmedibook"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -79,6 +81,21 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
+    networks:
+      - medibook-net
+
+  cassandra-init:
+    image: cassandra:4.1
+    container_name: medibook-cassandra-init
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - >
+        cqlsh cassandra 9042 -e "CREATE KEYSPACE IF NOT EXISTS medibook
+        WITH replication = {'class': 'SimpleStrategy', 'replication_factor': 1};"
     networks:
       - medibook-net
 

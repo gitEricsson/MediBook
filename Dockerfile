@@ -18,7 +18,7 @@ COPY --from=builder /app/target/medibook-*.jar app.jar
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health | grep '"status":"UP"' || exit 1
+  CMD wget -qO- http://localhost:8080/actuator/health/liveness | grep '"status":"UP"' || exit 1
 
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \

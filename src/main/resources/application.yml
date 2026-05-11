@@ -86,14 +86,14 @@ spring:
   mail:
     host: ${MAIL_HOST:smtp.gmail.com}
     port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
+    username: ${MAIL_USERNAME:no}
     password: ${MAIL_PASSWORD:}
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${MAIL_SMTP_AUTH:false}
           starttls:
-            enable: true
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
 
 # ─── JWT ────────────────────────────────────────────────────────────────────
 app:

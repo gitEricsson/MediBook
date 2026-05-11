@@ -164,7 +164,7 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public void resendVerificationEmail(ForgotPasswordRequest request) {
+    public void resendVerificationEmail(ResendVerificationRequest request) {
         userRepository.findByEmail(normalizeEmail(request.getEmail())).ifPresent(user -> {
             if (user.isActive()) {
                 return;

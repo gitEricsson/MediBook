@@ -24,6 +24,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       MAIL_HOST: mailhog
       MAIL_PORT: 1025
+      MAIL_USERNAME: noreply@medibook.com
       # Dev-only defaults keep this local Compose stack runnable even when the
       # caller's shell/IDE does not load the project root .env file. Override
       # both values for any shared, staging, or production-like environment.

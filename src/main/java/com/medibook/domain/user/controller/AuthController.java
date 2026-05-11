@@ -122,9 +122,17 @@ public class AuthController {
     }
 
     @PostMapping("/email/resend")
-    @Operation(summary = "Resend the email verification link")
+    @Operation(
+            summary = "Resend verification link",
+            description = "Dispatches a new verification email if the account is registered but not yet active."
+    )
+    @ApiResponses({
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Verification email dispatched"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid request data"),
+        @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "429", description = "Too many requests (rate limited)")
+    })
     public ResponseEntity<ApiResponse<Void>> resendVerification(
-            @Valid @RequestBody ForgotPasswordRequest request) {
+            @Valid @RequestBody ResendVerificationRequest request) {
         authService.resendVerificationEmail(request);
         return ResponseEntity.ok(ApiResponse.noContent("Verification email sent"));
     }

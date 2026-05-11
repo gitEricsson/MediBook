@@ -2,6 +2,7 @@ package com.medibook.domain.analytics.controller;
 
 import com.medibook.common.response.ApiResponse;
 import com.medibook.domain.analytics.dto.AppointmentAnalyticsResponse;
+import com.medibook.domain.analytics.dto.DailyCapacityReportResponse;
 import com.medibook.domain.analytics.dto.DoctorUtilizationResponse;
 import com.medibook.domain.analytics.dto.RevenueAnalyticsResponse;
 import com.medibook.domain.analytics.service.AnalyticsService;
@@ -15,12 +16,13 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @RestController
 @RequestMapping("/api/v1/admin/analytics")
 @RequiredArgsConstructor
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 @Tag(name = "Admin Analytics", description = "Platform analytics and reporting dashboard")
 public class AdminAnalyticsController {
 
@@ -48,5 +50,12 @@ public class AdminAnalyticsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime to) {
         return ApiResponse.ok(analyticsService.getDoctorUtilization(from, to));
+    }
+
+    @GetMapping("/capacity")
+    @Operation(summary = "Daily capacity report: available slots, bookings, utilisation")
+    public ApiResponse<DailyCapacityReportResponse> getDailyCapacityReport(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+        return ApiResponse.ok(analyticsService.getDailyCapacityReport(date));
     }
 }

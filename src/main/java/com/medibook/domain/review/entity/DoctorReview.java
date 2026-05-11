@@ -6,7 +6,9 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
 
+import java.sql.Types;
 import java.time.LocalDateTime;
 
 @Entity
@@ -34,6 +36,7 @@ public class DoctorReview extends AuditableEntity {
     @JoinColumn(name = "doctor_id", nullable = false)
     private Doctor doctor;
 
+    @JdbcTypeCode(Types.TINYINT)
     @Column(nullable = false)
     private byte rating;
 

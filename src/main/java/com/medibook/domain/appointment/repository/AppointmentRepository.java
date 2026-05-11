@@ -94,6 +94,10 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Optional<Appointment> findFirstByDoctorIdAndScheduledAtAfterAndStatusOrderByScheduledAtAsc(Long doctorId, LocalDateTime now, AppointmentStatus status);
 
+    boolean existsByConfirmationCode(String confirmationCode);
+
+    Optional<Appointment> findByConfirmationCode(String confirmationCode);
+
     @Query("""
         SELECT a.status, COUNT(a), SUM(0) FROM Appointment a
         WHERE a.scheduledAt BETWEEN :from AND :to
@@ -128,4 +132,17 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
         ORDER BY COUNT(a) DESC
         """)
     List<Object[]> getDoctorUtilizationStats(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT dept.id, dept.name,
+               COUNT(a),
+               SUM(CASE WHEN a.status = 'COMPLETED' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END)
+        FROM Appointment a
+        JOIN a.doctor doc JOIN doc.department dept
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY dept.id, dept.name
+        ORDER BY COUNT(a) DESC
+        """)
+    List<Object[]> getDepartmentCapacityStats(LocalDateTime from, LocalDateTime to);
 }

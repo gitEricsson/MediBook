@@ -1,11 +1,15 @@
 package com.medibook.domain.analytics.service;
 
 import com.medibook.domain.analytics.dto.AppointmentAnalyticsResponse;
+import com.medibook.domain.analytics.dto.DailyCapacityReportResponse;
+import com.medibook.domain.analytics.dto.DailyCapacityReportResponse.DepartmentCapacitySummary;
 import com.medibook.domain.analytics.dto.DoctorUtilizationResponse;
 import com.medibook.domain.analytics.dto.RevenueAnalyticsResponse;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
+import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import com.medibook.domain.payment.repository.PaymentRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -14,10 +18,13 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.Duration;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -25,9 +32,10 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AnalyticsService {
 
-    private final AppointmentRepository appointmentRepository;
-    private final DoctorRepository      doctorRepository;
-    private final PaymentRepository     paymentRepository;
+    private final AppointmentRepository        appointmentRepository;
+    private final DoctorRepository             doctorRepository;
+    private final DoctorWorkingHoursRepository workingHoursRepository;
+    private final PaymentRepository            paymentRepository;
 
     @Cacheable(value = "analytics", key = "'appointments-' + #from + '-' + #to")
     @Transactional(readOnly = true)
@@ -110,6 +118,69 @@ public class AnalyticsService {
                 .refundedPayments(refunded)
                 .revenueByDepartment(Map.of())
                 .revenueByMonth(Map.of())
+                .build();
+    }
+
+    @Transactional(readOnly = true)
+    public DailyCapacityReportResponse getDailyCapacityReport(LocalDate date) {
+        LocalDateTime startOfDay = date.atStartOfDay();
+        LocalDateTime endOfDay   = date.atTime(23, 59, 59);
+
+        // Day of week: Java DayOfWeek.getValue() returns 1=Mon..7=Sun — matches doctor_working_hours schema
+        int dow = date.getDayOfWeek().getValue();
+        List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDayOfWeekForActiveDoctors(dow);
+
+        int totalActiveDoctors = (int) workingHours.stream()
+                .map(wh -> wh.getDoctor().getId())
+                .distinct()
+                .count();
+
+        int totalAvailableSlots = workingHours.stream()
+                .mapToInt(wh -> {
+                    long minutes = Duration.between(wh.getStartTime(), wh.getEndTime()).toMinutes();
+                    int slotDuration = wh.getDoctor().getSlotDurationMins();
+                    return slotDuration > 0 ? (int) (minutes / slotDuration) : 0;
+                })
+                .sum();
+
+        List<Object[]> statusRows = appointmentRepository.countByStatusBetween(startOfDay, endOfDay);
+        long booked = 0, completed = 0, cancelled = 0, noShow = 0;
+        for (Object[] row : statusRows) {
+            String status = String.valueOf(row[0]);
+            long count   = ((Number) row[1]).longValue();
+            switch (status) {
+                case "PENDING", "CONFIRMED", "ON_HOLD" -> booked    += count;
+                case "COMPLETED"                        -> completed += count;
+                case "CANCELLED"                        -> cancelled += count;
+                case "NO_SHOW"                          -> noShow    += count;
+            }
+        }
+
+        double utilization = totalAvailableSlots > 0
+                ? Math.round((booked + completed) * 100.0 / totalAvailableSlots * 100.0) / 100.0
+                : 0.0;
+
+        List<DepartmentCapacitySummary> deptSummaries =
+                appointmentRepository.getDepartmentCapacityStats(startOfDay, endOfDay).stream()
+                        .map(row -> DepartmentCapacitySummary.builder()
+                                .departmentId(((Number) row[0]).longValue())
+                                .departmentName(String.valueOf(row[1]))
+                                .totalAppointments(((Number) row[2]).longValue())
+                                .completedAppointments(((Number) row[3]).longValue())
+                                .cancelledAppointments(((Number) row[4]).longValue())
+                                .build())
+                        .toList();
+
+        return DailyCapacityReportResponse.builder()
+                .date(date)
+                .totalActiveDoctors(totalActiveDoctors)
+                .totalAvailableSlots(totalAvailableSlots)
+                .bookedSlots(booked)
+                .completedAppointments(completed)
+                .cancelledAppointments(cancelled)
+                .noShowAppointments(noShow)
+                .utilizationPercent(utilization)
+                .byDepartment(deptSummaries)
                 .build();
     }
 

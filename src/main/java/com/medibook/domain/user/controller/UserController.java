@@ -37,14 +37,14 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Get a user by ID (Admin only)")
     public ResponseEntity<ApiResponse<UserResponse>> getUserById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(userService.getUserById(id)));
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "List all users with pagination (Admin only)")
     public ResponseEntity<ApiResponse<Page<UserResponse>>> listUsers(
             @PageableDefault(size = 20) Pageable pageable) {
@@ -59,7 +59,7 @@ public class UserController {
     }
 
     @PatchMapping("/{id}/disable")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Disable a user account (Admin only)")
     public ResponseEntity<ApiResponse<Void>> disableUser(@PathVariable Long id) {
         userService.disableUser(id);
@@ -67,14 +67,14 @@ public class UserController {
     }
 
     @PatchMapping("/{id}/enable")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Re-enable a disabled user account (Admin only)")
     public ResponseEntity<ApiResponse<UserResponse>> enableUser(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(userService.enableUser(id)));
     }
 
     @PatchMapping("/{id}/role")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Change user role — cannot promote to ADMIN (Admin only)")
     public ResponseEntity<ApiResponse<UserResponse>> changeRole(
             @PathVariable Long id,
@@ -83,7 +83,7 @@ public class UserController {
     }
 
     @PostMapping("/{id}/revoke-sessions")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Force-expire all refresh tokens for a user (Admin only)")
     public ResponseEntity<ApiResponse<String>> revokeSessions(@PathVariable Long id) {
         int count = userService.revokeAllSessions(id);
@@ -91,7 +91,7 @@ public class UserController {
     }
 
     @GetMapping("/{id}/audit")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "View recent audit log entries for a user (Admin only)")
     public ResponseEntity<ApiResponse<List<AuditLog>>> getAuditLog(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(userService.getAuditLog(id)));

@@ -110,6 +110,24 @@ public class DoctorService {
         return updateLoaded(doctor, request);
     }
 
+    @CacheEvict(value = "doctors", key = "#id")
+    @Transactional
+    public DoctorResponse activate(Long id) {
+        Doctor doctor = doctorRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
+        doctor.setActive(true);
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+    }
+
+    @CacheEvict(value = "doctors", key = "#id")
+    @Transactional
+    public DoctorResponse deactivate(Long id) {
+        Doctor doctor = doctorRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
+        doctor.setActive(false);
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+    }
+
     private DoctorResponse updateLoaded(Doctor doctor, DoctorRequest request) {
         Department dept = departmentRepository.findById(request.getDepartmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));

@@ -19,6 +19,7 @@ public class UserResponse {
     private String phone;
     private Role role;
     private boolean enabled;
+    private boolean active;
     private boolean twoFactorEnabled;
     private boolean emailNotifications;
     private boolean smsNotifications;
@@ -35,6 +36,7 @@ public class UserResponse {
                 .phone(user.getPhone())
                 .role(user.getRole())
                 .enabled(user.isEnabled())
+                .active(user.isActive())
                 .twoFactorEnabled(user.isTwoFactorEnabled())
                 .emailNotifications(user.isEmailNotifications())
                 .smsNotifications(user.isSmsNotifications())

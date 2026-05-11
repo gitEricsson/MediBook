@@ -51,6 +51,9 @@ public class SecurityConfig {
             "/api/v1/payments/webhooks/**",
             // FHIR endpoints used by interop systems
             "/api/v1/fhir/**",
+            // WebSocket upgrade: HTTP auth is not used here.
+            // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.
+            "/ws/**",
             "/swagger-ui/**",
             "/api-docs/**",
             "/actuator/health/**",
@@ -82,11 +85,12 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/metadata/**").permitAll()
-                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                // SUPER_ADMIN is a superset of ADMIN; fine-grained locks via @PreAuthorize per endpoint
+                .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                 // GET doctor search and availability is open to all authenticated users (patients need it to book).
                 // Write operations (POST register, PUT update) are further protected by @PreAuthorize in the controller.
                 .requestMatchers(HttpMethod.GET, "/api/v1/doctors/**").authenticated()
-                .requestMatchers("/api/v1/doctors/**").hasAnyRole("DOCTOR", "ADMIN")
+                .requestMatchers("/api/v1/doctors/**").hasAnyRole("DOCTOR", "ADMIN", "SUPER_ADMIN")
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())

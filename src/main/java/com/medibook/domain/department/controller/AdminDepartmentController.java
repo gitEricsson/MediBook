@@ -27,7 +27,7 @@ import java.util.List;
 @RequestMapping("/api/v1/admin/departments")
 @RequiredArgsConstructor
 @Tag(name = "Admin Departments", description = "Admin-only department management endpoints")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 @SecurityRequirement(name = "bearerAuth")
 public class AdminDepartmentController {
 

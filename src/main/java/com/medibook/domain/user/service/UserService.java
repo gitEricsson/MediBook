@@ -78,8 +78,8 @@ public class UserService {
     @CacheEvict(value = "users", key = "#userId")
     @Transactional
     public UserResponse changeRole(Long userId, Role newRole) {
-        if (newRole == Role.ROLE_ADMIN) {
-            throw new MediBookException("Cannot promote to ADMIN via this endpoint",
+        if (newRole == Role.ROLE_ADMIN || newRole == Role.ROLE_SUPER_ADMIN) {
+            throw new MediBookException("Cannot promote to ADMIN or SUPER_ADMIN via this endpoint",
                     HttpStatus.FORBIDDEN, "ADMIN_PROMOTION_DENIED");
         }
         User user = userRepository.findById(userId)

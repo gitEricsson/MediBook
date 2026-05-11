@@ -15,8 +15,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
+import org.springframework.data.redis.connection.DefaultMessage;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -34,6 +36,7 @@ class NotificationServiceTest {
     @Mock StringRedisTemplate             stringRedisTemplate;
     @Mock RedisMessageListenerContainer   listenerContainer;
     @Mock ObjectMapper                    objectMapper;
+    @Mock SimpMessagingTemplate           messagingTemplate;
 
     @InjectMocks NotificationService notificationService;
 
@@ -48,6 +51,8 @@ class NotificationServiceTest {
                 .scheduledAt(LocalDateTime.now().plusDays(3))
                 .build();
     }
+
+    // ─── Persistence tests ────────────────────────────────────────────────
 
     @Test
     @DisplayName("sendAppointmentBooked — inserts one notification for patient and one for doctor")
@@ -102,6 +107,121 @@ class NotificationServiceTest {
     }
 
     @Test
+    @DisplayName("save — inserts with 30-day TTL so rows self-expire")
+    void save_insertsWithTtl() {
+        notificationService.save(1L, "Test", "Test message", "APPOINTMENT_BOOKED", 42L);
+
+        ArgumentCaptor<InsertOptions> optionsCaptor = ArgumentCaptor.forClass(InsertOptions.class);
+        verify(cassandraOperations).insert(any(Notification.class), optionsCaptor.capture());
+        InsertOptions options = optionsCaptor.getValue();
+        assertThat(options.getTtl()).isNotNull();
+        assertThat(options.getTtl().toDays()).isEqualTo(30);
+    }
+
+    @Test
+    @DisplayName("save — notification is persisted to Cassandra BEFORE Redis publish (durability first)")
+    void save_persistsCassandraBeforeRedisPubSub() throws Exception {
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"type\":\"APPOINTMENT_BOOKED\"}");
+        var order = inOrder(cassandraOperations, stringRedisTemplate);
+
+        notificationService.save(1L, "Test", "Msg", "APPOINTMENT_BOOKED", 42L);
+
+        order.verify(cassandraOperations).insert(any(Notification.class), any(InsertOptions.class));
+        order.verify(stringRedisTemplate).convertAndSend(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("save — publishes to Redis pub/sub channel for cross-instance fan-out")
+    void save_publishesToRedisPubSub() throws Exception {
+        when(objectMapper.writeValueAsString(any())).thenReturn("{\"type\":\"APPOINTMENT_BOOKED\"}");
+
+        notificationService.save(1L, "Test", "Test message", "APPOINTMENT_BOOKED", 42L);
+
+        verify(stringRedisTemplate).convertAndSend(eq("notifications:user:1"), anyString());
+    }
+
+    @Test
+    @DisplayName("save — Redis failure does NOT lose the notification (Cassandra already written)")
+    void save_redisPubSubFailure_notificationStillPersisted() throws Exception {
+        when(objectMapper.writeValueAsString(any())).thenThrow(new RuntimeException("Redis down"));
+
+        // Should not throw — Redis failure is caught and logged
+        assertThatNoException().isThrownBy(() ->
+                notificationService.save(1L, "Test", "Msg", "APPOINTMENT_BOOKED", 42L));
+
+        // Cassandra insert already happened before Redis
+        verify(cassandraOperations).insert(any(Notification.class), any(InsertOptions.class));
+    }
+
+    // ─── WebSocket delivery tests ─────────────────────────────────────────
+
+    @Test
+    @DisplayName("onMessage — valid payload routes to correct user's WebSocket queue")
+    void onMessage_validPayload_deliversToCorrectUser() throws Exception {
+        NotificationResponse expectedPayload = NotificationResponse.builder()
+                .type("APPOINTMENT_BOOKED").title("Appointment Booked").build();
+        when(objectMapper.readValue(anyString(), eq(NotificationResponse.class)))
+                .thenReturn(expectedPayload);
+
+        String channel = "notifications:user:42";
+        String body    = "{\"type\":\"APPOINTMENT_BOOKED\"}";
+        notificationService.onMessage(
+                new DefaultMessage(channel.getBytes(), body.getBytes()), null);
+
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("42"),
+                eq("/queue/notifications"),
+                eq(expectedPayload));
+    }
+
+    @Test
+    @DisplayName("onMessage — user A's notification is never delivered to user B's queue")
+    void onMessage_notificationIsolation_noLeakBetweenUsers() throws Exception {
+        NotificationResponse forUser42 = NotificationResponse.builder()
+                .type("APPOINTMENT_BOOKED").build();
+        when(objectMapper.readValue(anyString(), eq(NotificationResponse.class)))
+                .thenReturn(forUser42);
+
+        notificationService.onMessage(
+                new DefaultMessage("notifications:user:42".getBytes(), "{}".getBytes()), null);
+
+        // Must send to "42" only
+        verify(messagingTemplate).convertAndSendToUser(
+                eq("42"), anyString(), any(NotificationResponse.class));
+        verify(messagingTemplate, never()).convertAndSendToUser(
+                eq("99"), anyString(), any());
+    }
+
+    @Test
+    @DisplayName("onMessage — malformed JSON is caught, service continues (no crash)")
+    void onMessage_malformedJson_logsAndContinues() throws Exception {
+        when(objectMapper.readValue(anyString(), eq(NotificationResponse.class)))
+                .thenThrow(new RuntimeException("Bad JSON"));
+
+        assertThatNoException().isThrownBy(() ->
+                notificationService.onMessage(
+                        new DefaultMessage("notifications:user:1".getBytes(), "BADJSON".getBytes()), null));
+
+        verify(messagingTemplate, never()).convertAndSendToUser(any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("onMessage — WebSocket delivery failure is silently ignored (user offline)")
+    void onMessage_webSocketDeliveryFailure_doesNotThrow() throws Exception {
+        NotificationResponse payload = NotificationResponse.builder().type("TEST").build();
+        when(objectMapper.readValue(anyString(), eq(NotificationResponse.class)))
+                .thenReturn(payload);
+        doThrow(new RuntimeException("No WebSocket session"))
+                .when(messagingTemplate).convertAndSendToUser(any(), any(), any());
+
+        assertThatNoException().isThrownBy(() ->
+                notificationService.onMessage(
+                        new DefaultMessage("notifications:user:1".getBytes(), "{}".getBytes()), null));
+    }
+
+    // ─── REST query tests ─────────────────────────────────────────────────
+
+    @Test
     @DisplayName("getRecent — delegates to repository and maps to NotificationResponse")
     void getRecent_delegatesToRepository() {
         Notification n = Notification.builder().userId(1L).type("APPOINTMENT_BOOKED").build();
@@ -134,27 +254,5 @@ class NotificationServiceTest {
         assertThat(count).isEqualTo(5L);
         verify(notificationRepository).countUnreadByUserId(1L);
         verify(notificationRepository, never()).findUnreadByUserId(anyLong());
-    }
-
-    @Test
-    @DisplayName("save — inserts with 30-day TTL so rows self-expire")
-    void save_insertsWithTtl() {
-        notificationService.save(1L, "Test", "Test message", "APPOINTMENT_BOOKED", 42L);
-
-        ArgumentCaptor<InsertOptions> optionsCaptor = ArgumentCaptor.forClass(InsertOptions.class);
-        verify(cassandraOperations).insert(any(Notification.class), optionsCaptor.capture());
-        InsertOptions options = optionsCaptor.getValue();
-        assertThat(options.getTtl()).isNotNull();
-        assertThat(options.getTtl().toDays()).isEqualTo(30);
-    }
-
-    @Test
-    @DisplayName("save — publishes to Redis pub/sub channel for cross-instance fan-out")
-    void save_publishesToRedisPubSub() throws Exception {
-        when(objectMapper.writeValueAsString(any())).thenReturn("{\"type\":\"APPOINTMENT_BOOKED\"}");
-
-        notificationService.save(1L, "Test", "Test message", "APPOINTMENT_BOOKED", 42L);
-
-        verify(stringRedisTemplate).convertAndSend(eq("notifications:user:1"), anyString());
     }
 }

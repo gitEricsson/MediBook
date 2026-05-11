@@ -6,5 +6,6 @@ package com.medibook.domain.user.entity;
 public enum Role {
     ROLE_PATIENT,
     ROLE_DOCTOR,
-    ROLE_ADMIN
+    ROLE_ADMIN,
+    ROLE_SUPER_ADMIN
 }

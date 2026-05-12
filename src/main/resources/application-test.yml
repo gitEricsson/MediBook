@@ -70,6 +70,8 @@ app:
       last-name: Admin
 
 medibook:
+  jobs:
+    enabled: false
   rate-limit:
     enabled: false
 

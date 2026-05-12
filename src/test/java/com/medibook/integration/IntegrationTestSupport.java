@@ -114,7 +114,7 @@ abstract class IntegrationTestSupport {
     }
 
     private static DockerMode dockerMode() {
-        String configured = System.getProperty("medibook.integration.docker", "auto")
+        String configured = System.getProperty("medibook.integration.docker", "false")
                 .trim()
                 .toLowerCase(Locale.ROOT);
 

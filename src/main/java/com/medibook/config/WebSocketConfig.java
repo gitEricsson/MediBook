@@ -4,10 +4,14 @@ import com.medibook.security.websocket.JwtHandshakeHandler;
 import com.medibook.security.websocket.JwtHandshakeInterceptor;
 import com.medibook.security.websocket.WebSocketAuthChannelInterceptor;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.scheduling.TaskScheduler;
+import org.springframework.scheduling.concurrent.ThreadPoolTaskScheduler;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
@@ -42,12 +46,26 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     private final JwtHandshakeHandler             jwtHandshakeHandler;
     private final WebSocketAuthChannelInterceptor wsAuthChannelInterceptor;
 
+    @Qualifier("taskScheduler")
+    private final TaskScheduler                   taskScheduler;
+
     @Value("${app.cors.allowed-origins:http://localhost:3000}")
     private String allowedOrigins;
+
+    @Bean
+    public static TaskScheduler taskScheduler() {
+        ThreadPoolTaskScheduler scheduler = new ThreadPoolTaskScheduler();
+        scheduler.setPoolSize(2);
+        scheduler.setThreadNamePrefix("medibook-task-");
+        scheduler.setDaemon(true);
+        scheduler.setRemoveOnCancelPolicy(true);
+        return scheduler;
+    }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry registry) {
         registry.enableSimpleBroker("/queue", "/topic")
+                .setTaskScheduler(taskScheduler)
                 // 25 s heartbeat: server sends every 25 s, expects client every 25 s
                 .setHeartbeatValue(new long[]{25_000, 25_000});
         registry.setApplicationDestinationPrefixes("/app");

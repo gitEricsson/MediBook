@@ -154,6 +154,19 @@ app:
       # Sandbox: https://sandbox.monnify.com  |  Live: https://api.monnify.com
       base-url: ${MONNIFY_BASE_URL:https://sandbox.monnify.com}
       redirect-url: ${MONNIFY_REDIRECT_URL:http://localhost:3000/payment/callback}
+  chat:
+    baa-active: ${AI_CHAT_BAA_ACTIVE:false}   # Set true ONLY after BAA is executed with Twilio and AI provider
+
+  ai:
+    support:
+      # Provider options: stub (default, no AI) | ollama (local) | claude-api (remote)
+      provider: ${AI_SUPPORT_PROVIDER:stub}
+      max-tokens: ${AI_SUPPORT_MAX_TOKENS:512}
+      ollama:
+        base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+        model: ${OLLAMA_MODEL:llama3.1}
+        timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:30}
+
   intelligence:
     nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:stub}
     claude-api:
@@ -203,6 +216,10 @@ resilience4j:
         limit-for-period: 100
         limit-refresh-period: 1m
         timeout-duration: 0s
+      aiChatEndpoint:
+        limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0s
   circuit-breaker:
     instances:
       kafkaProducer:
@@ -250,6 +267,12 @@ resilience4j:
         slow-call-duration-threshold: 10s
         wait-duration-in-open-state: 120s
         sliding-window-size: 5
+      ollamaProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 15s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 5
+        permitted-number-of-calls-in-half-open-state: 2
 
 # ─── Springdoc / Swagger ────────────────────────────────────────────────────
 springdoc:

@@ -1,8 +1,6 @@
 package com.medibook.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.medibook.domain.appointment.dto.AppointmentRequest;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
-import com.medibook.domain.appointment.entity.AppointmentType;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;

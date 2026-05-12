@@ -2,7 +2,6 @@ package com.medibook.domain.appointment.service;
 
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
-import com.medibook.config.entity.SystemConfig;
 import com.medibook.config.repository.SystemConfigRepository;
 import com.medibook.domain.appointment.dto.*;
 import com.medibook.domain.appointment.entity.Appointment;

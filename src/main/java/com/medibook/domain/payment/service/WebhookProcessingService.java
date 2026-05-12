@@ -2,6 +2,7 @@ package com.medibook.domain.payment.service;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medibook.domain.payment.entity.Payment;
 import com.medibook.domain.payment.entity.PaymentStatus;
 import com.medibook.domain.payment.entity.PaymentWebhookEvent;
 import com.medibook.domain.payment.provider.PaymentProviderFactory;

@@ -649,7 +649,7 @@ public class SeedDataRunner implements ApplicationRunner {
                 .appointment(appt)
                 .patient(appt.getPatient())
                 .doctor(appt.getDoctor())
-                .rating(r.rating())
+                .rating((byte) r.rating())
                 .comment(r.comment())
                 .status("APPROVED")
                 .moderatedAt(appt.getScheduledAt().plusDays(1))

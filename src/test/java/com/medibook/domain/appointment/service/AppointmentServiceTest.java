@@ -550,6 +550,27 @@ class AppointmentServiceTest {
         assertEquals(1, result.getTotalElements());
     }
 
+    @Test
+    void getByPatientCursor_upcoming_returnsCursorPage() {
+        appointment.setScheduledAt(LocalDateTime.now().plusDays(2));
+        when(appointmentRepository.findUpcomingByPatientCursor(
+                eq(patient.getId()), any(LocalDateTime.class), isNull(), isNull(), any(PageRequest.class)))
+                .thenReturn(List.of(appointment));
+
+        var page = appointmentService.getByPatientCursor(patient.getId(), "upcoming", null, 20);
+
+        assertEquals(1, page.getItems().size());
+        assertFalse(page.isHasMore());
+    }
+
+    @Test
+    void getByPatientCursor_invalidCursor_throwsBadRequest() {
+        MediBookException ex = assertThrows(MediBookException.class,
+                () -> appointmentService.getByPatientCursor(patient.getId(), "past", "%%%bad%%%", 20));
+
+        assertEquals("INVALID_CURSOR", ex.getErrorCode());
+    }
+
 
     @Test
     void generateIcs_notFound_throwsResourceNotFoundException() {

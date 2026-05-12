@@ -6,10 +6,12 @@ services:
       context: ..
       dockerfile: Dockerfile
     container_name: medibook-app
+    env_file:
+      - ../.env
     ports:
       - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: dev
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       DB_HOST: mysql
       DB_PORT: 3306
       DB_NAME: medibook
@@ -22,9 +24,6 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       KAFKA_BROKERS: kafka:9092
-      MAIL_HOST: mailhog
-      MAIL_PORT: 1025
-      MAIL_USERNAME: noreply@medibook.com
       # Dev-only defaults keep this local Compose stack runnable even when the
       # caller's shell/IDE does not load the project root .env file. Override
       # both values for any shared, staging, or production-like environment.
@@ -199,6 +198,8 @@ services:
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=15d
       - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+      - --enable-feature=native-histograms
     networks:
       - medibook-net
     depends_on:
@@ -222,12 +223,90 @@ services:
     depends_on:
       - prometheus
 
+  k6:
+    image: grafana/k6:0.49.0
+    profiles:
+      - load-test
+    working_dir: /scripts
+    env_file:
+      - ../.env
+    environment:
+      K6_BASE_URL: ${K6_BASE_URL:-http://app:8080}
+      K6_USERNAME: ${K6_USERNAME:-patient.james@medibook.local}
+      K6_PASSWORD: ${K6_PASSWORD:-Password123!}
+      K6_TESTID: ${K6_TESTID:-}
+      K6_START_RATE: ${K6_START_RATE:-5}
+      K6_TARGET_RATE: ${K6_TARGET_RATE:-20}
+      K6_PRE_ALLOCATED_VUS: ${K6_PRE_ALLOCATED_VUS:-30}
+      K6_MAX_VUS: ${K6_MAX_VUS:-120}
+      K6_WARMUP_DURATION: ${K6_WARMUP_DURATION:-30s}
+      K6_RAMP_UP_DURATION: ${K6_RAMP_UP_DURATION:-1m}
+      K6_STEADY_STATE_DURATION: ${K6_STEADY_STATE_DURATION:-3m}
+      K6_RAMP_DOWN_DURATION: ${K6_RAMP_DOWN_DURATION:-30s}
+      K6_P99_THRESHOLD_MS: ${K6_P99_THRESHOLD_MS:-750}
+      K6_SEARCH_P99_THRESHOLD_MS: ${K6_SEARCH_P99_THRESHOLD_MS:-1000}
+      K6_PROMETHEUS_RW_SERVER_URL: ${K6_PROMETHEUS_RW_SERVER_URL:-http://prometheus:9090/api/v1/write}
+      K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
+      K6_PROMETHEUS_RW_PUSH_INTERVAL: 5s
+    command:
+      - run
+      - -o
+      - experimental-prometheus-rw
+      - /scripts/medibook.js
+    volumes:
+      - ../load-tests:/scripts
+    depends_on:
+      app:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    networks:
+      - medibook-net
+
+  gatling:
+    image: maven:3.9.9-eclipse-temurin-21-alpine
+    profiles:
+      - load-test
+    working_dir: /workspace
+    env_file:
+      - ../.env
+    environment:
+      GATLING_BASE_URL: ${GATLING_BASE_URL:-http://app:8080}
+      GATLING_USERNAME: ${GATLING_USERNAME:-patient.james@medibook.local}
+      GATLING_PASSWORD: ${GATLING_PASSWORD:-Password123!}
+      GATLING_START_RATE: ${GATLING_START_RATE:-5}
+      GATLING_TARGET_RATE: ${GATLING_TARGET_RATE:-20}
+      GATLING_WARMUP_SECONDS: ${GATLING_WARMUP_SECONDS:-30}
+      GATLING_RAMP_UP_SECONDS: ${GATLING_RAMP_UP_SECONDS:-60}
+      GATLING_STEADY_STATE_SECONDS: ${GATLING_STEADY_STATE_SECONDS:-180}
+      GATLING_RAMP_DOWN_SECONDS: ${GATLING_RAMP_DOWN_SECONDS:-30}
+      GATLING_P99_THRESHOLD_MS: ${GATLING_P99_THRESHOLD_MS:-750}
+      GATLING_SEARCH_P99_THRESHOLD_MS: ${GATLING_SEARCH_P99_THRESHOLD_MS:-1000}
+    command:
+      - mvn
+      - -B
+      - -DskipTests
+      - -Dgatling.simulationClass=com.medibook.performance.ReadPathSimulation
+      - gatling:test
+    volumes:
+      - ..:/workspace
+      - maven-cache:/root/.m2
+    depends_on:
+      app:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    networks:
+      - medibook-net
+
 volumes:
   mysql-data:
   cassandra-data:
   redis-data:
   prometheus-data:
   grafana-data:
+  maven-cache:
 
 networks:
   medibook-net:

@@ -1,6 +1,8 @@
 package com.medibook.common.exception;
 
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -54,6 +56,13 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Access denied", null);
     }
 
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+        log.warn("Data integrity violation: {}", ex.getMessage());
+        return buildResponse(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION",
+                "The request conflicts with existing data", null);
+    }
+
     @ExceptionHandler(BadCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
         return buildResponse(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid email or password", null);
@@ -77,9 +86,12 @@ public class GlobalExceptionHandler {
                                                          List<ErrorResponse.FieldError> errors) {
         ErrorResponse body = ErrorResponse.builder()
                 .status(status.value())
+                .error(code)
                 .errorCode(code)
                 .message(message)
                 .timestamp(LocalDateTime.now())
+                .correlationId(MDC.get("correlationId"))
+                .fieldErrors(errors)
                 .errors(errors)
                 .build();
         return ResponseEntity.status(status).body(body);

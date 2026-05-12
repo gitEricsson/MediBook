@@ -100,6 +100,7 @@ public class TestRedisConfig {
                 .withCacheConfiguration("doctors", config.entryTtl(Duration.ofMinutes(30)))
                 .withCacheConfiguration("departments", config.entryTtl(Duration.ofHours(1)))
                 .withCacheConfiguration("appointments", config.entryTtl(Duration.ofMinutes(5)))
+                .withCacheConfiguration("notificationUnreadCounts", config.entryTtl(Duration.ofSeconds(60)))
                 .build();
     }
 
@@ -124,7 +125,7 @@ public class TestRedisConfig {
     @Bean
     @ConditionalOnProperty(name = "medibook.test.redis.mode", havingValue = "memory", matchIfMissing = true)
     public CacheManager inMemoryCacheManager() {
-        return new ConcurrentMapCacheManager("users", "doctors", "departments", "appointments");
+        return new ConcurrentMapCacheManager("users", "doctors", "departments", "appointments", "notificationUnreadCounts");
     }
 
     private GenericJackson2JsonRedisSerializer jsonSerializer() {

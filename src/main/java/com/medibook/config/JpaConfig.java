@@ -34,6 +34,6 @@ public class JpaConfig {
 
     @Bean
     public PageableHandlerMethodArgumentResolverCustomizer pageableCustomizer() {
-        return resolver -> resolver.setMaxPageSize(100);
+        return resolver -> resolver.setMaxPageSize(50);
     }
 }

@@ -1,14 +1,12 @@
 package com.medibook.domain.user.service;
 
 import com.medibook.common.exception.MediBookException;
-import jakarta.mail.internet.MimeMessage;
+import com.medibook.common.mail.TransactionalEmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +22,7 @@ public class PasswordResetService {
     private static final Duration TOKEN_TTL = Duration.ofMinutes(15);
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final JavaMailSender mailSender;
-
-    @Value("${spring.mail.username}")
-    private String fromAddress;
+    private final TransactionalEmailService transactionalEmailService;
 
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
@@ -52,13 +47,10 @@ public class PasswordResetService {
     public void sendResetEmail(String toEmail, String token) {
         try {
             String link = frontendUrl + "/auth/reset-password?token=" + token;
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Reset your MediBook password");
-            helper.setText(buildEmailBody(link), true);
-            mailSender.send(msg);
+            transactionalEmailService.sendHtml(
+                    toEmail,
+                    "Reset your MediBook password",
+                    buildEmailBody(link));
             log.info("Password reset email dispatched to {}", toEmail);
         } catch (Exception e) {
             log.error("Failed to send password reset email to {}: {}", toEmail, e.getMessage());

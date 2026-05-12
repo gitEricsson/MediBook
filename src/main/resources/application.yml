@@ -118,6 +118,14 @@ app:
     allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
+  mail:
+    from-address: ${MAIL_FROM_ADDRESS:${spring.mail.username:noreply@medibook.local}}
+    from-name: ${MAIL_FROM_NAME:MediBook}
+    failover-enabled: ${APP_MAIL_FAILOVER_ENABLED:true}
+    brevo:
+      enabled: ${BREVO_ENABLED:false}
+      api-key: ${BREVO_API_KEY:}
+      base-url: ${BREVO_BASE_URL:https://api.brevo.com}
   bootstrap:
     super-admin:
       email: ${SUPER_ADMIN_EMAIL:}
@@ -160,6 +168,8 @@ app:
       auth-token: ${TWILIO_AUTH_TOKEN:}
       api-key: ${TWILIO_API_KEY:}
       api-secret: ${TWILIO_API_SECRET:}
+  api-docs:
+    enabled: ${OPENAPI_ENABLED:true}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:
@@ -244,8 +254,10 @@ resilience4j:
 # ─── Springdoc / Swagger ────────────────────────────────────────────────────
 springdoc:
   api-docs:
+    enabled: ${app.api-docs.enabled:true}
     path: /api-docs
   swagger-ui:
+    enabled: ${app.api-docs.enabled:true}
     path: /swagger-ui.html
     tags-sorter: alpha
     operations-sorter: alpha

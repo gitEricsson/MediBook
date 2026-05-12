@@ -18,11 +18,13 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 
 import java.time.LocalDate;
@@ -78,6 +80,36 @@ class DoctorSearchServiceTest {
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().getFirst().getFullName()).isEqualTo("Ada Lovelace");
         assertThat(page.getContent().getFirst().getDepartmentName()).isEqualTo("Cardiology");
+    }
+
+    @Test
+    void searchDoctors_filtersTelemedicineWhenVisitTypeRequiresIt() {
+        Doctor doctor = doctor();
+        doctor.setTelemedicineEnabled(true);
+        when(doctorRepository.findAll(any(Specification.class), any(PageRequest.class)))
+                .thenReturn(new PageImpl<>(List.of(doctor)));
+
+        Page<DoctorResponse> page = service.searchDoctors(
+                null, null, null, null, "telehealth", null, PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).hasSize(1);
+        verify(doctorRepository).findAll(any(Specification.class), any(PageRequest.class));
+    }
+
+    @Test
+    void searchDoctors_appliesDefaultRankingSortWhenClientDoesNotProvideOne() {
+        when(doctorRepository.findAll(any(Specification.class), any(PageRequest.class)))
+                .thenReturn(Page.empty());
+
+        service.searchDoctors(null, null, null, null, null, null, PageRequest.of(0, 10));
+
+        ArgumentCaptor<PageRequest> pageableCaptor = ArgumentCaptor.forClass(PageRequest.class);
+        verify(doctorRepository).findAll(any(Specification.class), pageableCaptor.capture());
+
+        assertThat(pageableCaptor.getValue().getSort()).isEqualTo(Sort.by(
+                Sort.Order.desc("averageRating"),
+                Sort.Order.desc("reviewCount"),
+                Sort.Order.asc("id")));
     }
 
     @Test

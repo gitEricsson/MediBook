@@ -12,23 +12,10 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  test:
-    name: Maven test matrix
+  unit-tests:
+    name: Unit tests
     runs-on: ubuntu-latest
-    timeout-minutes: 35
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - name: fallback
-            command: mvn -B -Dmedibook.integration.docker=false test
-          - name: docker-integration
-            command: mvn -B -Dmedibook.integration.docker=true '-Dtest=*IntegrationTest' test
-          - name: flyway-validation
-            command: mvn -B -Dmedibook.integration.docker=true -Dmedibook.integration.schema=flyway '-Dtest=*IntegrationTest' test
-          - name: verify
-            command: mvn -B -Dmedibook.integration.docker=false verify
-
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@v4
@@ -40,5 +27,133 @@ jobs:
           java-version: '21'
           cache: maven
 
-      - name: Run ${{ matrix.name }}
-        run: ${{ matrix.command }}
+      - name: Run unit suite
+        run: mvn -B -Dmedibook.integration.docker=false "-Dtest=*Test,!*IntegrationTest" test
+
+  integration-tests:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: unit-tests
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run integration suite
+        run: mvn -B -Dmedibook.integration.docker=true "-Dtest=*IntegrationTest,!OpenApiContractIntegrationTest" test
+
+  flyway-validation:
+    name: Flyway validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    needs: unit-tests
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Run Flyway-backed integration suite
+        run: mvn -B -Dmedibook.integration.docker=true -Dmedibook.integration.schema=flyway "-Dtest=*IntegrationTest,!OpenApiContractIntegrationTest" test
+
+  openapi-contract:
+    name: OpenAPI contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: unit-tests
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Validate generated OpenAPI document
+        run: mvn -B -Dmedibook.integration.docker=false -Dtest=OpenApiContractIntegrationTest test
+
+  package:
+    name: Package artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs:
+      - integration-tests
+      - flyway-validation
+      - openapi-contract
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      - name: Build package without rerunning test suites
+        run: mvn -B -DskipTests package
+
+  zap-baseline:
+    name: ZAP baseline
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: package
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Prepare env file for compose
+        run: cp .env.example .env
+
+      - name: Start application stack
+        run: docker compose -f docker/docker-compose.yml up -d --build app
+
+      - name: Wait for application health
+        run: |
+          for i in {1..60}; do
+            if curl -fsS http://localhost:8080/actuator/health > /dev/null; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Application did not become healthy in time" >&2
+          exit 1
+
+      - name: Run ZAP baseline
+        run: |
+          docker run --rm --network host \
+            -v "${{ github.workspace }}:/zap/wrk:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            zap-baseline.py \
+            -t http://localhost:8080/swagger-ui.html \
+            -J zap-baseline.json \
+            -r zap-baseline.html
+
+      - name: Upload ZAP report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-baseline-report
+          path: |
+            zap-baseline.json
+            zap-baseline.html
+
+      - name: Stop application stack
+        if: always()
+        run: docker compose -f docker/docker-compose.yml down -v

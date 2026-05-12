@@ -4,10 +4,12 @@ import com.medibook.domain.doctor.entity.Doctor;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
@@ -17,12 +19,21 @@ import java.util.Optional;
 @Repository
 public interface DoctorRepository extends JpaRepository<Doctor, Long>, JpaSpecificationExecutor<Doctor> {
 
+    @Override
+    @EntityGraph(attributePaths = {"user", "department"})
+    Page<Doctor> findAll(Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"user", "department"})
+    Page<Doctor> findAll(Specification<Doctor> spec, Pageable pageable);
+
     Optional<Doctor> findByUserId(Long userId);
 
     Optional<Doctor> findByLicenseNumber(String licenseNumber);
 
     boolean existsByLicenseNumber(String licenseNumber);
 
+    @EntityGraph(attributePaths = {"user", "department"})
     Page<Doctor> findByDepartmentId(Long departmentId, Pageable pageable);
 
     @Query("SELECT d FROM Doctor d JOIN FETCH d.user JOIN FETCH d.department WHERE d.id = :id")

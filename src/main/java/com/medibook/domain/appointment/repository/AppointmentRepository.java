@@ -26,6 +26,44 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     Page<Appointment> findByPatientIdAndScheduledAtBeforeOrderByScheduledAtDesc(Long patientId, LocalDateTime time, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt >= :anchor
+           AND (
+                :cursorScheduledAt IS NULL
+                OR a.scheduledAt > :cursorScheduledAt
+                OR (a.scheduledAt = :cursorScheduledAt AND a.id > :cursorId)
+           )
+           ORDER BY a.scheduledAt ASC, a.id ASC
+           """)
+    List<Appointment> findUpcomingByPatientCursor(
+            Long patientId,
+            LocalDateTime anchor,
+            LocalDateTime cursorScheduledAt,
+            Long cursorId,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt < :anchor
+           AND (
+                :cursorScheduledAt IS NULL
+                OR a.scheduledAt < :cursorScheduledAt
+                OR (a.scheduledAt = :cursorScheduledAt AND a.id < :cursorId)
+           )
+           ORDER BY a.scheduledAt DESC, a.id DESC
+           """)
+    List<Appointment> findPastByPatientCursor(
+            Long patientId,
+            LocalDateTime anchor,
+            LocalDateTime cursorScheduledAt,
+            Long cursorId,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Page<Appointment> findByDoctorId(Long doctorId, Pageable pageable);
 
     Page<Appointment> findByStatus(AppointmentStatus status, Pageable pageable);

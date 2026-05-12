@@ -1,7 +1,9 @@
 package com.medibook.domain.appointment.controller;
 
 import com.medibook.common.response.ApiResponse;
+import com.medibook.common.response.CursorPageResponse;
 import com.medibook.domain.appointment.dto.*;
+import com.medibook.domain.appointment.service.AppointmentIdempotencyService;
 import com.medibook.domain.appointment.service.AppointmentService;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
@@ -30,15 +32,22 @@ import java.nio.charset.StandardCharsets;
 public class PatientAppointmentController {
 
     private final AppointmentService appointmentService;
+    private final AppointmentIdempotencyService appointmentIdempotencyService;
 
     @PostMapping("/appointments")
     @PreAuthorize("hasRole('PATIENT')")
     @Operation(summary = "Book a new appointment")
     public ResponseEntity<ApiResponse<AppointmentResponse>> book(
             @CurrentUser UserPrincipal principal,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
             @Valid @RequestBody AppointmentRequest request) {
+        AppointmentResponse response = appointmentIdempotencyService.execute(
+                principal.getId(),
+                idempotencyKey,
+                request,
+                () -> appointmentService.book(principal.getId(), request));
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.created(appointmentService.book(principal.getId(), request)));
+                .body(ApiResponse.created(response));
     }
 
     @PostMapping("/appointments/{id}/calendar.ics")
@@ -66,6 +75,18 @@ public class PatientAppointmentController {
             page = appointmentService.getUpcomingByPatient(principal.getId(), pageable);
         }
         return ResponseEntity.ok(ApiResponse.ok(page));
+    }
+
+    @GetMapping("/me/appointments/cursor")
+    @PreAuthorize("hasRole('PATIENT')")
+    @Operation(summary = "List my appointments with cursor pagination")
+    public ResponseEntity<ApiResponse<CursorPageResponse<AppointmentResponse>>> myAppointmentsCursor(
+            @CurrentUser UserPrincipal principal,
+            @RequestParam(defaultValue = "upcoming") String tab,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer limit) {
+        return ResponseEntity.ok(ApiResponse.ok(
+                appointmentService.getByPatientCursor(principal.getId(), tab, cursor, limit)));
     }
 
     @GetMapping("/me/appointments/{id}")

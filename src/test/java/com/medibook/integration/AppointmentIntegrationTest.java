@@ -634,4 +634,34 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data").value(
                         org.hamcrest.Matchers.startsWith("tel:")));
     }
+
+    @Test
+    @Order(40)
+    @DisplayName("GET /api/v1/me/appointments/cursor â€” returns cursor envelope and nextCursor")
+    void myAppointments_cursor_returnsCursorEnvelope() throws Exception {
+        LocalDateTime slotOne = LocalDateTime.now().plusDays(60).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime slotTwo = slotOne.plusDays(1);
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildReq(slotOne))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildReq(slotTwo))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/me/appointments/cursor")
+                        .param("tab", "upcoming")
+                        .param("limit", "1")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.hasMore").value(true))
+                .andExpect(jsonPath("$.data.nextCursor").isNotEmpty());
+    }
 }

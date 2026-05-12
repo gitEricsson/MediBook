@@ -83,6 +83,7 @@ public class RedisConfig {
                 .withCacheConfiguration("doctors",      config.entryTtl(Duration.ofMinutes(30)))
                 .withCacheConfiguration("departments",  config.entryTtl(Duration.ofHours(1)))
                 .withCacheConfiguration("appointments", config.entryTtl(Duration.ofMinutes(5)))
+                .withCacheConfiguration("notificationUnreadCounts", config.entryTtl(Duration.ofSeconds(60)))
                 .withCacheConfiguration("analytics",    config.entryTtl(Duration.ofMinutes(15)))
                 .build();
     }

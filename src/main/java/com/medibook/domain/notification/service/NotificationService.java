@@ -18,6 +18,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -50,6 +52,7 @@ public class NotificationService implements MessageListener {
     private static final Duration NOTIFICATION_TTL = Duration.ofDays(30);
     private static final String   PUBSUB_PREFIX     = "notifications:user:";
     private static final String   WS_DESTINATION    = "/queue/notifications";
+    private static final String   UNREAD_COUNT_CACHE = "notificationUnreadCounts";
 
     private final NotificationRepository        notificationRepository;
     private final CassandraOperations           cassandraOperations;
@@ -57,6 +60,7 @@ public class NotificationService implements MessageListener {
     private final RedisMessageListenerContainer listenerContainer;
     private final ObjectMapper                  objectMapper;
     private final SimpMessagingTemplate         messagingTemplate;
+    private final CacheManager                  cacheManager;
 
     @PostConstruct
     public void registerPubSubListener() {
@@ -150,7 +154,19 @@ public class NotificationService implements MessageListener {
     }
 
     public long getUnreadCount(Long userId) {
-        return notificationRepository.countUnreadByUserId(userId);
+        Cache cache = cacheManager.getCache(UNREAD_COUNT_CACHE);
+        if (cache != null) {
+            Long cached = cache.get(userId, Long.class);
+            if (cached != null) {
+                return cached;
+            }
+        }
+
+        long count = notificationRepository.countUnreadByUserId(userId);
+        if (cache != null) {
+            cache.put(userId, count);
+        }
+        return count;
     }
 
     public void markAsRead(Long userId, Instant createdAt, UUID notificationId) {
@@ -162,9 +178,13 @@ public class NotificationService implements MessageListener {
                 Notification.class);
 
         if (notification != null) {
+            boolean wasUnread = !notification.isRead();
             notification.setRead(true);
             notification.setReadAt(Instant.now());
             notificationRepository.save(notification);
+            if (wasUnread) {
+                evictUnreadCount(userId);
+            }
         }
     }
 
@@ -176,6 +196,9 @@ public class NotificationService implements MessageListener {
             n.setReadAt(now);
         });
         notificationRepository.saveAll(unread);
+        if (!unread.isEmpty()) {
+            evictUnreadCount(userId);
+        }
     }
 
     // ─── Redis Pub/Sub inbound handler ──────────────────────────────────────
@@ -223,6 +246,8 @@ public class NotificationService implements MessageListener {
             log.error("Redis pub/sub publish failed for user [{}]; notification still persisted", userId, e);
         }
 
+        evictUnreadCount(userId);
+
         log.debug("Notification saved and published; userId={} type={}", userId, type);
     }
 
@@ -238,6 +263,13 @@ public class NotificationService implements MessageListener {
         } catch (Exception e) {
             // Best-effort: user may be offline; notification is already in Cassandra
             log.debug("WebSocket delivery skipped; userId={} (user likely offline): {}", userId, e.getMessage());
+        }
+    }
+
+    private void evictUnreadCount(Long userId) {
+        Cache cache = cacheManager.getCache(UNREAD_COUNT_CACHE);
+        if (cache != null) {
+            cache.evict(userId);
         }
     }
 }

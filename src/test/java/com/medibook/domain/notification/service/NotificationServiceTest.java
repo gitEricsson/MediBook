@@ -13,6 +13,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.data.redis.connection.DefaultMessage;
@@ -37,6 +39,8 @@ class NotificationServiceTest {
     @Mock RedisMessageListenerContainer   listenerContainer;
     @Mock ObjectMapper                    objectMapper;
     @Mock SimpMessagingTemplate           messagingTemplate;
+    @Mock CacheManager                    cacheManager;
+    @Mock Cache                           unreadCountCache;
 
     @InjectMocks NotificationService notificationService;
 
@@ -44,6 +48,7 @@ class NotificationServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(cacheManager.getCache("notificationUnreadCounts")).thenReturn(unreadCountCache);
         event = AppointmentEvent.builder()
                 .appointmentId(100L)
                 .patientId(1L).patientName("Alice Patient").patientEmail("alice@test.com")
@@ -254,5 +259,24 @@ class NotificationServiceTest {
         assertThat(count).isEqualTo(5L);
         verify(notificationRepository).countUnreadByUserId(1L);
         verify(notificationRepository, never()).findUnreadByUserId(anyLong());
+    }
+
+    @Test
+    @DisplayName("getUnreadCount - returns cached value when available")
+    void getUnreadCount_returnsCachedValue() {
+        when(unreadCountCache.get(1L, Long.class)).thenReturn(7L);
+
+        long count = notificationService.getUnreadCount(1L);
+
+        assertThat(count).isEqualTo(7L);
+        verify(notificationRepository, never()).countUnreadByUserId(anyLong());
+    }
+
+    @Test
+    @DisplayName("save - evicts cached unread count for the target user")
+    void save_evictsUnreadCountCache() {
+        notificationService.save(1L, "Test", "Test message", "APPOINTMENT_BOOKED", 42L);
+
+        verify(unreadCountCache).evict(1L);
     }
 }

@@ -2,6 +2,7 @@ package com.medibook.domain.appointment.service;
 
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.common.response.CursorPageResponse;
 import com.medibook.config.repository.SystemConfigRepository;
 import com.medibook.domain.appointment.dto.*;
 import com.medibook.domain.appointment.entity.Appointment;
@@ -23,6 +24,7 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,8 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Base64;
+import java.util.List;
 import java.util.UUID;
 
 @Slf4j
@@ -268,6 +272,48 @@ public class AppointmentService {
     }
 
     @Transactional(readOnly = true)
+    public CursorPageResponse<AppointmentResponse> getByPatientCursor(
+            Long patientId,
+            String tab,
+            String cursor,
+            Integer limit) {
+        CursorPosition cursorPosition = decodeCursor(cursor);
+        int pageSize = normalizeCursorLimit(limit);
+        LocalDateTime anchor = LocalDateTime.now();
+        List<Appointment> appointments;
+
+        if ("past".equalsIgnoreCase(tab)) {
+            appointments = appointmentRepository.findPastByPatientCursor(
+                    patientId,
+                    anchor,
+                    cursorPosition == null ? null : cursorPosition.scheduledAt(),
+                    cursorPosition == null ? null : cursorPosition.appointmentId(),
+                    PageRequest.of(0, pageSize + 1));
+        } else {
+            appointments = appointmentRepository.findUpcomingByPatientCursor(
+                    patientId,
+                    anchor,
+                    cursorPosition == null ? null : cursorPosition.scheduledAt(),
+                    cursorPosition == null ? null : cursorPosition.appointmentId(),
+                    PageRequest.of(0, pageSize + 1));
+        }
+
+        boolean hasMore = appointments.size() > pageSize;
+        List<Appointment> pageItems = hasMore ? appointments.subList(0, pageSize) : appointments;
+        List<AppointmentResponse> items = pageItems.stream()
+                .map(AppointmentResponse::fromEntity)
+                .toList();
+
+        String nextCursor = null;
+        if (hasMore && !pageItems.isEmpty()) {
+            Appointment last = pageItems.getLast();
+            nextCursor = encodeCursor(last.getScheduledAt(), last.getId());
+        }
+
+        return AppointmentCursorPageResponse.of(items, nextCursor, hasMore, pageSize);
+    }
+
+    @Transactional(readOnly = true)
     public String generateIcs(Long id) {
         Appointment appt = getAndValidate(id);
         DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyyMMdd'T'HHmmss");
@@ -358,5 +404,36 @@ public class AppointmentService {
         } else {
             action.run();
         }
+    }
+
+    private int normalizeCursorLimit(Integer limit) {
+        if (limit == null) {
+            return 20;
+        }
+        return Math.min(Math.max(limit, 1), 50);
+    }
+
+    private String encodeCursor(LocalDateTime scheduledAt, Long appointmentId) {
+        String raw = "%s|%s".formatted(scheduledAt, appointmentId);
+        return Base64.getUrlEncoder().withoutPadding().encodeToString(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private CursorPosition decodeCursor(String cursor) {
+        if (cursor == null || cursor.isBlank()) {
+            return null;
+        }
+        try {
+            String decoded = new String(Base64.getUrlDecoder().decode(cursor), java.nio.charset.StandardCharsets.UTF_8);
+            String[] parts = decoded.split("\\|", 2);
+            if (parts.length != 2) {
+                throw new IllegalArgumentException("invalid cursor");
+            }
+            return new CursorPosition(LocalDateTime.parse(parts[0]), Long.parseLong(parts[1]));
+        } catch (RuntimeException ex) {
+            throw new MediBookException("Invalid cursor value", HttpStatus.BAD_REQUEST, "INVALID_CURSOR");
+        }
+    }
+
+    private record CursorPosition(LocalDateTime scheduledAt, Long appointmentId) {
     }
 }

@@ -1,15 +1,13 @@
 package com.medibook.domain.user.service;
 
 import com.medibook.common.exception.MediBookException;
+import com.medibook.common.mail.TransactionalEmailService;
 
-import jakarta.mail.internet.MimeMessage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -18,7 +16,7 @@ import java.time.Duration;
 
 /**
  * Email OTP service — generates a 6-digit code, stores it in Redis
- * with a configurable TTL, and sends it via SMTP.
+ * with a configurable TTL, and sends it through the transactional mail pipeline.
  */
 @Slf4j
 @Service
@@ -35,13 +33,10 @@ public class EmailOtpService {
     private final SecureRandom secureRandom = new SecureRandom();
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final JavaMailSender mailSender;
+    private final TransactionalEmailService transactionalEmailService;
 
     @Value("${app.otp.expiration-minutes:5}")
     private long otpExpirationMinutes;
-
-    @Value("${spring.mail.username}")
-    private String fromAddress;
 
 
     public String generateAndStore(String email) {
@@ -96,13 +91,10 @@ public class EmailOtpService {
     @Async
     public void sendOtpEmail(String toEmail, String otp) {
         try {
-            MimeMessage mimeMessage = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(mimeMessage, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Your MediBook Verification Code");
-            helper.setText(buildEmailBody(otp), true);
-            mailSender.send(mimeMessage);
+            transactionalEmailService.sendHtml(
+                    toEmail,
+                    "Your MediBook Verification Code",
+                    buildEmailBody(otp));
             log.info("OTP email sent to {}", toEmail);
         } catch (Exception e) {
             log.error("Failed to send OTP email to {}: {}", toEmail, e.getMessage());

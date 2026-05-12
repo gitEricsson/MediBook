@@ -29,6 +29,8 @@ application-prod.yml
 
 # ─── Docker 
 docker/volumes/
+load-tests/results/*
+!load-tests/results/.gitkeep
 
 # ─── Maven wrapper 
 .mvn/wrapper/maven-wrapper.properties

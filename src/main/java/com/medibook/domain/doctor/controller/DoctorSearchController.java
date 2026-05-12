@@ -20,7 +20,7 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/v1/doctors")
 @RequiredArgsConstructor
-@Tag(name = "Doctors", description = "Doctor search and availability")
+@Tag(name = "Doctors", description = "Doctor profile, search, and management")
 @SecurityRequirement(name = "bearerAuth")
 public class DoctorSearchController {
 

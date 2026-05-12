@@ -68,6 +68,9 @@ public class User extends AuditableEntity {
     @Builder.Default
     private String locale = "en-US";
 
+    @Column(name = "avatar_url", columnDefinition = "MEDIUMTEXT")
+    private String avatarUrl;
+
     @Version
     private Long version;
 

@@ -2,6 +2,8 @@ package com.medibook.domain.user.dto;
 
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import lombok.Builder;
 import lombok.Data;
 
@@ -24,6 +26,7 @@ public class UserResponse {
     private boolean emailNotifications;
     private boolean smsNotifications;
     private String locale;
+    private String avatarUrl;
     private LocalDateTime createdAt;
 
     public static UserResponse fromUser(User user) {
@@ -41,7 +44,26 @@ public class UserResponse {
                 .emailNotifications(user.isEmailNotifications())
                 .smsNotifications(user.isSmsNotifications())
                 .locale(user.getLocale())
+                .avatarUrl(user.getAvatarUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
+    }
+
+    @Data
+    @Builder
+    public static class UpdateRequest {
+        @NotBlank(message = "First name is required")
+        private String firstName;
+
+        @NotBlank(message = "Last name is required")
+        private String lastName;
+
+        @NotBlank(message = "Phone number is required")
+        @Pattern(regexp = "^[+]?[(]?[0-9]{1,4}[)]?[-\\s\\.]?[(]?[0-9]{1,4}[)]?[-\\s\\.]?[0-9]{1,9}$", message = "Invalid phone number")
+        private String phone;
+
+        private String locale;
+        private boolean emailNotifications;
+        private boolean smsNotifications;
     }
 }

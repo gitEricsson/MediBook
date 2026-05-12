@@ -4,8 +4,10 @@ import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
+import com.medibook.domain.doctor.dto.AdminCreateDoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorResponse;
+import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.user.entity.User;
@@ -18,8 +20,11 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -28,6 +33,7 @@ public class DoctorService {
     private final DoctorRepository doctorRepository;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Cacheable(value = "doctors", key = "#id")
     @Bulkhead(name = "doctorService")
@@ -153,6 +159,48 @@ public class DoctorService {
         doctor.setTelemedicineEnabled(request.isTelemedicineEnabled());
         doctor.setSearchVector(buildSearchVector(
                 doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
+
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+    }
+
+    /**
+     * Admin-only: provision a new User + Doctor in a single transaction.
+     * Generates a random temporary password; the doctor must reset it on first login.
+     */
+    @CacheEvict(value = "doctors", allEntries = true)
+    @Transactional
+    public DoctorResponse adminCreateDoctor(AdminCreateDoctorRequest request) {
+        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+            throw new MediBookException("Email already registered",
+                    HttpStatus.CONFLICT, "EMAIL_TAKEN");
+        }
+
+        Department dept = departmentRepository.findById(request.getDepartmentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
+
+        // Create user account with a temporary random password
+        String tempPassword = UUID.randomUUID().toString();
+        User user = User.builder()
+                .firstName(request.getFirstName())
+                .lastName(request.getLastName())
+                .email(request.getEmail())
+                .phone(request.getPhone())
+                .password(passwordEncoder.encode(tempPassword))
+                .role(Role.ROLE_DOCTOR)
+                .isActive(true)
+                .enabled(true)
+                .build();
+        User savedUser = userRepository.save(user);
+
+        Doctor doctor = Doctor.builder()
+                .user(savedUser)
+                .department(dept)
+                .specialization(request.getSpecialization())
+                .licenseNumber(request.getLicenseNumber() != null ? request.getLicenseNumber() : "PENDING-" + savedUser.getId())
+                .bio(request.getBio())
+                .build();
+        doctor.setSearchVector(buildSearchVector(
+                request.getFirstName(), request.getLastName(), request.getSpecialization()));
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor));
     }

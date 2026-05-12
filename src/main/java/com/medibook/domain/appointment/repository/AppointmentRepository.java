@@ -20,9 +20,21 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     Page<Appointment> findByPatientId(Long patientId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt > :time
+           ORDER BY a.scheduledAt ASC
+           """)
     Page<Appointment> findByPatientIdAndScheduledAtAfterOrderByScheduledAtAsc(Long patientId, LocalDateTime time, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt < :time
+           ORDER BY a.scheduledAt DESC
+           """)
     Page<Appointment> findByPatientIdAndScheduledAtBeforeOrderByScheduledAtDesc(Long patientId, LocalDateTime time, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})

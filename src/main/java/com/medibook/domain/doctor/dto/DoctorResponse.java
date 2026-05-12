@@ -1,5 +1,6 @@
 package com.medibook.domain.doctor.dto;
 
+import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.doctor.entity.Doctor;
 import lombok.Builder;
 import lombok.Data;
@@ -33,6 +34,12 @@ public class DoctorResponse {
     private LocalDateTime createdAt;
 
     public static DoctorResponse fromEntity(Doctor d) {
+        if (d.getUser() == null) {
+            throw new ResourceNotFoundException("User account", "doctor.id", d.getId());
+        }
+        if (d.getDepartment() == null) {
+            throw new ResourceNotFoundException("Department", "doctor.id", d.getId());
+        }
         return DoctorResponse.builder()
                 .id(d.getId())
                 .userId(d.getUser().getId())

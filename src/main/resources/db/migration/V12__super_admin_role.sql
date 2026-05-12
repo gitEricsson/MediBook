@@ -4,7 +4,7 @@
 INSERT IGNORE INTO roles (name) VALUES ('ROLE_SUPER_ADMIN');
 
 -- Composite index for admin listing queries that filter by role + enabled state
-CREATE INDEX IF NOT EXISTS idx_users_role_enabled ON users (role, is_enabled);
+CREATE INDEX idx_users_role_enabled ON users (role, is_enabled);
 
 -- Composite index for capacity report date-range + department joins
-CREATE INDEX IF NOT EXISTS idx_appt_dept_scheduled ON appointments (department_id, scheduled_at);
+CREATE INDEX idx_appt_dept_scheduled ON appointments (department_id, scheduled_at);

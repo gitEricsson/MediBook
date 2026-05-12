@@ -115,7 +115,7 @@ app:
   phi:
     encryption-key: ${PHI_ENCRYPTION_KEY}
   cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
   bootstrap:
@@ -244,7 +244,7 @@ resilience4j:
 # ─── Springdoc / Swagger ────────────────────────────────────────────────────
 springdoc:
   api-docs:
-    path: /api-docs
+    path: /v3/api-docs        # matches the /v3/api-docs/** whitelist in SecurityConfig
   swagger-ui:
     path: /swagger-ui.html
     tags-sorter: alpha

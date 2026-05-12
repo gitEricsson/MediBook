@@ -33,6 +33,9 @@ public class DoctorResponse {
     private LocalDateTime createdAt;
 
     public static DoctorResponse fromEntity(Doctor d) {
+        if (d.getUser() == null || d.getDepartment() == null) {
+            throw new IllegalStateException("Doctor [id=" + d.getId() + "] has missing required relationships (user or department)");
+        }
         return DoctorResponse.builder()
                 .id(d.getId())
                 .userId(d.getUser().getId())

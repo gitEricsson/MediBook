@@ -41,13 +41,13 @@ public class PatientAppointmentController {
                 .body(ApiResponse.created(appointmentService.book(principal.getId(), request)));
     }
 
-    @PostMapping("/appointments/{id}/calendar.ics")
-    @Operation(summary = "Get ICS calendar file for appointment")
+    @GetMapping("/appointments/{id}/ics")
+    @Operation(summary = "Download ICS calendar file for an appointment")
     public ResponseEntity<byte[]> getCalendarIcs(@PathVariable Long id) {
         String ics = appointmentService.generateIcs(id);
         HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType("text/calendar"));
-        headers.setContentDispositionFormData("attachment", "appointment.ics");
+        headers.setContentType(MediaType.parseMediaType("text/calendar; charset=UTF-8"));
+        headers.set(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"appointment-" + id + ".ics\"");
         return new ResponseEntity<>(ics.getBytes(StandardCharsets.UTF_8), headers, HttpStatus.OK);
     }
 

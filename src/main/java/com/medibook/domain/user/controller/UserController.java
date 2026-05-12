@@ -36,6 +36,14 @@ public class UserController {
         return ResponseEntity.ok(ApiResponse.ok(userService.getUserById(principal.getId())));
     }
 
+    @PutMapping("/me")
+    @Operation(summary = "Update the authenticated user's profile")
+    public ResponseEntity<ApiResponse<UserResponse>> updateMyProfile(
+            @CurrentUser UserPrincipal principal,
+            @Valid @RequestBody UserResponse.UpdateRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.updateProfile(principal.getId(), request)));
+    }
+
     @GetMapping("/{id}")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Get a user by ID (Admin only)")

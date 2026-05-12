@@ -101,4 +101,20 @@ public class UserService {
         }
         return auditLogService.getRecentByActor(userId);
     }
+
+    @CacheEvict(value = "users", key = "#userId")
+    @Transactional
+    public UserResponse updateProfile(Long userId, UserResponse.UpdateRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setPhone(request.getPhone());
+        user.setLocale(request.getLocale());
+        user.setEmailNotifications(request.isEmailNotifications());
+        user.setSmsNotifications(request.isSmsNotifications());
+
+        return UserResponse.fromUser(userRepository.save(user));
+    }
 }

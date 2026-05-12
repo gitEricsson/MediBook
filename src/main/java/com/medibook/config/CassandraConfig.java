@@ -78,7 +78,14 @@ public class CassandraConfig extends AbstractCassandraConfiguration {
 
     @Override
     protected DriverConfigLoaderBuilderConfigurer getDriverConfigLoaderBuilderConfigurer() {
-        return builder -> builder.withDuration(DefaultDriverOption.REQUEST_TIMEOUT, requestTimeout);
+        // Fallback guards against @Value injection failures (null Duration from bad parse)
+        Duration timeout = (requestTimeout != null) ? requestTimeout : Duration.ofSeconds(15);
+        return builder -> builder
+                .withDuration(DefaultDriverOption.REQUEST_TIMEOUT, timeout)
+                // When running outside Docker the contact point is localhost:9042 (port-mapped).
+                // Without this, the driver swaps localhost for Cassandra's Docker-internal IP
+                // (e.g. 172.18.x.x) after peer discovery, which is unreachable from the host.
+                .withBoolean(DefaultDriverOption.RESOLVE_CONTACT_POINTS, false);
     }
 
     @Override

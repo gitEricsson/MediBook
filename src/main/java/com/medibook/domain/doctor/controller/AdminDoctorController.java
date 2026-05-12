@@ -1,6 +1,7 @@
 package com.medibook.domain.doctor.controller;
 
 import com.medibook.common.response.ApiResponse;
+import com.medibook.domain.doctor.dto.AdminCreateDoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorResponse;
 import com.medibook.domain.doctor.service.DoctorService;
@@ -25,10 +26,10 @@ public class AdminDoctorController {
     private final DoctorService doctorService;
 
     @PostMapping
-    @Operation(summary = "Register a new doctor (Admin only)")
-    public ResponseEntity<ApiResponse<DoctorResponse>> create(@Valid @RequestBody DoctorRequest request) {
+    @Operation(summary = "Provision a new doctor account (creates user + doctor in one step)")
+    public ResponseEntity<ApiResponse<DoctorResponse>> create(@Valid @RequestBody AdminCreateDoctorRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.created(doctorService.register(request)));
+                .body(ApiResponse.created(doctorService.adminCreateDoctor(request)));
     }
 
     @PostMapping("/{id}/activate")

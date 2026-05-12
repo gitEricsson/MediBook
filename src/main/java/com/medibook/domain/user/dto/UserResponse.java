@@ -26,6 +26,7 @@ public class UserResponse {
     private boolean emailNotifications;
     private boolean smsNotifications;
     private String locale;
+    private String avatarUrl;
     private LocalDateTime createdAt;
 
     public static UserResponse fromUser(User user) {
@@ -43,6 +44,7 @@ public class UserResponse {
                 .emailNotifications(user.isEmailNotifications())
                 .smsNotifications(user.isSmsNotifications())
                 .locale(user.getLocale())
+                .avatarUrl(user.getAvatarUrl())
                 .createdAt(user.getCreatedAt())
                 .build();
     }

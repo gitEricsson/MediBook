@@ -17,6 +17,10 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.Base64;
+import java.util.Set;
 
 import java.util.List;
 
@@ -111,9 +115,40 @@ public class UserService {
         user.setFirstName(request.getFirstName());
         user.setLastName(request.getLastName());
         user.setPhone(request.getPhone());
-        user.setLocale(request.getLocale());
+        if (request.getLocale() != null) user.setLocale(request.getLocale());
         user.setEmailNotifications(request.isEmailNotifications());
         user.setSmsNotifications(request.isSmsNotifications());
+
+        return UserResponse.fromUser(userRepository.save(user));
+    }
+
+    private static final Set<String> ALLOWED_MIME_TYPES = Set.of("image/jpeg", "image/png", "image/webp");
+    private static final long MAX_AVATAR_BYTES = 2 * 1024 * 1024; // 2 MB
+
+    @CacheEvict(value = "users", key = "#userId")
+    @Transactional
+    public UserResponse uploadAvatar(Long userId, MultipartFile file) {
+        if (file == null || file.isEmpty()) {
+            throw new MediBookException("Avatar file is required", HttpStatus.BAD_REQUEST, "MISSING_FILE");
+        }
+        if (file.getSize() > MAX_AVATAR_BYTES) {
+            throw new MediBookException("Avatar must be smaller than 2 MB", HttpStatus.BAD_REQUEST, "FILE_TOO_LARGE");
+        }
+        String mimeType = file.getContentType();
+        if (mimeType == null || !ALLOWED_MIME_TYPES.contains(mimeType)) {
+            throw new MediBookException("Only JPEG, PNG, and WEBP images are allowed", HttpStatus.BAD_REQUEST, "UNSUPPORTED_MEDIA_TYPE");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        try {
+            byte[] bytes = file.getBytes();
+            String dataUri = "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
+            user.setAvatarUrl(dataUri);
+        } catch (Exception e) {
+            throw new MediBookException("Failed to process avatar image", HttpStatus.INTERNAL_SERVER_ERROR, "UPLOAD_FAILED");
+        }
 
         return UserResponse.fromUser(userRepository.save(user));
     }

@@ -18,6 +18,8 @@ services:
       DB_NAME: ${DB_NAME:-medibook}
       DB_USER: ${DB_USER:-medibook}
       DB_PASSWORD: ${DB_PASSWORD:-medibook}
+      MEDIBOOK_DB_HOST: mysql
+      MEDIBOOK_DB_PORT: 3306
       CASSANDRA_HOST: ${CASSANDRA_HOST:-cassandra}
       CASSANDRA_PORT: ${CASSANDRA_PORT:-9042}
       CASSANDRA_KEYSPACE: ${CASSANDRA_KEYSPACE:-medibook}
@@ -95,6 +97,8 @@ services:
     environment:
       CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-MediBookCluster}
       CASSANDRA_DC: ${CASSANDRA_DATACENTER:-datacenter1}
+    ports:
+      - "9042:9042"
     volumes:
       - cassandra-data:/var/lib/cassandra
     healthcheck:
@@ -132,6 +136,8 @@ services:
     image: redis:7.2-alpine
     container_name: medibook-redis
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
     volumes:
       - redis-data:/data
     healthcheck:

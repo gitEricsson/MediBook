@@ -1,10 +1,7 @@
 -- V8__sync_schema_with_entities.sql
 -- Synchronizes the database schema with JPA entity definitions to resolve Hibernate validation errors.
 
--- 1. Departments: Add missing 'code' and 'version' columns found in Department entity
-ALTER TABLE departments
-    ADD COLUMN code VARCHAR(50) NOT NULL UNIQUE AFTER name,
-    ADD COLUMN version BIGINT NOT NULL DEFAULT 0 AFTER is_active;
+-- 1. Departments: code and version columns already added in V2, skipping
 
 -- 2. Appointments: Adjust cancelled_at from TIMESTAMP to DATETIME(6) 
 -- to match Hibernate's default mapping for LocalDateTime in MySQL 8.

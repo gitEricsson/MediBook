@@ -4,6 +4,8 @@ import com.medibook.common.audit.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "departments")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -25,6 +27,10 @@ public class Department extends AuditableEntity {
     @Column(name = "is_active")
     @Builder.Default
     private boolean isActive = true;
+
+    @Column(name = "base_consultation_fee", nullable = false, precision = 10, scale = 2)
+    @Builder.Default
+    private BigDecimal baseConsultationFee = BigDecimal.valueOf(5000.00);
 
     @Version
     @Builder.Default

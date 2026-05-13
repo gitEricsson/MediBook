@@ -1,4 +1,8 @@
 spring:
+  cassandra:
+    request:
+      timeout: 15s
+
   autoconfigure:
     exclude:
       - org.springframework.boot.autoconfigure.cassandra.CassandraAutoConfiguration
@@ -14,6 +18,30 @@ spring:
 
   flyway:
     enabled: false
+
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+    show-sql: false
+
+  data:
+    cassandra:
+      repositories:
+        type: none
+      contact-points: localhost
+      port: 9042
+      keyspace-name: medibook
+      local-datacenter: datacenter1
+      schema-action: RECREATE
+    redis:
+      repositories:
+        enabled: false
+      host: localhost
+      port: 6379
 
   kafka:
     bootstrap-servers: localhost:9092
@@ -33,7 +61,24 @@ app:
     refresh-token-expiration-ms: 604800000
   phi:
     encryption-key: medibook-phi-aes256-encryption-key!
+  bootstrap:
+    super-admin:
+      email: superadmin@medibook.test
+      password: SuperAdminTest1!
+      first-name: Super
+      last-name: Admin
+
+medibook:
+  jobs:
+    enabled: false
+  rate-limit:
+    enabled: false
 
 logging:
   level:
     com.medibook: DEBUG
+
+management:
+  endpoint:
+    health:
+      validate-group-membership: false

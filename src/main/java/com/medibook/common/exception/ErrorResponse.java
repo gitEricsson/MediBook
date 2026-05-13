@@ -11,9 +11,12 @@ import java.util.List;
 public class ErrorResponse {
 
     private int status;
+    private String error;
     private String errorCode;
     private String message;
     private LocalDateTime timestamp;
+    private String correlationId;
+    private List<FieldError> fieldErrors;
     private List<FieldError> errors;
 
     @Data

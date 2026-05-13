@@ -78,6 +78,19 @@ public class AppointmentHoldService {
         log.info("Released hold for slot {}", slotKey);
     }
 
+    public void releaseHold(Long doctorId, LocalDateTime scheduledAt, String holdId) {
+        String slotKey = buildSlotKey(doctorId, scheduledAt);
+        String currentHoldId = redisTemplate.opsForValue().get(slotKey);
+        if (currentHoldId == null) {
+            return;
+        }
+        if (!currentHoldId.equals(holdId)) {
+            throw new MediBookException("Invalid hold ID.", HttpStatus.FORBIDDEN, "INVALID_HOLD");
+        }
+        redisTemplate.delete(slotKey);
+        log.info("Released hold [{}] for slot {}", holdId, slotKey);
+    }
+
     public boolean isSlotHeld(Long doctorId, LocalDateTime scheduledAt) {
         String slotKey = buildSlotKey(doctorId, scheduledAt);
         return Boolean.TRUE.equals(redisTemplate.hasKey(slotKey));

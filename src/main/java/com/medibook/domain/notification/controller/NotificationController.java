@@ -10,26 +10,37 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Notification REST API — provides the initial load and offline-recovery fallback.
+ *
+ * Real-time updates are pushed over WebSocket STOMP:
+ *   Endpoint  : ws://host/ws?token=<JWT>
+ *   Subscribe : /user/queue/notifications
+ *
+ * Recommended frontend flow:
+ *   1. On login/page load  → GET /api/v1/notifications?unread=true  (badge count)
+ *   2. WebSocket connect   → subscribe /user/queue/notifications
+ *   3. On WS message       → increment badge, prepend to list, show toast
+ *   4. On WS disconnect    → reconnect with exponential backoff, then re-fetch count
+ */
 @RestController
 @RequestMapping({"/api/v1/me/notifications", "/api/v1/notifications"})
 @RequiredArgsConstructor
-@Tag(name = "Notifications", description = "Current user notification inbox")
+@Tag(name = "Notifications", description = "Notification inbox — REST fallback for WebSocket push")
 @SecurityRequirement(name = "bearerAuth")
 public class NotificationController {
 
     private final NotificationService notificationService;
 
     @GetMapping
-    @Operation(summary = "Get list of notifications")
+    @Operation(summary = "List recent notifications (or unread only when ?unread=true)")
     public ResponseEntity<ApiResponse<List<NotificationResponse>>> getNotifications(
             @CurrentUser UserPrincipal principal,
             @RequestParam(required = false) boolean unread) {
@@ -46,8 +57,14 @@ public class NotificationController {
         return ResponseEntity.ok(ApiResponse.ok(notificationService.getUnread(principal.getId())));
     }
 
+    @GetMapping("/unread-count")
+    @Operation(summary = "Get current unread notification count (for badge refresh)")
+    public ResponseEntity<ApiResponse<Long>> getUnreadCount(@CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(notificationService.getUnreadCount(principal.getId())));
+    }
+
     @PostMapping("/{id}/read")
-    @Operation(summary = "Mark single notification as read")
+    @Operation(summary = "Mark a single notification as read")
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @CurrentUser UserPrincipal principal,
             @PathVariable UUID id,
@@ -61,18 +78,6 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Void>> markAllRead(@CurrentUser UserPrincipal principal) {
         notificationService.markAllRead(principal.getId());
         return ResponseEntity.ok(ApiResponse.ok(null));
-    }
-
-    @GetMapping("/unread-count")
-    @Operation(summary = "Get current unread notification count")
-    public ResponseEntity<ApiResponse<Long>> getUnreadCount(@CurrentUser UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(notificationService.getUnreadCount(principal.getId())));
-    }
-
-    @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    @Operation(summary = "Establish SSE stream for live notifications")
-    public SseEmitter streamNotifications(@CurrentUser UserPrincipal principal) {
-        return notificationService.subscribe(principal.getId());
     }
 
     @Data

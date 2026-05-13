@@ -17,6 +17,8 @@ public interface ConsultationNoteRepository extends JpaRepository<ConsultationNo
            SELECT cn FROM ConsultationNote cn
            JOIN FETCH cn.appointment a
            JOIN FETCH a.patient
+           JOIN FETCH a.doctor d
+           JOIN FETCH d.user
            WHERE a.patient.id = :patientId
            ORDER BY cn.createdAt DESC
            """)

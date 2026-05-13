@@ -9,6 +9,7 @@ import com.medibook.domain.doctor.dto.ScheduleDayResponse;
 import com.medibook.domain.doctor.dto.ScheduleSummaryResponse;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.entity.DoctorWorkingHours;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.*;
 class DoctorScheduleServiceTest {
 
     @Mock AppointmentRepository        appointmentRepository;
+    @Mock DoctorRepository             doctorRepository;
     @Mock DoctorWorkingHoursRepository workingHoursRepository;
 
     @InjectMocks DoctorScheduleService scheduleService;
@@ -49,6 +51,7 @@ class DoctorScheduleServiceTest {
     private Appointment cancelledAppt;
     private Appointment noShowAppt;
     private Appointment completedAppt;
+    private Doctor doctor;
 
     @BeforeEach
     void setUp() {
@@ -57,8 +60,9 @@ class DoctorScheduleServiceTest {
         User docUser = User.builder().id(2L).email("d@test.com")
                 .firstName("Bob").lastName("D").role(Role.ROLE_DOCTOR).build();
         Department dept = Department.builder().id(1L).name("Cardiology").build();
-        Doctor doctor = Doctor.builder().id(DOCTOR_ID).user(docUser).department(dept)
+        doctor = Doctor.builder().id(DOCTOR_ID).user(docUser).department(dept)
                 .licenseNumber("LIC-001").build();
+        lenient().when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(doctor));
 
         pendingAppt   = appt(doctor, patient, DATE.atTime(9, 0),  AppointmentStatus.PENDING);
         confirmedAppt = appt(doctor, patient, DATE.atTime(10, 0), AppointmentStatus.CONFIRMED);

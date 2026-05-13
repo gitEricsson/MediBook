@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS doctors (
 CREATE TABLE IF NOT EXISTS doctor_working_hours (
     id              BIGINT      NOT NULL AUTO_INCREMENT,
     doctor_id       BIGINT      NOT NULL,
-    day_of_week     TINYINT     NOT NULL COMMENT '1=Mon..7=Sun',
+    day_of_week     INT         NOT NULL COMMENT '1=Mon..7=Sun',
     start_time      TIME        NOT NULL,
     end_time        TIME        NOT NULL,
     PRIMARY KEY (id),
@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     status              VARCHAR(30)     NOT NULL DEFAULT 'PENDING',
     reason              TEXT,
     notes               TEXT,
-    cancelled_at        TIMESTAMP       NULL,
+    cancelled_at        DATETIME(6)     NULL,
     cancelled_by        BIGINT          NULL,
     cancellation_reason TEXT,
     created_at          DATETIME(6)     NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
@@ -153,7 +153,7 @@ CREATE TABLE IF NOT EXISTS patient_profiles (
 
 -- 10. Processed Events (Idempotency for Consumers)
 CREATE TABLE IF NOT EXISTS processed_events (
-    event_id        CHAR(36)     PRIMARY KEY,
+    event_id        VARCHAR(36)  PRIMARY KEY,
     event_type      VARCHAR(100) NOT NULL,
     processed_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;

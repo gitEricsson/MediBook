@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
@@ -30,6 +31,7 @@ public class AppointmentEventProducer {
 
         kafkaTemplate.send(KafkaTopics.APPOINTMENT_EVENTS,
                 String.valueOf(event.getAppointmentId()), event)
+                .orTimeout(5, TimeUnit.SECONDS)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("Failed to publish AppointmentEvent [{}]: {}",
@@ -52,6 +54,7 @@ public class AppointmentEventProducer {
         }
         kafkaTemplate.send(KafkaTopics.AUDIT_EVENTS,
                 event.getResourceType() + ":" + event.getResourceId(), event)
+                .orTimeout(5, TimeUnit.SECONDS)
                 .whenComplete((result, ex) -> {
                     if (ex != null) {
                         log.error("Failed to publish AuditEvent [{}]: {}", event.getEventId(), ex.getMessage());

@@ -8,6 +8,7 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
+import com.medibook.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.http.HttpStatus;
@@ -66,6 +67,32 @@ public class DoctorWorkingHoursService {
                 .collect(Collectors.toList());
     }
 
+    @CacheEvict(value = "doctors", key = "#doctorId")
+    @Transactional
+    public List<WorkingHoursResponse> replaceAll(Long doctorId, WorkingHoursRequest request, UserPrincipal principal) {
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
+        ensureCanManageDoctor(doctor, principal);
+        validate(request);
+
+        List<DoctorWorkingHours> existing = workingHoursRepository.findByDoctorId(doctorId);
+        workingHoursRepository.deleteAll(existing);
+
+        List<DoctorWorkingHours> newHours = request.getSchedule().stream()
+                .map(d -> DoctorWorkingHours.builder()
+                        .doctor(doctor)
+                        .dayOfWeek(d.getDayOfWeek())
+                        .startTime(d.getStartTime())
+                        .endTime(d.getEndTime())
+                        .build())
+                .collect(Collectors.toList());
+
+        return workingHoursRepository.saveAll(newHours).stream()
+                .map(WorkingHoursResponse::fromEntity)
+                .sorted((a, b) -> Integer.compare(a.getDayOfWeek(), b.getDayOfWeek()))
+                .collect(Collectors.toList());
+    }
+
     private void validate(WorkingHoursRequest request) {
         Set<Integer> seen = new java.util.HashSet<>();
         for (WorkingHoursRequest.DaySchedule day : request.getSchedule()) {
@@ -79,6 +106,16 @@ public class DoctorWorkingHoursService {
                         "Start time must be before end time for day " + day.getDayOfWeek(),
                         HttpStatus.BAD_REQUEST, "INVALID_TIME_RANGE");
             }
+        }
+    }
+
+    private void ensureCanManageDoctor(Doctor doctor, UserPrincipal principal) {
+        if (principal.hasRole("ROLE_ADMIN")) {
+            return;
+        }
+        if (!doctor.getUser().getId().equals(principal.getId())) {
+            throw new MediBookException("Not authorized to manage this doctor schedule",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
     }
 }

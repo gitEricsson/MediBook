@@ -3,6 +3,8 @@ package com.medibook.domain.user.entity;
 import com.medibook.common.audit.AuditableEntity;
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
 
 @Entity
@@ -38,7 +40,7 @@ public class User extends AuditableEntity {
 
     @Column(length = 50, nullable = false)
     @Enumerated(EnumType.STRING)
-    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.VARCHAR)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Builder.Default
     private Role role = Role.ROLE_PATIENT;
 
@@ -65,6 +67,9 @@ public class User extends AuditableEntity {
     @Column(nullable = false, length = 10)
     @Builder.Default
     private String locale = "en-US";
+
+    @Column(name = "avatar_url", columnDefinition = "MEDIUMTEXT")
+    private String avatarUrl;
 
     @Version
     private Long version;

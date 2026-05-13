@@ -1,8 +1,6 @@
 package com.medibook.integration;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.medibook.domain.appointment.dto.AppointmentRequest;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
-import com.medibook.domain.appointment.entity.AppointmentType;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
@@ -57,11 +55,13 @@ class DoctorScheduleIntegrationTest extends IntegrationTestSupport {
         testDate = LocalDate.now().plusDays(7);
         User patientUser = userRepository.save(User.builder()
                 .email("sched-patient@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Alice").lastName("Sched").role(Role.ROLE_PATIENT).build());
+                .firstName("Alice").lastName("Sched").role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         patientUserId = patientUser.getId();
         User docUser = userRepository.save(User.builder()
                 .email("sched-doctor@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Bob").lastName("Sched").role(Role.ROLE_DOCTOR).build());
+                .firstName("Bob").lastName("Sched").role(Role.ROLE_DOCTOR)
+                .enabled(true).isActive(true).build());
         Department dept = departmentRepository.save(
                 Department.builder().name("Sched-Cardiology").code("SCHED1").build());
         Doctor doctor = doctorRepository.save(Doctor.builder()

@@ -19,6 +19,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -34,6 +35,7 @@ public class SecurityConfig {
     private final CustomUserDetailsService userDetailsService;
     private final JwtAuthFilter            jwtAuthFilter;
     private final RateLimitFilter          rateLimitFilter;
+    private final SecurityResponseHeaderFilter securityResponseHeaderFilter;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
     private String allowedOrigins;
@@ -46,12 +48,18 @@ public class SecurityConfig {
             "/api/v1/auth/forgot-password",
             "/api/v1/auth/reset-password",
             "/api/v1/auth/email/verify",
+            "/api/v1/auth/email/resend",
+            // Payment provider webhooks must be accessible without a JWT token
+            "/api/v1/payments/webhooks/**",
+            // FHIR endpoints used by interop systems
+            "/api/v1/fhir/**",
+            // WebSocket upgrade: HTTP auth is not used here.
+            // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.
+            "/ws/**",
             "/swagger-ui/**",
-            "/swagger-ui.html",
-            "/v3/api-docs/**",
-            "/v3/api-docs.yaml",
             "/api-docs/**",
             "/actuator/health/**",
+            "/actuator/prometheus",
             "/health",
             "/version"
     };
@@ -61,6 +69,14 @@ public class SecurityConfig {
         http
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
+            .headers(headers -> headers
+                .contentTypeOptions(contentTypeOptions -> {})
+                .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                .referrerPolicy(referrerPolicy -> referrerPolicy
+                        .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
+                .httpStrictTransportSecurity(hsts -> hsts
+                        .includeSubDomains(true)
+                        .maxAgeInSeconds(31536000)))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((req, res, e) -> {
@@ -79,16 +95,18 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/metadata/**").permitAll()
-                .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
+                // SUPER_ADMIN is a superset of ADMIN; fine-grained locks via @PreAuthorize per endpoint
+                .requestMatchers("/api/v1/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
                 // GET doctor search and availability is open to all authenticated users (patients need it to book).
                 // Write operations (POST register, PUT update) are further protected by @PreAuthorize in the controller.
                 .requestMatchers(HttpMethod.GET, "/api/v1/doctors/**").authenticated()
-                .requestMatchers("/api/v1/doctors/**").hasAnyRole("DOCTOR", "ADMIN")
+                .requestMatchers("/api/v1/doctors/**").hasAnyRole("DOCTOR", "ADMIN", "SUPER_ADMIN")
                 .anyRequest().authenticated()
             )
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterBefore(rateLimitFilter, JwtAuthFilter.class);
+            .addFilterAfter(rateLimitFilter, JwtAuthFilter.class)
+            .addFilterAfter(securityResponseHeaderFilter, JwtAuthFilter.class);
 
         return http.build();
     }
@@ -116,8 +134,8 @@ public class SecurityConfig {
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With"));
-        configuration.setExposedHeaders(List.of("Authorization"));
+        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "X-Correlation-Id"));
+        configuration.setExposedHeaders(List.of("Authorization", "X-Correlation-Id"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);

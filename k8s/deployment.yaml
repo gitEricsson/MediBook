@@ -28,8 +28,8 @@ spec:
         runAsUser: 1000
       containers:
         - name: medibook
-          image: medibook/app:latest
-          imagePullPolicy: Always
+          image: medibook/app:1.0.0
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
               name: http
@@ -41,6 +41,16 @@ spec:
                 secretKeyRef:
                   name: medibook-secrets
                   key: db-host
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: db-name
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: db-user
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
@@ -71,6 +81,23 @@ spec:
                 configMapKeyRef:
                   name: medibook-config
                   key: cassandra-host
+            - name: CASSANDRA_KEYSPACE
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: cassandra-keyspace
+            - name: CASSANDRA_DATACENTER
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: cassandra-datacenter
+            - name: CORS_ORIGINS
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: cors-origins
+            - name: MEDIBOOK_RATE_LIMIT_TRUST_FORWARDED_HEADERS
+              value: "true"
           resources:
             requests:
               memory: "512Mi"

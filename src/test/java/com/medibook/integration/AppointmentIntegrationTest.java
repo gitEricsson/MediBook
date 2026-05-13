@@ -56,6 +56,7 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
     @Autowired PasswordEncoder       passwordEncoder;
     Long   doctorEntityId;
     Long   doctorUserId;
+    Long   patientUserId;
     String patientToken;
     String doctorToken;
     String adminToken;
@@ -70,23 +71,28 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
                 .password(passwordEncoder.encode("Password1!"))
                 .firstName("Alice").lastName("Patient")
                 .phone("+15550101000")
-                .role(Role.ROLE_PATIENT).build());
+                .role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
+        patientUserId = patientUser.getId();
         User docUser = userRepository.save(User.builder()
                 .email("it-doctor@test.com")
                 .password(passwordEncoder.encode("Password1!"))
                 .firstName("Bob").lastName("Doctor")
-                .role(Role.ROLE_DOCTOR).build());
+                .role(Role.ROLE_DOCTOR)
+                .enabled(true).isActive(true).build());
         doctorUserId = docUser.getId();
         userRepository.save(User.builder()
                 .email("it-admin@test.com")
                 .password(passwordEncoder.encode("Password1!"))
                 .firstName("Carol").lastName("Admin")
-                .role(Role.ROLE_ADMIN).build());
+                .role(Role.ROLE_ADMIN)
+                .enabled(true).isActive(true).build());
         userRepository.save(User.builder()
                 .email("it-unrelated@test.com")
                 .password(passwordEncoder.encode("Password1!"))
                 .firstName("Dave").lastName("Nobody")
-                .role(Role.ROLE_PATIENT).build());
+                .role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         Doctor doctor = doctorRepository.save(Doctor.builder()
                 .user(docUser).department(dept)
                 .licenseNumber("LIC-IT-777")
@@ -534,7 +540,7 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
     @Order(29)
     @DisplayName("GET /api/v1/patients/{id}/summary — returns patient summary response")
     void getPatientSummary_returns200() throws Exception {
-        mockMvc.perform(get("/api/v1/patients/1/summary")
+        mockMvc.perform(get("/api/v1/patients/" + patientUserId + "/summary")
                         .header("Authorization", "Bearer " + doctorToken))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.success").value(true));
@@ -543,7 +549,7 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
     @Order(30)
     @DisplayName("GET /api/v1/patients/{id}/summary — patient role returns 403")
     void getPatientSummary_patientRole_returns403() throws Exception {
-        mockMvc.perform(get("/api/v1/patients/1/summary")
+        mockMvc.perform(get("/api/v1/patients/" + patientUserId + "/summary")
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isForbidden());
     }
@@ -627,5 +633,35 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.success").value(true))
                 .andExpect(jsonPath("$.data").value(
                         org.hamcrest.Matchers.startsWith("tel:")));
+    }
+
+    @Test
+    @Order(40)
+    @DisplayName("GET /api/v1/me/appointments/cursor â€” returns cursor envelope and nextCursor")
+    void myAppointments_cursor_returnsCursorEnvelope() throws Exception {
+        LocalDateTime slotOne = LocalDateTime.now().plusDays(60).withMinute(0).withSecond(0).withNano(0);
+        LocalDateTime slotTwo = slotOne.plusDays(1);
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildReq(slotOne))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/appointments")
+                        .header("Authorization", "Bearer " + patientToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(buildReq(slotTwo))))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/v1/me/appointments/cursor")
+                        .param("tab", "upcoming")
+                        .param("limit", "1")
+                        .header("Authorization", "Bearer " + patientToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.items.length()").value(1))
+                .andExpect(jsonPath("$.data.hasMore").value(true))
+                .andExpect(jsonPath("$.data.nextCursor").isNotEmpty());
     }
 }

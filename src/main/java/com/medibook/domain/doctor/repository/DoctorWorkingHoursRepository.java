@@ -10,4 +10,14 @@ import java.util.List;
 public interface DoctorWorkingHoursRepository extends JpaRepository<DoctorWorkingHours, Long> {
     List<DoctorWorkingHours> findByDoctorId(Long doctorId);
     List<DoctorWorkingHours> findByDoctorIdAndDayOfWeek(Long doctorId, Integer dayOfWeek);
+
+    @org.springframework.data.jpa.repository.Query("""
+            SELECT dwh FROM DoctorWorkingHours dwh
+            JOIN FETCH dwh.doctor d
+            JOIN FETCH d.department
+            WHERE dwh.dayOfWeek = :dayOfWeek
+            AND d.isActive = true
+            """)
+    java.util.List<DoctorWorkingHours> findByDayOfWeekForActiveDoctors(
+            @org.springframework.data.repository.query.Param("dayOfWeek") int dayOfWeek);
 }

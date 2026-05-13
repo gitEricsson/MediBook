@@ -41,16 +41,20 @@ class DoctorIntegrationTest extends IntegrationTestSupport {
     void setUp() throws Exception {
         User patient = userRepository.save(User.builder()
                 .email("dr-test-patient@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Alice").lastName("Patient").role(Role.ROLE_PATIENT).build());
+                .firstName("Alice").lastName("Patient").role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         User admin = userRepository.save(User.builder()
                 .email("dr-test-admin@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Carol").lastName("Admin").role(Role.ROLE_ADMIN).build());
+                .firstName("Carol").lastName("Admin").role(Role.ROLE_ADMIN)
+                .enabled(true).isActive(true).build());
         User docUser = userRepository.save(User.builder()
                 .email("dr-test-doctor@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Bob").lastName("Doctor").role(Role.ROLE_DOCTOR).build());
+                .firstName("Bob").lastName("Doctor").role(Role.ROLE_DOCTOR)
+                .enabled(true).isActive(true).build());
         User newDocUser = userRepository.save(User.builder()
                 .email("dr-test-newdoc@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("New").lastName("Doctor").role(Role.ROLE_DOCTOR).build());
+                .firstName("New").lastName("Doctor").role(Role.ROLE_DOCTOR)
+                .enabled(true).isActive(true).build());
         newDoctorUserId = newDocUser.getId();
         Department dept = departmentRepository.save(
                 Department.builder().name("IT-Cardiology").code("ITC1").build());

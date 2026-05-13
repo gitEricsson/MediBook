@@ -11,7 +11,9 @@ import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +22,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -42,14 +45,18 @@ public class DoctorSearchService {
             String visitType,
             Boolean acceptingNew,
             Pageable pageable) {
+        Pageable sanitizedPageable = sanitizePageable(pageable);
 
         Specification<Doctor> spec = Specification.where(null);
 
         if (query != null && !query.isBlank()) {
-            String booleanQuery = query.trim() + "*";
+            String booleanQuery = toBooleanModeQuery(query);
+            if (booleanQuery == null) {
+                return Page.empty(sanitizedPageable);
+            }
             List<Long> matchedIds = doctorRepository.findIdsByFullText(booleanQuery);
             if (matchedIds.isEmpty()) {
-                return Page.empty(pageable);
+                return Page.empty(sanitizedPageable);
             }
             spec = spec.and((root, q, cb) -> root.get("id").in(matchedIds));
         }
@@ -66,9 +73,13 @@ public class DoctorSearchService {
             spec = spec.and((root, q, cb) -> cb.equal(root.get("acceptingNew"), acceptingNew));
         }
 
+        if (visitType != null && !visitType.isBlank() && requestsTelemedicine(visitType)) {
+            spec = spec.and((root, q, cb) -> cb.isTrue(root.get("telemedicineEnabled")));
+        }
+
         spec = spec.and((root, q, cb) -> cb.isTrue(root.get("isActive")));
 
-        return doctorRepository.findAll(spec, pageable).map(DoctorResponse::fromEntity);
+        return doctorRepository.findAll(spec, sanitizedPageable).map(DoctorResponse::fromEntity);
     }
 
     @Transactional(readOnly = true)
@@ -86,12 +97,13 @@ public class DoctorSearchService {
 
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
 
-        Set<LocalDateTime> bookedSlots = appointmentRepository
+        List<Appointment> bookedAppointments = appointmentRepository
                 .findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                         doctorId, from.atStartOfDay(), to.plusDays(1).atStartOfDay())
                 .stream()
-                .map(Appointment::getScheduledAt)
-                .collect(Collectors.toSet());
+                .filter(a -> a.getStatus() != com.medibook.domain.appointment.entity.AppointmentStatus.CANCELLED)
+                .filter(a -> a.getStatus() != com.medibook.domain.appointment.entity.AppointmentStatus.NO_SHOW)
+                .toList();
 
         List<LocalDateTime> allSlotStarts = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
@@ -121,7 +133,7 @@ public class DoctorSearchService {
                     LocalDateTime end   = start.plusMinutes(slotDuration); // fixed: was hardcoded 30
 
                     String status = "OPEN";
-                    if (bookedSlots.contains(start)) {
+                    if (overlapsAnyAppointment(start, end, bookedAppointments)) {
                         status = "TAKEN";
                     } else if (heldSlots.contains(start)) {
                         status = "HELD";
@@ -139,5 +151,51 @@ public class DoctorSearchService {
         }
 
         return AvailabilityGridResponse.builder().days(days).build();
+    }
+
+    private boolean overlapsAnyAppointment(LocalDateTime start, LocalDateTime end, List<Appointment> appointments) {
+        return appointments.stream().anyMatch(a -> {
+            LocalDateTime appointmentEnd = a.getEndTime() != null
+                    ? a.getEndTime()
+                    : a.getScheduledAt().plusMinutes(a.getDurationMins());
+            return a.getScheduledAt().isBefore(end) && appointmentEnd.isAfter(start);
+        });
+    }
+
+    private Pageable sanitizePageable(Pageable pageable) {
+        Sort sort = pageable.getSort().isSorted()
+                ? pageable.getSort()
+                : Sort.by(
+                        Sort.Order.desc("averageRating"),
+                        Sort.Order.desc("reviewCount"),
+                        Sort.Order.asc("id"));
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+    }
+
+    private boolean requestsTelemedicine(String visitType) {
+        String normalized = visitType.trim().toLowerCase();
+        return normalized.equals("telehealth")
+                || normalized.equals("video")
+                || normalized.equals("virtual")
+                || normalized.equals("online");
+    }
+
+    private String toBooleanModeQuery(String query) {
+        String normalized = query
+                .trim()
+                .replaceAll("[^\\p{IsAlphabetic}\\p{IsDigit}\\s-]", " ")
+                .replaceAll("\\s+", " ");
+        if (normalized.length() < 2) {
+            return null;
+        }
+
+        String booleanQuery = Arrays.stream(normalized.split(" "))
+                .map(String::trim)
+                .filter(token -> token.length() >= 2)
+                .limit(5)
+                .map(token -> token + "*")
+                .collect(Collectors.joining(" "));
+
+        return booleanQuery.isBlank() ? null : booleanQuery;
     }
 }

@@ -1,0 +1,345 @@
+services:
+
+  # ─── Application 
+  app:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: medibook-app
+    env_file:
+      - ../.env
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SERVER_PORT: ${SERVER_PORT:-8080}
+      DB_HOST: ${DB_HOST:-mysql}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_NAME: ${DB_NAME:-medibook}
+      DB_USER: ${DB_USER:-medibook}
+      DB_PASSWORD: ${DB_PASSWORD:-medibook}
+      CASSANDRA_HOST: ${CASSANDRA_HOST:-cassandra}
+      CASSANDRA_PORT: ${CASSANDRA_PORT:-9042}
+      CASSANDRA_KEYSPACE: ${CASSANDRA_KEYSPACE:-medibook}
+      CASSANDRA_DATACENTER: ${CASSANDRA_DATACENTER:-datacenter1}
+      CASSANDRA_USER: ${CASSANDRA_USER:-cassandra}
+      CASSANDRA_PASSWORD: ${CASSANDRA_PASSWORD:-cassandra}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      # Dev-only defaults keep this local Compose stack runnable even when the
+      # caller's shell/IDE does not load the project root .env file. Override
+      # both values for any shared, staging, or production-like environment.
+      JWT_SECRET: ${JWT_SECRET:-medibook-local-dev-jwt-secret-change-before-shared-use-64-bytes-minimum}
+      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-medibook-local-dev-phi-encryption-key}
+      # ─── Monnify (disabled by default; override in .env for sandbox testing) ───
+      MONNIFY_ENABLED: ${MONNIFY_ENABLED:-false}
+      MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
+      MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
+      MONNIFY_CONTRACT_CODE: ${MONNIFY_CONTRACT_CODE:-}
+      MONNIFY_BASE_URL: ${MONNIFY_BASE_URL:-https://sandbox.monnify.com}
+      MONNIFY_REDIRECT_URL: ${MONNIFY_REDIRECT_URL:-http://localhost:3000/payment/callback}
+    depends_on:
+      mysql:
+        condition: service_healthy
+      cassandra-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+      kafka:
+        condition: service_healthy
+    networks:
+      - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 768M
+    restart: unless-stopped
+
+  # ─── MySQL 
+  mysql:
+    image: mysql:8.2
+    container_name: medibook-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${DB_NAME:-medibook}
+      MYSQL_USER: ${DB_USER:-medibook}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-medibook}
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./mysql/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "--silent"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+    networks:
+      - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
+
+  # ─── Cassandra 
+  cassandra:
+    image: cassandra:4.1
+    container_name: medibook-cassandra
+    environment:
+      CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-MediBookCluster}
+      CASSANDRA_DC: ${CASSANDRA_DATACENTER:-datacenter1}
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
+      interval: 30s
+      timeout: 20s
+      retries: 20
+      start_period: 120s
+    networks:
+      - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1536M
+        reservations:
+          memory: 1024M
+
+  cassandra-init:
+    image: cassandra:4.1
+    container_name: medibook-cassandra-init
+    depends_on:
+      cassandra:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - >
+        cqlsh cassandra ${CASSANDRA_PORT:-9042} -e "CREATE KEYSPACE IF NOT EXISTS ${CASSANDRA_KEYSPACE:-medibook}
+        WITH replication = {'class': 'NetworkTopologyStrategy', '${CASSANDRA_DATACENTER:-datacenter1}': 1};"
+    networks:
+      - medibook-net
+
+  # ─── Redis ────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: medibook-redis
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - medibook-net
+
+  # ─── Zookeeper
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.6.0
+    container_name: medibook-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    healthcheck:
+      test: ["CMD-SHELL", "bash -lc 'exec 3<>/dev/tcp/127.0.0.1/2181; echo srvr >&3; timeout 2 cat <&3 | grep Mode'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    networks:
+      - medibook-net
+
+  # ─── Kafka
+  kafka:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: medibook-kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+    healthcheck:
+      test: ["CMD-SHELL", "kafka-topics --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 20s
+      timeout: 30s
+      retries: 20
+      start_period: 120s
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    networks:
+      - medibook-net
+    deploy:
+      resources:
+        limits:
+          memory: 1024M
+        reservations:
+          memory: 512M
+
+  # ─── Kafka UI
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: medibook-kafka-ui
+    ports:
+      - "127.0.0.1:8090:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: medibook
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - medibook-net
+
+  # ─── MailHog (Dev email catcher — never runs in prod)
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: medibook-mailhog
+    profiles:
+      - dev
+    ports:
+      - "127.0.0.1:1025:1025"   # SMTP
+      - "127.0.0.1:8025:8025"   # Web UI
+    networks:
+      - medibook-net
+
+  # ─── Prometheus ──────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.51.1
+    container_name: medibook-prometheus
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.enable-lifecycle
+      - --web.enable-remote-write-receiver
+      - --enable-feature=native-histograms
+    networks:
+      - medibook-net
+    depends_on:
+      - app
+
+  # ─── Grafana ─────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:10.4.2
+    container_name: medibook-grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-medibook}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - medibook-net
+    depends_on:
+      - prometheus
+
+  k6:
+    image: grafana/k6:0.49.0
+    profiles:
+      - load-test
+    working_dir: /scripts
+    env_file:
+      - ../.env
+    environment:
+      K6_BASE_URL: ${K6_BASE_URL:-http://app:8080}
+      K6_USERNAME: ${K6_USERNAME:-patient.james@medibook.local}
+      K6_PASSWORD: ${K6_PASSWORD:-Password123!}
+      K6_TESTID: ${K6_TESTID:-}
+      K6_START_RATE: ${K6_START_RATE:-5}
+      K6_TARGET_RATE: ${K6_TARGET_RATE:-20}
+      K6_PRE_ALLOCATED_VUS: ${K6_PRE_ALLOCATED_VUS:-30}
+      K6_MAX_VUS: ${K6_MAX_VUS:-120}
+      K6_WARMUP_DURATION: ${K6_WARMUP_DURATION:-30s}
+      K6_RAMP_UP_DURATION: ${K6_RAMP_UP_DURATION:-1m}
+      K6_STEADY_STATE_DURATION: ${K6_STEADY_STATE_DURATION:-3m}
+      K6_RAMP_DOWN_DURATION: ${K6_RAMP_DOWN_DURATION:-30s}
+      K6_P99_THRESHOLD_MS: ${K6_P99_THRESHOLD_MS:-750}
+      K6_SEARCH_P99_THRESHOLD_MS: ${K6_SEARCH_P99_THRESHOLD_MS:-1000}
+      K6_PROMETHEUS_RW_SERVER_URL: ${K6_PROMETHEUS_RW_SERVER_URL:-http://prometheus:9090/api/v1/write}
+      K6_PROMETHEUS_RW_TREND_AS_NATIVE_HISTOGRAM: "true"
+      K6_PROMETHEUS_RW_STALE_MARKERS: "true"
+      K6_PROMETHEUS_RW_PUSH_INTERVAL: 5s
+    command:
+      - run
+      - -o
+      - experimental-prometheus-rw
+      - /scripts/medibook.js
+    volumes:
+      - ../load-tests:/scripts
+    depends_on:
+      app:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    networks:
+      - medibook-net
+
+  gatling:
+    image: maven:3.9.9-eclipse-temurin-21-alpine
+    profiles:
+      - load-test
+    working_dir: /workspace
+    env_file:
+      - ../.env
+    environment:
+      GATLING_BASE_URL: ${GATLING_BASE_URL:-http://app:8080}
+      GATLING_USERNAME: ${GATLING_USERNAME:-patient.james@medibook.local}
+      GATLING_PASSWORD: ${GATLING_PASSWORD:-Password123!}
+      GATLING_START_RATE: ${GATLING_START_RATE:-5}
+      GATLING_TARGET_RATE: ${GATLING_TARGET_RATE:-20}
+      GATLING_WARMUP_SECONDS: ${GATLING_WARMUP_SECONDS:-30}
+      GATLING_RAMP_UP_SECONDS: ${GATLING_RAMP_UP_SECONDS:-60}
+      GATLING_STEADY_STATE_SECONDS: ${GATLING_STEADY_STATE_SECONDS:-180}
+      GATLING_RAMP_DOWN_SECONDS: ${GATLING_RAMP_DOWN_SECONDS:-30}
+      GATLING_P99_THRESHOLD_MS: ${GATLING_P99_THRESHOLD_MS:-750}
+      GATLING_SEARCH_P99_THRESHOLD_MS: ${GATLING_SEARCH_P99_THRESHOLD_MS:-1000}
+    command:
+      - mvn
+      - -B
+      - -DskipTests
+      - -Dgatling.simulationClass=com.medibook.performance.ReadPathSimulation
+      - gatling:test
+    volumes:
+      - ..:/workspace
+      - maven-cache:/root/.m2
+    depends_on:
+      app:
+        condition: service_started
+      prometheus:
+        condition: service_started
+    networks:
+      - medibook-net
+
+volumes:
+  mysql-data:
+  cassandra-data:
+  redis-data:
+  prometheus-data:
+  grafana-data:
+  maven-cache:
+
+networks:
+  medibook-net:
+    driver: bridge

@@ -1,6 +1,7 @@
 package com.medibook.domain.user.service;
 
 import com.medibook.common.exception.MediBookException;
+import com.medibook.common.mail.TransactionalEmailService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,7 +12,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.javamail.JavaMailSender;
 
 import java.time.Duration;
 
@@ -25,7 +25,7 @@ class PasswordResetServiceTest {
 
     @Mock RedisTemplate<String, Object> redisTemplate;
     @Mock ValueOperations<String, Object> valueOps;
-    @Mock JavaMailSender mailSender;
+    @Mock TransactionalEmailService transactionalEmailService;
 
     @InjectMocks PasswordResetService passwordResetService;
 

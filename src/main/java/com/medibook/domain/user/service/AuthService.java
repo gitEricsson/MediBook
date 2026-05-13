@@ -36,12 +36,13 @@ public class AuthService {
 
     @Transactional
     public TokenResponse register(RegisterRequest request) {
-        if (userRepository.existsByEmail(request.getEmail())) {
+        String email = normalizeEmail(request.getEmail());
+        if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new MediBookException("Email already registered", HttpStatus.CONFLICT, "EMAIL_TAKEN");
         }
 
         User saved = userRepository.save(User.builder()
-                .email(request.getEmail().toLowerCase())
+                .email(email)
                 .password(passwordEncoder.encode(request.getPassword()))
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
@@ -55,7 +56,9 @@ public class AuthService {
         String verifyToken = emailVerificationService.createToken(saved.getId());
         emailVerificationService.sendVerificationEmail(saved.getEmail(), verifyToken);
 
-        return buildTokenResponse(saved);
+        return TokenResponse.builder()
+                .user(UserResponse.fromUser(saved))
+                .build();
     }
 
 
@@ -64,13 +67,14 @@ public class AuthService {
         Authentication auth;
         try {
             auth = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword()));
+                    new UsernamePasswordAuthenticationToken(normalizeEmail(request.getEmail()), request.getPassword()));
         } catch (AuthenticationException ex) {
             log.warn("Failed login attempt for: {} — {}", request.getEmail(), ex.getClass().getSimpleName());
             throw ex;
         }
 
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+        ensureCanAuthenticate(principal.isEnabled(), principal.getId());
         if (principal.isTwoFactorEnabled()) {
             String otp = emailOtpService.generateAndStore(principal.getEmail());
             emailOtpService.sendOtpEmail(principal.getEmail(), otp);
@@ -83,10 +87,12 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public TokenResponse verifyTwoFactor(TwoFactorVerifyRequest request) {
-        emailOtpService.verify(request.getEmail(), request.getOtp());
+        String email = normalizeEmail(request.getEmail());
+        emailOtpService.verify(email, request.getOtp());
 
-        User user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow(() -> new ResourceNotFoundException("User", "email", request.getEmail()));
+        User user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new ResourceNotFoundException("User", "email", email));
+        ensureCanAuthenticate(user.isEnabled() && user.isActive(), user.getId());
 
         return buildTokenResponse(user);
     }
@@ -98,6 +104,7 @@ public class AuthService {
 
         User user = userRepository.findById(rotation.userId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", rotation.userId()));
+        ensureCanAuthenticate(user.isEnabled() && user.isActive(), user.getId());
 
         String accessToken = tokenProvider.generateAccessTokenFromUserId(
                 rotation.userId(), user.getEmail(), user.getRole().name());
@@ -117,7 +124,7 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public void forgotPassword(ForgotPasswordRequest request) {
-        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+        userRepository.findByEmail(normalizeEmail(request.getEmail())).ifPresent(user -> {
             String token = passwordResetService.createToken(user.getId());
             passwordResetService.sendResetEmail(user.getEmail(), token);
         });
@@ -130,6 +137,7 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
+        refreshTokenService.revokeAllForUser(userId);
         log.info("Password reset completed for userId={}", userId);
     }
 
@@ -153,6 +161,17 @@ public class AuthService {
         }
         String token = emailVerificationService.createToken(userId);
         emailVerificationService.sendVerificationEmail(user.getEmail(), token);
+    }
+
+    @Transactional(readOnly = true)
+    public void resendVerificationEmail(ResendVerificationRequest request) {
+        userRepository.findByEmail(normalizeEmail(request.getEmail())).ifPresent(user -> {
+            if (user.isActive()) {
+                return;
+            }
+            String token = emailVerificationService.createToken(user.getId());
+            emailVerificationService.sendVerificationEmail(user.getEmail(), token);
+        });
     }
 
 
@@ -187,6 +206,7 @@ public class AuthService {
      * Issues a token pair from a User entity (register, 2FA verify paths).
      */
     private TokenResponse buildTokenResponse(User user) {
+        ensureCanAuthenticate(user.isEnabled() && user.isActive(), user.getId());
         String accessToken  = tokenProvider.generateAccessTokenFromUserId(
                 user.getId(), user.getEmail(), user.getRole().name());
         String refreshToken = refreshTokenService.createRefreshToken(user.getId());
@@ -197,5 +217,15 @@ public class AuthService {
                 .tokenType("Bearer")
                 .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
                 .build();
+    }
+
+    private String normalizeEmail(String email) {
+        return email == null ? null : email.trim().toLowerCase();
+    }
+
+    private void ensureCanAuthenticate(boolean allowed, Long userId) {
+        if (!allowed) {
+            throw new MediBookException("Account is not active", HttpStatus.FORBIDDEN, "ACCOUNT_INACTIVE");
+        }
     }
 }

@@ -21,7 +21,7 @@ import java.util.List;
  * Implements {@link Serializable} so it can be stored in Redis-backed caches.
  */
 @Getter
-public class UserPrincipal implements UserDetails, Serializable {
+public class UserPrincipal implements UserDetails {
 
     @Serial
     private static final long serialVersionUID = 1L;
@@ -99,6 +99,7 @@ public class UserPrincipal implements UserDetails, Serializable {
 
     @Override public String  getUsername()              { return email; }
     @Override public boolean isAccountNonExpired()      { return true; }
-    @Override public boolean isAccountNonLocked()       { return true; }
+    @Override public boolean isAccountNonLocked()       { return enabled; }
     @Override public boolean isCredentialsNonExpired()  { return true; }
+    @Override public boolean isEnabled()                { return enabled && active; }
 }

@@ -1,9 +1,11 @@
 package com.medibook.domain.doctor.dto;
 
+import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.doctor.entity.Doctor;
 import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -22,9 +24,22 @@ public class DoctorResponse {
     private String languages;
     private boolean acceptingNew;
     private int slotDurationMins;
+    private int yearsOfExperience;
+    private BigDecimal consultationFee;
+    private BigDecimal effectiveConsultationFee;
+    private String gender;
+    private boolean telemedicineEnabled;
+    private double averageRating;
+    private int reviewCount;
     private LocalDateTime createdAt;
 
     public static DoctorResponse fromEntity(Doctor d) {
+        if (d.getUser() == null) {
+            throw new ResourceNotFoundException("User account", "doctor.id", d.getId());
+        }
+        if (d.getDepartment() == null) {
+            throw new ResourceNotFoundException("Department", "doctor.id", d.getId());
+        }
         return DoctorResponse.builder()
                 .id(d.getId())
                 .userId(d.getUser().getId())
@@ -38,6 +53,13 @@ public class DoctorResponse {
                 .languages(d.getLanguages())
                 .acceptingNew(d.isAcceptingNew())
                 .slotDurationMins(d.getSlotDurationMins())
+                .yearsOfExperience(d.getYearsOfExperience())
+                .consultationFee(d.getConsultationFee())
+                .effectiveConsultationFee(d.getEffectiveConsultationFee())
+                .gender(d.getGender())
+                .telemedicineEnabled(d.isTelemedicineEnabled())
+                .averageRating(d.getAverageRating())
+                .reviewCount(d.getReviewCount())
                 .createdAt(d.getCreatedAt())
                 .build();
     }

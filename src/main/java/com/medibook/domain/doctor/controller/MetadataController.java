@@ -13,7 +13,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/metadata")
@@ -33,13 +32,6 @@ public class MetadataController {
     @GetMapping("/specialisations")
     @Operation(summary = "Get distinct specialisations from active doctors")
     public ResponseEntity<ApiResponse<List<String>>> getSpecialisations() {
-        List<String> specs = doctorRepository.findAll().stream()
-                .filter(d -> d.isActive())
-                .map(d -> d.getSpecialization())
-                .filter(s -> s != null && !s.isBlank())
-                .distinct()
-                .sorted()
-                .collect(Collectors.toList());
-        return ResponseEntity.ok(ApiResponse.ok(specs));
+        return ResponseEntity.ok(ApiResponse.ok(doctorRepository.findDistinctActiveSpecializations()));
     }
 }

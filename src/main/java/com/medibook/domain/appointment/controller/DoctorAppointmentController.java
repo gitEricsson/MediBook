@@ -34,13 +34,15 @@ public class DoctorAppointmentController {
     @Operation(summary = "Get full appointment detail")
     public ResponseEntity<ApiResponse<AppointmentResponse>> getAppointmentDetail(
             @PathVariable Long id, @CurrentUser UserPrincipal principal) {
-        return ResponseEntity.ok(ApiResponse.ok(appointmentService.getById(id)));
+        return ResponseEntity.ok(ApiResponse.ok(appointmentService.getByIdForDoctor(id, principal)));
     }
 
     @GetMapping("/patients/{patientId}/summary")
     @Operation(summary = "Get patient history summary")
     public ResponseEntity<ApiResponse<PatientSummaryResponse>> getPatientSummary(
-            @PathVariable Long patientId) {
+            @PathVariable Long patientId,
+            @CurrentUser UserPrincipal principal) {
+        appointmentService.ensureDoctorCanAccessPatient(principal.getId(), patientId);
         return ResponseEntity.ok(ApiResponse.ok(historyService.getPatientSummary(patientId)));
     }
 
@@ -55,9 +57,10 @@ public class DoctorAppointmentController {
 
     @PostMapping("/appointments/{id}/call")
     @Operation(summary = "Get click-to-call URI")
-    public ResponseEntity<ApiResponse<String>> callPatient(@PathVariable Long id) {
-        AppointmentResponse appt = appointmentService.getById(id);
-        String phone = appointmentService.getPatientPhone(appt.getPatientId());
+    public ResponseEntity<ApiResponse<String>> callPatient(
+            @PathVariable Long id,
+            @CurrentUser UserPrincipal principal) {
+        String phone = appointmentService.getPatientPhoneForDoctor(id, principal);
         if (phone == null || phone.isBlank()) {
             throw new com.medibook.common.exception.MediBookException(
                     "Patient has no phone number on file", org.springframework.http.HttpStatus.NOT_FOUND, "PHONE_NOT_FOUND");

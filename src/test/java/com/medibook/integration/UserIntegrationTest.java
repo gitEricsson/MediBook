@@ -43,14 +43,17 @@ class UserIntegrationTest extends IntegrationTestSupport {
     void setUpFixtures() throws Exception {
         User patient = userRepository.save(User.builder()
                 .email("user-it-patient@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Alice").lastName("User").role(Role.ROLE_PATIENT).build());
+                .firstName("Alice").lastName("User").role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         patientUserId = patient.getId();
         userRepository.save(User.builder()
                 .email("user-it-admin@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Carol").lastName("Admin").role(Role.ROLE_ADMIN).build());
+                .firstName("Carol").lastName("Admin").role(Role.ROLE_ADMIN)
+                .enabled(true).isActive(true).build());
         User target = userRepository.save(User.builder()
                 .email("user-it-target@test.com").password(passwordEncoder.encode("Password1!"))
-                .firstName("Dave").lastName("Target").role(Role.ROLE_PATIENT).build());
+                .firstName("Dave").lastName("Target").role(Role.ROLE_PATIENT)
+                .enabled(true).isActive(true).build());
         targetUserId = target.getId();
         patientToken = loginAndGetToken("user-it-patient@test.com", "Password1!");
         adminToken   = loginAndGetToken("user-it-admin@test.com",   "Password1!");

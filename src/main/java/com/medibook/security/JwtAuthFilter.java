@@ -49,6 +49,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 }
                 Long userId = Long.parseLong(subject);
                 UserDetails userDetails = userDetailsService.loadUserById(userId);
+                if (!userDetails.isEnabled() || !userDetails.isAccountNonLocked()) {
+                    log.warn("JWT subject [{}] is disabled, inactive, or locked", userId);
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
                 UsernamePasswordAuthenticationToken authToken =
                         new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());

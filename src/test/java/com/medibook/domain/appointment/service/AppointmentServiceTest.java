@@ -90,7 +90,7 @@ class AppointmentServiceTest {
         req.setType(AppointmentType.IN_PERSON);
 
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
 
@@ -108,6 +108,8 @@ class AppointmentServiceTest {
         req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
 
+        when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(true);
 
         MediBookException ex = assertThrows(MediBookException.class, () -> appointmentService.book(patient.getId(), req));
@@ -121,7 +123,7 @@ class AppointmentServiceTest {
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
 
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenThrow(DataIntegrityViolationException.class);
 
         MediBookException ex = assertThrows(MediBookException.class, () -> appointmentService.book(patient.getId(), req));
@@ -161,6 +163,8 @@ class AppointmentServiceTest {
         req.setNewEnd(LocalDateTime.now().plusDays(3).plusMinutes(30));
 
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(appointmentRepository.existsConflictExcluding(anyLong(), anyLong(), any(), any())).thenReturn(false);
         when(appointmentRepository.save(any())).thenThrow(OptimisticLockingFailureException.class);
 
         MediBookException ex = assertThrows(MediBookException.class, () -> appointmentService.reschedule(100L, req, patientPrincipal));
@@ -197,7 +201,6 @@ class AppointmentServiceTest {
         AppointmentRequest req = new AppointmentRequest();
         req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
@@ -210,9 +213,8 @@ class AppointmentServiceTest {
         AppointmentRequest req = new AppointmentRequest();
         req.setDoctorId(99L);
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(99L)).thenReturn(Optional.empty());
+        when(doctorRepository.findByIdWithDetailsForUpdate(99L)).thenReturn(Optional.empty());
 
         assertThrows(ResourceNotFoundException.class,
                 () -> appointmentService.book(patient.getId(), req));
@@ -225,9 +227,8 @@ class AppointmentServiceTest {
         AppointmentRequest req = new AppointmentRequest();
         req.setDoctorId(inactive.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(inactive.getId())).thenReturn(Optional.of(inactive));
+        when(doctorRepository.findByIdWithDetailsForUpdate(inactive.getId())).thenReturn(Optional.of(inactive));
 
         MediBookException ex = assertThrows(MediBookException.class,
                 () -> appointmentService.book(patient.getId(), req));
@@ -244,7 +245,7 @@ class AppointmentServiceTest {
         req.setDurationMins(45);
         when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
 
         appointmentService.book(patient.getId(), req);
@@ -269,7 +270,7 @@ class AppointmentServiceTest {
         req.setHoldId("hold-abc");
         when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenReturn(appointment);
 
         appointmentService.book(patient.getId(), req);
@@ -284,7 +285,7 @@ class AppointmentServiceTest {
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
         when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenReturn(appointment);
 
         appointmentService.book(patient.getId(), req);
@@ -299,7 +300,7 @@ class AppointmentServiceTest {
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
         when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetails(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenReturn(appointment);
 
         appointmentService.book(patient.getId(), req);
@@ -461,7 +462,8 @@ class AppointmentServiceTest {
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
         LocalDateTime newStart = LocalDateTime.now().plusDays(3);
         LocalDateTime newEnd = newStart.plusMinutes(30);
-        when(appointmentRepository.existsConflict(eq(doctor.getId()), eq(newStart), eq(newEnd))).thenReturn(true);
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(appointmentRepository.existsConflictExcluding(100L, doctor.getId(), newStart, newEnd)).thenReturn(true);
         RescheduleRequest req = new RescheduleRequest();
         req.setNewStart(newStart);
         req.setNewEnd(newEnd);
@@ -476,7 +478,8 @@ class AppointmentServiceTest {
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
         LocalDateTime newStart = LocalDateTime.now().plusDays(3);
         LocalDateTime newEnd = newStart.plusMinutes(45);
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(appointmentRepository.existsConflictExcluding(anyLong(), anyLong(), any(), any())).thenReturn(false);
         when(appointmentRepository.save(any())).thenReturn(appointment);
         RescheduleRequest req = new RescheduleRequest();
         req.setNewStart(newStart);
@@ -497,7 +500,8 @@ class AppointmentServiceTest {
     @Test
     void reschedule_optimisticLockingOnNewSlot_throwsConcurrentModification() {
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
+        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
+        when(appointmentRepository.existsConflictExcluding(anyLong(), anyLong(), any(), any())).thenReturn(false);
         when(appointmentRepository.save(any())).thenThrow(OptimisticLockingFailureException.class);
         RescheduleRequest req = new RescheduleRequest();
         req.setNewStart(LocalDateTime.now().plusDays(3));
@@ -544,6 +548,27 @@ class AppointmentServiceTest {
 
         Page<AppointmentResponse> result = appointmentService.getPastByPatient(patient.getId(), pageable);
         assertEquals(1, result.getTotalElements());
+    }
+
+    @Test
+    void getByPatientCursor_upcoming_returnsCursorPage() {
+        appointment.setScheduledAt(LocalDateTime.now().plusDays(2));
+        when(appointmentRepository.findUpcomingByPatientCursor(
+                eq(patient.getId()), any(LocalDateTime.class), isNull(), isNull(), any(PageRequest.class)))
+                .thenReturn(List.of(appointment));
+
+        var page = appointmentService.getByPatientCursor(patient.getId(), "upcoming", null, 20);
+
+        assertEquals(1, page.getItems().size());
+        assertFalse(page.isHasMore());
+    }
+
+    @Test
+    void getByPatientCursor_invalidCursor_throwsBadRequest() {
+        MediBookException ex = assertThrows(MediBookException.class,
+                () -> appointmentService.getByPatientCursor(patient.getId(), "past", "%%%bad%%%", 20));
+
+        assertEquals("INVALID_CURSOR", ex.getErrorCode());
     }
 
 

@@ -1,14 +1,12 @@
 package com.medibook.domain.user.service;
 
 import com.medibook.common.exception.MediBookException;
-import jakarta.mail.internet.MimeMessage;
+import com.medibook.common.mail.TransactionalEmailService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.http.HttpStatus;
-import org.springframework.mail.javamail.JavaMailSender;
-import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
@@ -24,10 +22,7 @@ public class EmailVerificationService {
     private static final Duration TOKEN_TTL = Duration.ofHours(24);
 
     private final RedisTemplate<String, Object> redisTemplate;
-    private final JavaMailSender mailSender;
-
-    @Value("${spring.mail.username}")
-    private String fromAddress;
+    private final TransactionalEmailService transactionalEmailService;
 
     @Value("${app.frontend.url:http://localhost:3000}")
     private String frontendUrl;
@@ -52,13 +47,10 @@ public class EmailVerificationService {
     public void sendVerificationEmail(String toEmail, String token) {
         try {
             String link = frontendUrl + "/auth/verify-email?token=" + token;
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-            helper.setFrom(fromAddress);
-            helper.setTo(toEmail);
-            helper.setSubject("Verify your MediBook email address");
-            helper.setText(buildEmailBody(link), true);
-            mailSender.send(msg);
+            transactionalEmailService.sendHtml(
+                    toEmail,
+                    "Verify your MediBook email address",
+                    buildEmailBody(link));
             log.info("Verification email dispatched to {}", toEmail);
         } catch (Exception e) {
             log.error("Failed to send verification email to {}: {}", toEmail, e.getMessage());

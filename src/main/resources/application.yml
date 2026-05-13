@@ -2,6 +2,10 @@ spring:
   application:
     name: medibook
 
+  cassandra:
+    request:
+      timeout: ${CASSANDRA_REQUEST_TIMEOUT:15s}
+
   # ─── Java 21 Virtual Threads ────────────────────────────────────────────
   threads:
     virtual:
@@ -9,9 +13,9 @@ spring:
 
   # ─── MySQL / HikariCP ───────────────────────────────────────────────────
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:medibook}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
-    username: ${DB_USER:medibook}
-    password: ${DB_PASSWORD:medibook}
+    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:localhost}}:${MEDIBOOK_DB_PORT:${DB_PORT:3306}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    username: ${MEDIBOOK_DB_USER:${DB_USER:medibook}}
+    password: ${MEDIBOOK_DB_PASSWORD:${DB_PASSWORD:medibook}}
     hikari:
       pool-name: MediBook-HikariCP
       maximum-pool-size: 20
@@ -19,7 +23,7 @@ spring:
       idle-timeout: 600000
       connection-timeout: 30000
       max-lifetime: 1800000
-      leak-detection-threshold: 15000
+      leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD_MS:60000}
 
   jpa:
     hibernate:
@@ -41,6 +45,8 @@ spring:
   # ─── Cassandra ──────────────────────────────────────────────────────────
   data:
     cassandra:
+      repositories:
+        type: none
       keyspace-name: ${CASSANDRA_KEYSPACE:medibook}
       contact-points: ${CASSANDRA_HOST:localhost}
       port: ${CASSANDRA_PORT:9042}
@@ -49,6 +55,8 @@ spring:
       password: ${CASSANDRA_PASSWORD:cassandra}
       schema-action: CREATE_IF_NOT_EXISTS
     redis:
+      repositories:
+        enabled: false
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
@@ -62,7 +70,7 @@ spring:
 
   # ─── Kafka ──────────────────────────────────────────────────────────────
   kafka:
-    bootstrap-servers: ${KAFKA_BROKERS:localhost:9092}
+    bootstrap-servers: ${MEDIBOOK_KAFKA_BROKERS:${KAFKA_BROKERS:localhost:9092}}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -91,9 +99,9 @@ spring:
     properties:
       mail:
         smtp:
-          auth: true
+          auth: ${MAIL_SMTP_AUTH:false}
           starttls:
-            enable: true
+            enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
 
 # ─── JWT ────────────────────────────────────────────────────────────────────
 app:
@@ -107,9 +115,74 @@ app:
   phi:
     encryption-key: ${PHI_ENCRYPTION_KEY}
   cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:3000}
+    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
   frontend:
     url: ${FRONTEND_URL:http://localhost:3000}
+  mail:
+    from-address: ${MAIL_FROM_ADDRESS:${spring.mail.username:noreply@medibook.local}}
+    from-name: ${MAIL_FROM_NAME:MediBook}
+    failover-enabled: ${APP_MAIL_FAILOVER_ENABLED:true}
+    brevo:
+      enabled: ${BREVO_ENABLED:false}
+      api-key: ${BREVO_API_KEY:}
+      base-url: ${BREVO_BASE_URL:https://api.brevo.com}
+  bootstrap:
+    super-admin:
+      email: ${SUPER_ADMIN_EMAIL:}
+      password: ${SUPER_ADMIN_PASSWORD:}
+      first-name: ${SUPER_ADMIN_FIRST_NAME:Super}
+      last-name: ${SUPER_ADMIN_LAST_NAME:Admin}
+      phone: ${SUPER_ADMIN_PHONE:}
+  payment:
+    paystack:
+      enabled: ${PAYSTACK_ENABLED:true}
+      secret-key: ${PAYSTACK_SECRET_KEY:}
+      base-url: ${PAYSTACK_BASE_URL:https://api.paystack.co}
+    flutterwave:
+      enabled: ${FLUTTERWAVE_ENABLED:false}
+      secret-key: ${FLUTTERWAVE_SECRET_KEY:}
+      base-url: https://api.flutterwave.com/v3
+    stripe:
+      enabled: ${STRIPE_ENABLED:false}
+      secret-key: ${STRIPE_SECRET_KEY:}
+      webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
+    monnify:
+      enabled: ${MONNIFY_ENABLED:false}
+      api-key: ${MONNIFY_API_KEY:}
+      secret-key: ${MONNIFY_SECRET_KEY:}
+      contract-code: ${MONNIFY_CONTRACT_CODE:}
+      # Sandbox: https://sandbox.monnify.com  |  Live: https://api.monnify.com
+      base-url: ${MONNIFY_BASE_URL:https://sandbox.monnify.com}
+      redirect-url: ${MONNIFY_REDIRECT_URL:http://localhost:3000/payment/callback}
+  chat:
+    baa-active: ${AI_CHAT_BAA_ACTIVE:false}   # Set true ONLY after BAA is executed with Twilio and AI provider
+
+  ai:
+    support:
+      # Provider options: stub (default, no AI) | ollama (local) | claude-api (remote)
+      provider: ${AI_SUPPORT_PROVIDER:stub}
+      max-tokens: ${AI_SUPPORT_MAX_TOKENS:512}
+      ollama:
+        base-url: ${OLLAMA_BASE_URL:http://localhost:11434}
+        model: ${OLLAMA_MODEL:llama3.1}
+        timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:30}
+
+  intelligence:
+    nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:stub}
+    claude-api:
+      key: ${CLAUDE_API_KEY:}
+      max-tokens: 512
+  telemedicine:
+    provider: ${TELEMEDICINE_PROVIDER:stub}
+    daily-co:
+      api-key: ${DAILY_CO_API_KEY:}
+    twilio:
+      account-sid: ${TWILIO_ACCOUNT_SID:}
+      auth-token: ${TWILIO_AUTH_TOKEN:}
+      api-key: ${TWILIO_API_KEY:}
+      api-secret: ${TWILIO_API_SECRET:}
+  api-docs:
+    enabled: ${OPENAPI_ENABLED:true}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:
@@ -143,6 +216,10 @@ resilience4j:
         limit-for-period: 100
         limit-refresh-period: 1m
         timeout-duration: 0s
+      aiChatEndpoint:
+        limit-for-period: 20
+        limit-refresh-period: 1m
+        timeout-duration: 0s
   circuit-breaker:
     instances:
       kafkaProducer:
@@ -157,25 +234,84 @@ resilience4j:
         failure-rate-threshold: 50
         wait-duration-in-open-state: 20s
         sliding-window-size: 10
+      paystackProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      flutterwaveProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      stripeProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 5s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      monnifyProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 8s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 10
+        permitted-number-of-calls-in-half-open-state: 3
+      videoRoomProvider:
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 30s
+        sliding-window-size: 5
+      clinicalNlpProvider:
+        failure-rate-threshold: 60
+        slow-call-duration-threshold: 10s
+        wait-duration-in-open-state: 120s
+        sliding-window-size: 5
+      ollamaProvider:
+        failure-rate-threshold: 50
+        slow-call-duration-threshold: 15s
+        wait-duration-in-open-state: 60s
+        sliding-window-size: 5
+        permitted-number-of-calls-in-half-open-state: 2
 
 # ─── Springdoc / Swagger ────────────────────────────────────────────────────
 springdoc:
   api-docs:
+    enabled: ${app.api-docs.enabled:true}
     path: /api-docs
   swagger-ui:
+    enabled: ${app.api-docs.enabled:true}
     path: /swagger-ui.html
     tags-sorter: alpha
     operations-sorter: alpha
 
-# ─── Actuator ───────────────────────────────────────────────────────────────
+# ─── Actuator / Prometheus ──────────────────────────────────────────────────
 management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,prometheus,metrics
   endpoint:
     health:
       show-details: when-authorized
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis,kafka
+        liveness:
+          include: livenessState
+    prometheus:
+      enabled: true
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      slo:
+        http.server.requests: 50ms,100ms,200ms,500ms,1s
+    tags:
+      application: medibook
+      env: ${spring.profiles.active:default}
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging:
@@ -184,4 +320,4 @@ logging:
     org.springframework.security: INFO
     org.hibernate.SQL: WARN
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

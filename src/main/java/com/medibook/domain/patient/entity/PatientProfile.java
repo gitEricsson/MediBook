@@ -1,6 +1,7 @@
 package com.medibook.domain.patient.entity;
 
 import com.medibook.common.audit.AuditableEntity;
+import com.medibook.common.encryption.PhiAttributeConverter;
 import com.medibook.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
@@ -18,18 +19,22 @@ public class PatientProfile extends AuditableEntity {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(name = "date_of_birth_enc", columnDefinition = "TEXT")
     private String dateOfBirthEnc;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(name = "ssn_enc", columnDefinition = "TEXT")
     private String ssnEnc;
 
     @Column(name = "blood_group", length = 10)
     private String bloodGroup;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(name = "allergies_enc", columnDefinition = "TEXT")
     private String allergiesEnc;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(name = "medical_history_enc", columnDefinition = "TEXT")
     private String medicalHistoryEnc;
 

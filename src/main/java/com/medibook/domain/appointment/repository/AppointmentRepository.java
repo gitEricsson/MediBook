@@ -20,10 +20,60 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     Page<Appointment> findByPatientId(Long patientId, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt > :time
+           ORDER BY a.scheduledAt ASC
+           """)
     Page<Appointment> findByPatientIdAndScheduledAtAfterOrderByScheduledAtAsc(Long patientId, LocalDateTime time, Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt < :time
+           ORDER BY a.scheduledAt DESC
+           """)
     Page<Appointment> findByPatientIdAndScheduledAtBeforeOrderByScheduledAtDesc(Long patientId, LocalDateTime time, Pageable pageable);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt >= :anchor
+           AND (
+                :cursorScheduledAt IS NULL
+                OR a.scheduledAt > :cursorScheduledAt
+                OR (a.scheduledAt = :cursorScheduledAt AND a.id > :cursorId)
+           )
+           ORDER BY a.scheduledAt ASC, a.id ASC
+           """)
+    List<Appointment> findUpcomingByPatientCursor(
+            Long patientId,
+            LocalDateTime anchor,
+            LocalDateTime cursorScheduledAt,
+            Long cursorId,
+            Pageable pageable);
+
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.scheduledAt < :anchor
+           AND (
+                :cursorScheduledAt IS NULL
+                OR a.scheduledAt < :cursorScheduledAt
+                OR (a.scheduledAt = :cursorScheduledAt AND a.id < :cursorId)
+           )
+           ORDER BY a.scheduledAt DESC, a.id DESC
+           """)
+    List<Appointment> findPastByPatientCursor(
+            Long patientId,
+            LocalDateTime anchor,
+            LocalDateTime cursorScheduledAt,
+            Long cursorId,
+            Pageable pageable);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Page<Appointment> findByDoctorId(Long doctorId, Pageable pageable);
@@ -39,6 +89,13 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            WHERE a.id = :id
            """)
     Optional<Appointment> findByIdWithDetails(Long id);
+
+    @Query("""
+           SELECT COUNT(a) > 0 FROM Appointment a
+           WHERE a.doctor.user.id = :doctorUserId
+           AND a.patient.id = :patientId
+           """)
+    boolean existsDoctorPatientRelationship(Long doctorUserId, Long patientId);
 
     /** Used by reminder job — upcoming appointments in the next window */
     @Query("""
@@ -62,6 +119,16 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            """)
     boolean existsConflict(Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
 
+    @Query("""
+           SELECT COUNT(a) > 0 FROM Appointment a
+           WHERE a.id <> :appointmentId
+           AND a.doctor.id = :doctorId
+           AND a.scheduledAt < :endTime
+           AND a.endTime > :scheduledAt
+           AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
+           """)
+    boolean existsConflictExcluding(Long appointmentId, Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
+
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     List<Appointment> findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(Long doctorId, LocalDateTime startOfDay, LocalDateTime endOfDay);
@@ -76,4 +143,56 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Optional<Appointment> findFirstByDoctorIdAndScheduledAtAfterAndStatusOrderByScheduledAtAsc(Long doctorId, LocalDateTime now, AppointmentStatus status);
+
+    boolean existsByConfirmationCode(String confirmationCode);
+
+    Optional<Appointment> findByConfirmationCode(String confirmationCode);
+
+    @Query("""
+        SELECT a.status, COUNT(a), SUM(0) FROM Appointment a
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY a.status
+        """)
+    List<Object[]> countByStatusBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT d.name, COUNT(a) FROM Appointment a
+        JOIN a.doctor doc JOIN doc.department d
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY d.name
+        """)
+    List<Object[]> countByDepartmentBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT a.type, COUNT(a) FROM Appointment a
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY a.type
+        """)
+    List<Object[]> countByTypeBetween(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT doc.id, CONCAT(u.firstName, ' ', u.lastName), COUNT(a),
+               SUM(CASE WHEN a.status = 'COMPLETED' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END),
+               doc.averageRating
+        FROM Appointment a
+        JOIN a.doctor doc JOIN doc.user u
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY doc.id, u.firstName, u.lastName, doc.averageRating
+        ORDER BY COUNT(a) DESC
+        """)
+    List<Object[]> getDoctorUtilizationStats(LocalDateTime from, LocalDateTime to);
+
+    @Query("""
+        SELECT dept.id, dept.name,
+               COUNT(a),
+               SUM(CASE WHEN a.status = 'COMPLETED' THEN 1 ELSE 0 END),
+               SUM(CASE WHEN a.status = 'CANCELLED' THEN 1 ELSE 0 END)
+        FROM Appointment a
+        JOIN a.doctor doc JOIN doc.department dept
+        WHERE a.scheduledAt BETWEEN :from AND :to
+        GROUP BY dept.id, dept.name
+        ORDER BY COUNT(a) DESC
+        """)
+    List<Object[]> getDepartmentCapacityStats(LocalDateTime from, LocalDateTime to);
 }

@@ -5,6 +5,7 @@ import com.medibook.domain.user.dto.ChangePasswordRequest;
 import com.medibook.domain.user.dto.UpdateProfileRequest;
 import com.medibook.domain.user.dto.UserResponse;
 import com.medibook.domain.user.service.UserProfileService;
+import com.medibook.domain.user.service.UserService;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
@@ -12,8 +13,10 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
 
@@ -25,6 +28,7 @@ import java.util.Map;
 public class MeController {
 
     private final UserProfileService userProfileService;
+    private final UserService userService;
 
     @GetMapping
     @Operation(summary = "Get current user profile")
@@ -33,14 +37,30 @@ public class MeController {
     }
 
     @PatchMapping
-    @Operation(summary = "Update profile details")
+    @Operation(summary = "Partially update profile details")
+    public ResponseEntity<ApiResponse<UserResponse>> patchProfile(
+            @CurrentUser UserPrincipal principal,
+            @Valid @RequestBody UpdateProfileRequest request) {
+        return ResponseEntity.ok(ApiResponse.ok(userProfileService.updateProfile(principal.getId(), request)));
+    }
+
+    @PutMapping
+    @Operation(summary = "Update profile details (full replace)")
     public ResponseEntity<ApiResponse<UserResponse>> updateProfile(
             @CurrentUser UserPrincipal principal,
             @Valid @RequestBody UpdateProfileRequest request) {
         return ResponseEntity.ok(ApiResponse.ok(userProfileService.updateProfile(principal.getId(), request)));
     }
 
-    @PostMapping("/password")
+    @PostMapping(value = "/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload profile picture (max 2 MB, JPEG/PNG/WEBP)")
+    public ResponseEntity<ApiResponse<UserResponse>> uploadAvatar(
+            @CurrentUser UserPrincipal principal,
+            @RequestParam("file") MultipartFile file) {
+        return ResponseEntity.ok(ApiResponse.ok(userService.uploadAvatar(principal.getId(), file)));
+    }
+
+    @PostMapping({"/password", "/change-password"})
     @Operation(summary = "Update password")
     public ResponseEntity<ApiResponse<Void>> updatePassword(
             @CurrentUser UserPrincipal principal,

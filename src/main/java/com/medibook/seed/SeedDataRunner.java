@@ -18,6 +18,10 @@ import com.medibook.domain.patient.repository.PatientProfileRepository;
 import com.medibook.domain.payment.entity.Invoice;
 import com.medibook.domain.payment.entity.InvoiceLineItem;
 import com.medibook.domain.payment.entity.Payment;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import com.medibook.domain.payment.entity.PaymentProvider;
 import com.medibook.domain.payment.entity.PaymentStatus;
 import com.medibook.domain.payment.repository.InvoiceRepository;
@@ -189,7 +193,6 @@ public class SeedDataRunner implements ApplicationRunner {
         "Wait time was short, doctor was excellent.", "Highly recommend this doctor and clinic.",
         "Excellent bedside manner and clear communication.", "Took the time to answer all my questions.",
         "Professional staff and knowledgeable doctor.", "Great experience, very satisfied with the care."
-    );
     );
 
     // ══════════════════════════════════════════════════════════════════════════

@@ -22,6 +22,9 @@ public class UserConsent {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @Column(name = "doctor_id")
+    private Long doctorId;
+
     @Column(name = "consent_type", nullable = false, length = 50)
     private String consentType;
 

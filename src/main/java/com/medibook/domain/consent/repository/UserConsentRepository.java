@@ -12,5 +12,5 @@ public interface UserConsentRepository extends JpaRepository<UserConsent, Long> 
 
     List<UserConsent> findByUserId(Long userId);
 
-    Optional<UserConsent> findByUserIdAndConsentType(Long userId, String consentType);
+    Optional<UserConsent> findByUserIdAndDoctorIdAndConsentType(Long userId, Long doctorId, String consentType);
 }

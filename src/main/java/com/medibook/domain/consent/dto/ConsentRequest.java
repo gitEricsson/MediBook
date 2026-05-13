@@ -12,5 +12,7 @@ public class ConsentRequest {
             message = "Consent type must be one of: TELEMEDICINE, DATA_PROCESSING, MARKETING, PHI_SHARING")
     private String consentType;
 
+    private Long doctorId;
+
     private boolean granted;
 }

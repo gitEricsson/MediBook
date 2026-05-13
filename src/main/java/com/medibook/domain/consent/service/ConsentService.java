@@ -25,11 +25,12 @@ public class ConsentService {
     @Transactional
     public UserConsent updateConsent(ConsentRequest req, UserPrincipal principal, String ipAddress) {
         UserConsent consent = consentRepository
-                .findByUserIdAndConsentType(principal.getId(), req.getConsentType())
+                .findByUserIdAndDoctorIdAndConsentType(principal.getId(), req.getDoctorId(), req.getConsentType())
                 .orElseGet(() -> {
                     User user = userRepository.getReferenceById(principal.getId());
                     return UserConsent.builder()
                             .user(user)
+                            .doctorId(req.getDoctorId())
                             .consentType(req.getConsentType())
                             .build();
                 });
@@ -45,7 +46,7 @@ public class ConsentService {
         }
 
         UserConsent saved = consentRepository.save(consent);
-        log.info("Consent [{}] {} for user [{}]", req.getConsentType(),
+        log.info("Consent [{}] for doctor [{}] {} for user [{}]", req.getConsentType(), req.getDoctorId(),
                 req.isGranted() ? "granted" : "revoked", principal.getId());
         return saved;
     }

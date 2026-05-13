@@ -19,6 +19,7 @@ import com.medibook.domain.payment.repository.InvoiceRepository;
 import com.medibook.domain.payment.repository.PaymentRepository;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
+import com.medibook.common.sequence.SequenceService;
 import com.medibook.messaging.outbox.OutboxEventRepository;
 import com.medibook.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,6 +49,7 @@ class PaymentServiceTest {
     @Mock PaymentProviderFactory     providerFactory;
     @Mock OutboxEventRepository      outboxRepository;
     @Mock ObjectMapper               objectMapper;
+    @Mock SequenceService            sequenceService;
 
     @InjectMocks
     PaymentService paymentService;

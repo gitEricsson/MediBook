@@ -11,6 +11,7 @@ import com.medibook.domain.waitlist.dto.WaitlistRequest;
 import com.medibook.domain.waitlist.dto.WaitlistResponse;
 import com.medibook.domain.waitlist.entity.WaitlistEntry;
 import com.medibook.domain.waitlist.repository.WaitlistRepository;
+import com.medibook.messaging.producer.OutboxEventProducer;
 import com.medibook.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,7 @@ class WaitlistServiceTest {
     @Mock UserRepository       userRepository;
     @Mock DoctorRepository     doctorRepository;
     @Mock DepartmentRepository departmentRepository;
+    @Mock OutboxEventProducer  eventProducer;
 
     @InjectMocks WaitlistService waitlistService;
 

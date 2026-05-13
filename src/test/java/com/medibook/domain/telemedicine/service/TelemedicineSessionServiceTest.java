@@ -17,6 +17,7 @@ import com.medibook.domain.telemedicine.repository.TelemedicineSessionRepository
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
+import com.medibook.messaging.producer.OutboxEventProducer;
 import com.medibook.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -44,6 +45,7 @@ class TelemedicineSessionServiceTest {
     @Mock AppointmentRepository         appointmentRepository;
     @Mock UserRepository                userRepository;
     @Mock VideoRoomPort                 videoRoomPort;
+    @Mock OutboxEventProducer           eventProducer;
 
     @InjectMocks TelemedicineSessionService sessionService;
 

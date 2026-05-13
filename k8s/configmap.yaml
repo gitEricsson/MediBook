@@ -11,18 +11,4 @@ data:
   cassandra-keyspace: "medibook"
   cassandra-datacenter: "datacenter1"
   cors-origins: "https://app.medibook.com"
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: medibook-secrets
-  namespace: medibook
-type: Opaque
-stringData:
-  db-host: "medibook-mysql"
-  db-name: "medibook"
-  db-user: "medibook"
-  db-password: "CHANGE_ME"
-  jwt-secret: "CHANGE_ME_256_BIT_SECRET"
-  phi-encryption-key: "CHANGE_ME_32_CHAR_AES_KEY_!!!!!!"
-  mail-password: "CHANGE_ME"
+  frontend-url: "https://app.medibook.com"

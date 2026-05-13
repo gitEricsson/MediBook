@@ -45,3 +45,6 @@ ehthumbs.db
 Desktop.ini
 /Endpoints
 /notes.md
+
+# K8s secrets — never commit real values
+k8s/secrets.yaml

@@ -1,5 +1,4 @@
 ---
-# MediBook Kubernetes Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -7,7 +6,8 @@ metadata:
   namespace: medibook
   labels:
     app: medibook
-    version: "1.0.0"
+    app.kubernetes.io/name: medibook
+    app.kubernetes.io/component: api
 spec:
   replicas: 2
   selector:
@@ -22,36 +22,56 @@ spec:
     metadata:
       labels:
         app: medibook
+        app.kubernetes.io/name: medibook
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/port: "8080"
     spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 1000
+        fsGroup: 1000
+      terminationGracePeriodSeconds: 60
       containers:
         - name: medibook
-          image: medibook/app:1.0.0
-          imagePullPolicy: IfNotPresent
+          image: REGISTRY/medibook-api:TAG
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               name: http
+              protocol: TCP
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
           env:
             - name: SPRING_PROFILES_ACTIVE
               value: "prod"
-            - name: DB_HOST
+            # DB — primary env var names match application-prod.yml resolution order
+            - name: MEDIBOOK_DB_HOST
               valueFrom:
                 secretKeyRef:
                   name: medibook-secrets
                   key: db-host
-            - name: DB_NAME
+            - name: MEDIBOOK_DB_PORT
+              value: "3306"
+            - name: MEDIBOOK_DB_NAME
               valueFrom:
                 secretKeyRef:
                   name: medibook-secrets
                   key: db-name
-            - name: DB_USER
+            - name: MEDIBOOK_DB_USER
               valueFrom:
                 secretKeyRef:
                   name: medibook-secrets
                   key: db-user
-            - name: DB_PASSWORD
+            - name: MEDIBOOK_DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: medibook-secrets
@@ -66,11 +86,18 @@ spec:
                 secretKeyRef:
                   name: medibook-secrets
                   key: phi-encryption-key
+            - name: MAIL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: mail-password
             - name: REDIS_HOST
               valueFrom:
                 configMapKeyRef:
                   name: medibook-config
                   key: redis-host
+            - name: REDIS_PORT
+              value: "6379"
             - name: KAFKA_BROKERS
               valueFrom:
                 configMapKeyRef:
@@ -81,6 +108,8 @@ spec:
                 configMapKeyRef:
                   name: medibook-config
                   key: cassandra-host
+            - name: CASSANDRA_PORT
+              value: "9042"
             - name: CASSANDRA_KEYSPACE
               valueFrom:
                 configMapKeyRef:
@@ -96,27 +125,43 @@ spec:
                 configMapKeyRef:
                   name: medibook-config
                   key: cors-origins
+            - name: FRONTEND_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: frontend-url
             - name: MEDIBOOK_RATE_LIMIT_TRUST_FORWARDED_HEADERS
               value: "true"
           resources:
             requests:
-              memory: "512Mi"
+              memory: "768Mi"
               cpu: "250m"
             limits:
-              memory: "1Gi"
+              memory: "1536Mi"
               cpu: "1000m"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 12
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
               port: 8080
-            initialDelaySeconds: 60
+            initialDelaySeconds: 0
             periodSeconds: 30
             failureThreshold: 3
+            timeoutSeconds: 5
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
               port: 8080
-            initialDelaySeconds: 30
+            initialDelaySeconds: 0
             periodSeconds: 10
             failureThreshold: 3
-      terminationGracePeriodSeconds: 60
+            timeoutSeconds: 5
+      volumes:
+        - name: tmp
+          emptyDir: {}

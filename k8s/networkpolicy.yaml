@@ -1,0 +1,68 @@
+---
+# Allow ingress from nginx ingress controller only
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: medibook-app-ingress
+  namespace: medibook
+spec:
+  podSelector:
+    matchLabels:
+      app: medibook
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 8080
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: medibook
+      ports:
+        - protocol: TCP
+          port: 3306   # MySQL
+        - protocol: TCP
+          port: 9042   # Cassandra
+        - protocol: TCP
+          port: 6379   # Redis
+        - protocol: TCP
+          port: 9092   # Kafka
+    - to: []            # Allow all egress for external APIs (payment, email, AI)
+      ports:
+        - protocol: TCP
+          port: 443
+        - protocol: TCP
+          port: 587    # SMTP STARTTLS
+---
+# Allow Prometheus to scrape metrics from all app pods
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-prometheus-scrape
+  namespace: medibook
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8080

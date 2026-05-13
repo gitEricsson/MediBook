@@ -12,7 +12,7 @@ import com.medibook.domain.telemedicine.entity.TelemedicineSession;
 import com.medibook.domain.telemedicine.entity.TelemedicineSessionStatus;
 import com.medibook.domain.telemedicine.provider.VideoRoomPort;
 import com.medibook.domain.telemedicine.repository.CassandraChatMessageRepository;
-import com.medibook.domain.telemedicine.repository.ChatMessageRepository;
+import com.medibook.domain.telemedicine.repository.TelemedicineChatMessageRepository;
 import com.medibook.domain.telemedicine.repository.TelemedicineSessionRepository;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
@@ -39,7 +39,7 @@ import static org.mockito.Mockito.*;
 class TelemedicineSessionServiceTest {
 
     @Mock TelemedicineSessionRepository sessionRepository;
-    @Mock ChatMessageRepository         chatMessageRepository;
+    @Mock TelemedicineChatMessageRepository chatMessageRepository;
     @Mock CassandraChatMessageRepository cassandraChatRepo;
     @Mock AppointmentRepository         appointmentRepository;
     @Mock UserRepository                userRepository;

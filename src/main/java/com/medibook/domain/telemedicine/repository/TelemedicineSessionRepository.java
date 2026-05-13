@@ -1,16 +1,22 @@
 package com.medibook.domain.telemedicine.repository;
 
 import com.medibook.domain.telemedicine.entity.TelemedicineSession;
+import com.medibook.domain.telemedicine.entity.TelemedicineSessionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.Optional;
 
 @Repository
 public interface TelemedicineSessionRepository extends JpaRepository<TelemedicineSession, Long> {
 
     Optional<TelemedicineSession> findByAppointmentId(Long appointmentId);
+
+    Optional<TelemedicineSession> findFirstByAppointmentIdAndStatusIn(
+            Long appointmentId,
+            Collection<TelemedicineSessionStatus> statuses);
 
     @Query("""
         SELECT s FROM TelemedicineSession s

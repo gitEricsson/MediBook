@@ -103,6 +103,13 @@ spring:
           starttls:
             enable: ${MAIL_SMTP_STARTTLS_ENABLE:true}
 
+# ─── Twilio Conversations ───────────────────────────────────────────────────
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID:}
+  auth-token: ${TWILIO_AUTH_TOKEN:}
+  conversations:
+    service-sid: ${TWILIO_CONVERSATIONS_SERVICE_SID:}
+
 # ─── JWT ────────────────────────────────────────────────────────────────────
 app:
   jwt:
@@ -179,8 +186,11 @@ app:
     twilio:
       account-sid: ${TWILIO_ACCOUNT_SID:}
       auth-token: ${TWILIO_AUTH_TOKEN:}
-      api-key: ${TWILIO_API_KEY:}
-      api-secret: ${TWILIO_API_SECRET:}
+      api-key-sid: ${TWILIO_API_KEY_SID:${TWILIO_API_KEY:}}
+      api-key-secret: ${TWILIO_API_KEY_SECRET:${TWILIO_API_SECRET:}}
+      video-room-type: ${TWILIO_VIDEO_ROOM_TYPE:group}
+      video-token-ttl-seconds: ${TWILIO_VIDEO_TOKEN_TTL_SECONDS:900}
+      video-status-callback-url: ${TWILIO_VIDEO_STATUS_CALLBACK_URL:}
   api-docs:
     enabled: ${OPENAPI_ENABLED:true}
 

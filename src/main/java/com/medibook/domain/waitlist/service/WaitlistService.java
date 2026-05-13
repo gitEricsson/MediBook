@@ -21,6 +21,10 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.medibook.messaging.KafkaTopics;
+import com.medibook.messaging.event.WaitlistEvent;
+import com.medibook.messaging.producer.OutboxEventProducer;
+import java.util.UUID;
 import java.time.LocalDateTime;
 
 @Slf4j
@@ -32,6 +36,7 @@ public class WaitlistService {
     private final UserRepository       userRepository;
     private final DoctorRepository     doctorRepository;
     private final DepartmentRepository departmentRepository;
+    private final OutboxEventProducer  eventProducer;
 
     @Transactional
     public WaitlistResponse joinWaitlist(WaitlistRequest req, UserPrincipal principal) {
@@ -71,6 +76,18 @@ public class WaitlistService {
 
         WaitlistEntry saved = waitlistRepository.save(entry);
         log.info("Patient [{}] joined waitlist entry [{}]", principal.getId(), saved.getId());
+
+        eventProducer.publish("WAITLIST", String.valueOf(saved.getId()), "JOINED",
+                KafkaTopics.WAITLIST_EVENTS,
+                WaitlistEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .eventType("JOINED")
+                        .waitlistId(saved.getId())
+                        .patientId(patient.getId())
+                        .doctorId(doctor != null ? doctor.getId() : null)
+                        .doctorName(doctor != null ? doctor.getUser().getFullName() : "N/A")
+                        .occurredAt(LocalDateTime.now())
+                        .build());
         return WaitlistResponse.fromEntity(saved);
     }
 

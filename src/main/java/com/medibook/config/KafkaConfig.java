@@ -2,7 +2,10 @@ package com.medibook.config;
 
 import com.medibook.messaging.event.AppointmentEvent;
 import com.medibook.messaging.event.AuditEvent;
+import com.medibook.messaging.event.ChatEvent;
 import com.medibook.messaging.event.PaymentEvent;
+import com.medibook.messaging.event.TelemedicineEvent;
+import com.medibook.messaging.event.WaitlistEvent;
 import org.apache.kafka.clients.admin.AdminClient;
 import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -121,6 +124,45 @@ public class KafkaConfig {
     }
 
     @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, ChatEvent> chatKafkaListenerContainerFactory(
+            KafkaTemplate<String, Object> kafkaTemplate) {
+        ConcurrentKafkaListenerContainerFactory<String, ChatEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
+                baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(ChatEvent.class)));
+        factory.setConcurrency(2);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
+        return factory;
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, TelemedicineEvent> telemedicineKafkaListenerContainerFactory(
+            KafkaTemplate<String, Object> kafkaTemplate) {
+        ConcurrentKafkaListenerContainerFactory<String, TelemedicineEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
+                baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(TelemedicineEvent.class)));
+        factory.setConcurrency(2);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
+        return factory;
+    }
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory<String, WaitlistEvent> waitlistKafkaListenerContainerFactory(
+            KafkaTemplate<String, Object> kafkaTemplate) {
+        ConcurrentKafkaListenerContainerFactory<String, WaitlistEvent> factory =
+                new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
+                baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(WaitlistEvent.class)));
+        factory.setConcurrency(2);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
+        factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
+        return factory;
+    }
+
+    @Bean
     public NewTopic appointmentEventsTopic() {
         return TopicBuilder.name("appointment.events").partitions(3).replicas(1).build();
     }
@@ -148,6 +190,12 @@ public class KafkaConfig {
     @Bean public NewTopic notificationEventsDltTopic()  { return TopicBuilder.name("notification.events.DLT").partitions(3).replicas(1).build(); }
     @Bean public NewTopic paymentEventsTopic()          { return TopicBuilder.name("payment.events").partitions(3).replicas(1).build(); }
     @Bean public NewTopic paymentEventsDltTopic()       { return TopicBuilder.name("payment.events.DLT").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic chatEventsTopic()             { return TopicBuilder.name("chat.events").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic chatEventsDltTopic()          { return TopicBuilder.name("chat.events.DLT").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic aiEventsTopic()               { return TopicBuilder.name("ai.events").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic aiEventsDltTopic()            { return TopicBuilder.name("ai.events.DLT").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic urgencyEventsTopic()          { return TopicBuilder.name("urgency.events").partitions(3).replicas(1).build(); }
+    @Bean public NewTopic urgencyEventsDltTopic()       { return TopicBuilder.name("urgency.events.DLT").partitions(3).replicas(1).build(); }
     @Bean public NewTopic telemedicineEventsTopic()     { return TopicBuilder.name("telemedicine.events").partitions(3).replicas(1).build(); }
     @Bean public NewTopic reviewEventsTopic()           { return TopicBuilder.name("review.events").partitions(2).replicas(1).build(); }
     @Bean public NewTopic waitlistEventsTopic()         { return TopicBuilder.name("waitlist.events").partitions(2).replicas(1).build(); }

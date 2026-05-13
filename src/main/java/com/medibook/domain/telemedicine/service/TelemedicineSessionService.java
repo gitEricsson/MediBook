@@ -12,11 +12,14 @@ import com.medibook.domain.telemedicine.entity.ChatMessage;
 import com.medibook.domain.telemedicine.entity.TelemedicineSession;
 import com.medibook.domain.telemedicine.entity.TelemedicineSessionStatus;
 import com.medibook.domain.telemedicine.entity.CassandraChatMessage;
+import com.medibook.messaging.KafkaTopics;
+import com.medibook.messaging.event.TelemedicineEvent;
+import com.medibook.messaging.producer.OutboxEventProducer;
 import java.time.Instant;
 import java.util.UUID;
 import com.medibook.domain.telemedicine.provider.VideoRoomPort;
 import com.medibook.domain.telemedicine.repository.CassandraChatMessageRepository;
-import com.medibook.domain.telemedicine.repository.ChatMessageRepository;
+import com.medibook.domain.telemedicine.repository.TelemedicineChatMessageRepository;
 import com.medibook.domain.telemedicine.repository.TelemedicineSessionRepository;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
@@ -36,11 +39,12 @@ import java.util.List;
 public class TelemedicineSessionService {
 
     private final TelemedicineSessionRepository sessionRepository;
-    private final ChatMessageRepository         chatMessageRepository;
+    private final TelemedicineChatMessageRepository chatMessageRepository;
     private final CassandraChatMessageRepository cassandraChatRepo;
     private final AppointmentRepository         appointmentRepository;
     private final UserRepository                userRepository;
     private final VideoRoomPort                 videoRoomPort;
+    private final OutboxEventProducer           eventProducer;
 
     @Transactional
     public TelemedicineSessionResponse createSession(Long appointmentId, boolean patientConsent, UserPrincipal principal) {
@@ -96,6 +100,18 @@ public class TelemedicineSessionService {
         TelemedicineSession saved = sessionRepository.save(session);
         log.info("Telemedicine session [{}] created for appointment [{}]", saved.getId(), appointmentId);
 
+        eventProducer.publish("TELEMEDICINE", String.valueOf(saved.getId()), "READY",
+                KafkaTopics.TELEMEDICINE_EVENTS,
+                TelemedicineEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .eventType("READY")
+                        .sessionId(saved.getId())
+                        .appointmentId(appointmentId)
+                        .patientId(appointment.getPatient().getId())
+                        .doctorId(appointment.getDoctor().getUser().getId())
+                        .occurredAt(LocalDateTime.now())
+                        .build());
+
         boolean isDoctor = appointment.getDoctor().getUser().getId().equals(principal.getId());
         return TelemedicineSessionResponse.fromEntity(saved, isDoctor);
     }
@@ -119,6 +135,19 @@ public class TelemedicineSessionService {
         }
 
         TelemedicineSession updated = sessionRepository.save(session);
+
+        eventProducer.publish("TELEMEDICINE", String.valueOf(updated.getId()), updated.getStatus().name(),
+                KafkaTopics.TELEMEDICINE_EVENTS,
+                TelemedicineEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .eventType(updated.getStatus().name())
+                        .sessionId(updated.getId())
+                        .appointmentId(updated.getAppointment().getId())
+                        .patientId(updated.getAppointment().getPatient().getId())
+                        .doctorId(updated.getAppointment().getDoctor().getUser().getId())
+                        .occurredAt(LocalDateTime.now())
+                        .build());
+
         boolean isDoctor = isDoctorForSession(updated, principal);
         return TelemedicineSessionResponse.fromEntity(updated, isDoctor);
     }

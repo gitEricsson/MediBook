@@ -6,7 +6,7 @@ import lombok.*;
 
 import java.time.LocalDateTime;
 
-@Entity
+@Entity(name = "TelemedicineChatMessage")
 @Table(name = "chat_messages",
         indexes = {
             @Index(name = "idx_cm_session_time", columnList = "session_id, sent_at")

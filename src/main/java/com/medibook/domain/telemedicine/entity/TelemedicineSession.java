@@ -27,11 +27,29 @@ public class TelemedicineSession extends AuditableEntity {
     @JoinColumn(name = "appointment_id", nullable = false, unique = true)
     private Appointment appointment;
 
+    @Column(name = "patient_id")
+    private Long patientId;
+
+    @Column(name = "doctor_id")
+    private Long doctorId;
+
+    @Column(name = "chat_conversation_id")
+    private Long chatConversationId;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 30)
     @Builder.Default
     private TelemedicineSessionStatus status = TelemedicineSessionStatus.SCHEDULED;
+
+    @Column(name = "twilio_room_sid", length = 64)
+    private String twilioRoomSid;
+
+    @Column(name = "twilio_room_name", length = 255)
+    private String twilioRoomName;
+
+    @Column(name = "started_by_user_id")
+    private Long startedByUserId;
 
     @Column(name = "room_id", length = 255)
     private String roomId;
@@ -45,6 +63,9 @@ public class TelemedicineSession extends AuditableEntity {
     @Column(name = "started_at")
     private LocalDateTime startedAt;
 
+    @Column(name = "accepted_at")
+    private LocalDateTime acceptedAt;
+
     @Column(name = "ended_at")
     private LocalDateTime endedAt;
 
@@ -53,6 +74,9 @@ public class TelemedicineSession extends AuditableEntity {
 
     @Column(name = "call_note_draft", columnDefinition = "MEDIUMTEXT")
     private String callNoteDraft;
+
+    @Column(name = "end_reason", length = 255)
+    private String endReason;
 
     @Column(name = "ai_assisted", nullable = false)
     @Builder.Default
@@ -69,4 +93,8 @@ public class TelemedicineSession extends AuditableEntity {
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<ChatMessage> chatMessages = new ArrayList<>();
+
+    @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private List<CallParticipant> participants = new ArrayList<>();
 }

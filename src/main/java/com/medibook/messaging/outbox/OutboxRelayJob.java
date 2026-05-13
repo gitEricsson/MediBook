@@ -21,11 +21,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OutboxRelayJob {
 
-    private static final int BATCH_SIZE       = 50;
-    private static final int MAX_RETRY_COUNT  = 5;
-    private static final long RETRY_BACKOFF_S = 30;
+    private static final int BATCH_SIZE = 50;
 
     private final OutboxEventRepository          outboxRepository;
+    private final OutboxRelayService             outboxService;
     private final KafkaTemplate<String, Object>  kafkaTemplate;
 
     @Scheduled(fixedDelay = 5_000, initialDelay = 10_000)
@@ -40,38 +39,15 @@ public class OutboxRelayJob {
                 kafkaTemplate.send(event.getTopic(), event.getAggregateId(), event.getPayload())
                         .whenComplete((result, ex) -> {
                             if (ex != null) {
-                                handleFailure(event, ex);
+                                outboxService.handleFailure(event, ex);
                             } else {
-                                markProcessed(event);
+                                outboxService.markProcessed(event);
                                 log.debug("Outbox event [{}] published to [{}]", event.getId(), event.getTopic());
                             }
                         });
             } catch (Exception ex) {
-                handleFailure(event, ex);
+                outboxService.handleFailure(event, ex);
             }
         }
-    }
-
-    @Transactional
-    protected void markProcessed(OutboxEvent event) {
-        event.setStatus("PROCESSED");
-        event.setProcessedAt(LocalDateTime.now());
-        outboxRepository.save(event);
-    }
-
-    @Transactional
-    protected void handleFailure(OutboxEvent event, Throwable ex) {
-        log.warn("Outbox event [{}] failed to publish: {}", event.getId(), ex.getMessage());
-        event.setRetryCount(event.getRetryCount() + 1);
-        event.setLastError(ex.getMessage());
-
-        if (event.getRetryCount() >= MAX_RETRY_COUNT) {
-            event.setStatus("FAILED");
-            log.error("Outbox event [{}] permanently failed after {} retries", event.getId(), MAX_RETRY_COUNT);
-        } else {
-            event.setStatus("PENDING");
-            event.setScheduledAfter(LocalDateTime.now().plusSeconds(RETRY_BACKOFF_S * event.getRetryCount()));
-        }
-        outboxRepository.save(event);
     }
 }

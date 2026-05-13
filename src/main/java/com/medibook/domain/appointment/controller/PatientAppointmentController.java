@@ -50,7 +50,7 @@ public class PatientAppointmentController {
                 .body(ApiResponse.created(response));
     }
 
-    @GetMapping("/appointments/{id}/ics")
+    @RequestMapping(path = {"/appointments/{id}/ics", "/appointments/{id}/calendar.ics"}, method = {RequestMethod.GET, RequestMethod.POST})
     @Operation(summary = "Download ICS calendar file for an appointment")
     public ResponseEntity<byte[]> getCalendarIcs(@PathVariable Long id) {
         String ics = appointmentService.generateIcs(id);

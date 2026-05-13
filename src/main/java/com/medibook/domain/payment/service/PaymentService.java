@@ -36,7 +36,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicLong;
+
+import com.medibook.common.sequence.SequenceService;
 
 @Slf4j
 @Service
@@ -49,8 +50,7 @@ public class PaymentService {
     private final PaymentProviderFactory     providerFactory;
     private final OutboxEventRepository      outboxRepository;
     private final ObjectMapper               objectMapper;
-
-    private final AtomicLong invoiceSeq = new AtomicLong(System.currentTimeMillis() % 1_000_000);
+    private final SequenceService            sequenceService;
 
     @Transactional
     public PaymentResponse initiatePayment(InitiatePaymentRequest req, UserPrincipal principal) {
@@ -219,8 +219,9 @@ public class PaymentService {
     }
 
     private void createInvoice(Payment payment, Doctor doctor, User patient, BigDecimal amount) {
+        long nextSeq = sequenceService.getNextValue("invoice");
         String invoiceNumber = "INV-" + DateTimeFormatter.ofPattern("yyyyMMdd").format(LocalDateTime.now())
-                + "-" + String.format("%06d", invoiceSeq.incrementAndGet());
+                + "-" + String.format("%06d", nextSeq);
 
         InvoiceLineItem lineItem = InvoiceLineItem.builder()
                 .description("Consultation fee – Dr. " + doctor.getUser().getFullName())

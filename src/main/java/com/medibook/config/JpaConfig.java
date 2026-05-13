@@ -17,8 +17,11 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 @EnableJpaRepositories(
         basePackages = {
                 "com.medibook.config.repository",
+                "com.medibook.common",
                 "com.medibook.domain",
-                "com.medibook.messaging"
+                "com.medibook.messaging",
+                "com.medibook.chat",
+                "com.medibook.ai"
         },
         excludeFilters = @ComponentScan.Filter(
                 type = FilterType.ASSIGNABLE_TYPE,

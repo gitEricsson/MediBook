@@ -7,7 +7,7 @@ import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
-@Entity
+@Entity(name = "ConversationChatMessage")
 @Table(name = "chat_messages",
        indexes = {
            @Index(name = "idx_cm_conversation", columnList = "conversation_id"),
@@ -47,6 +47,9 @@ public class ChatMessage extends AuditableEntity {
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "safety_label", length = 30)
     private SafetyLabel safetyLabel;
+
+    @Column(name = "metadata_json", columnDefinition = "TEXT")
+    private String metadataJson;
 
     public enum SenderRole { PATIENT, DOCTOR, AI_ASSISTANT, SYSTEM }
 }

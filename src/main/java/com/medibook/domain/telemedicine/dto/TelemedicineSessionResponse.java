@@ -15,11 +15,15 @@ public class TelemedicineSessionResponse {
     private Long appointmentId;
     private Long patientId;
     private Long doctorId;
+    private Long conversationId;
     private String doctorName;
     private TelemedicineSessionStatus status;
     private String roomId;
+    private String twilioRoomSid;
+    private String twilioRoomName;
     private String joinUrl;
     private LocalDateTime startedAt;
+    private LocalDateTime acceptedAt;
     private LocalDateTime endedAt;
     private Integer durationSeconds;
     private boolean patientConsent;
@@ -32,12 +36,16 @@ public class TelemedicineSessionResponse {
                 .id(s.getId())
                 .appointmentId(s.getAppointment().getId())
                 .patientId(s.getAppointment().getPatient().getId())
-                .doctorId(s.getAppointment().getDoctor().getId())
+                .doctorId(s.getAppointment().getDoctor().getUser().getId())
+                .conversationId(s.getChatConversationId())
                 .doctorName(s.getAppointment().getDoctor().getUser().getFullName())
                 .status(s.getStatus())
                 .roomId(s.getRoomId())
+                .twilioRoomSid(s.getTwilioRoomSid())
+                .twilioRoomName(s.getTwilioRoomName())
                 .joinUrl(isDoctor ? s.getJoinUrlDoctor() : s.getJoinUrlPatient())
                 .startedAt(s.getStartedAt())
+                .acceptedAt(s.getAcceptedAt())
                 .endedAt(s.getEndedAt())
                 .durationSeconds(s.getDurationSeconds())
                 .patientConsent(s.isPatientConsent())

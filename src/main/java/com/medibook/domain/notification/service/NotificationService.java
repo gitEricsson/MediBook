@@ -130,6 +130,12 @@ public class NotificationService implements MessageListener {
                 "WAITLIST_PROMOTED", appointmentId);
     }
 
+    public void sendWaitlistJoined(Long patientId, String doctorName) {
+        save(patientId, "Waitlist Joined",
+                "You've successfully joined the waitlist for Dr. " + doctorName,
+                "WAITLIST_JOINED", null);
+    }
+
     public void sendTelemedicineSessionReady(Long patientId, Long doctorId, Long appointmentId) {
         save(patientId, "Video Consultation Ready",
                 "Your telemedicine session is ready. Click to join.",
@@ -137,6 +143,24 @@ public class NotificationService implements MessageListener {
         save(doctorId, "Patient Waiting",
                 "A patient is waiting for the telemedicine session.",
                 "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+    }
+
+    public void sendTelemedicinePatientWaiting(Long doctorId, Long appointmentId) {
+        save(doctorId, "Patient Waiting",
+                "Your patient has entered the waiting room for appointment #" + appointmentId,
+                "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+    }
+
+    public void sendUrgencyAlert(Long doctorId, Long conversationId, String urgencyKeywords) {
+        save(doctorId, "Urgent Chat Alert",
+                "A patient message may need urgent review: " + urgencyKeywords,
+                "CHAT_URGENCY_ALERT", conversationId);
+    }
+
+    public void sendChatEscalationRequired(Long doctorId, Long appointmentId) {
+        save(doctorId, "Escalation Required",
+                "AI has flagged a conversation for your clinical review.",
+                "CHAT_ESCALATION", appointmentId);
     }
 
     // ─── REST query methods ──────────────────────────────────────────────────

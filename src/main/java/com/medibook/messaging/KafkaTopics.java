@@ -15,6 +15,11 @@ public final class KafkaTopics {
     // Telemedicine
     public static final String TELEMEDICINE_EVENTS = "telemedicine.events";
 
+    // Chat / AI
+    public static final String CHAT_EVENTS          = "chat.events";
+    public static final String AI_EVENTS            = "ai.events";
+    public static final String URGENCY_EVENTS       = "urgency.events";
+
     // Reviews
     public static final String REVIEW_EVENTS       = "review.events";
 

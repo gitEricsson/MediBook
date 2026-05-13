@@ -30,7 +30,7 @@ public class AiMessageAudit {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "event_id", nullable = false, unique = true, length = 36)
+    @Column(name = "event_id", nullable = false, unique = true, columnDefinition = "CHAR(36)")
     private String eventId;
 
     @Column(name = "conversation_id")

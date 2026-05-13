@@ -1,25 +1,25 @@
 package com.medibook.messaging.producer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.messaging.KafkaTopics;
 import com.medibook.messaging.event.ChatEvent;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import com.medibook.messaging.outbox.OutboxEvent;
+import com.medibook.messaging.outbox.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class ChatEventProducer {
 
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final OutboxEventRepository outboxRepository;
+    private final ObjectMapper          objectMapper;
 
-    @CircuitBreaker(name = "kafkaProducer", fallbackMethod = "publishFallback")
     public void publishChatEvent(ChatEvent event) {
         if (event.getEventId() == null) {
             event.setEventId(UUID.randomUUID().toString());
@@ -28,20 +28,23 @@ public class ChatEventProducer {
             event.setOccurredAt(LocalDateTime.now());
         }
 
-        String topic  = resolveTopicForEvent(event.getEventType());
-        String key    = String.valueOf(event.getConversationId());
+        String topic = resolveTopicForEvent(event.getEventType());
 
-        kafkaTemplate.send(topic, key, event)
-                .orTimeout(5, TimeUnit.SECONDS)
-                .whenComplete((result, ex) -> {
-                    if (ex != null) {
-                        log.error("Failed to publish ChatEvent [{}] type={}: {}",
-                                event.getEventId(), event.getEventType(), ex.getMessage());
-                    } else {
-                        log.info("Published ChatEvent [{}] type={} topic={}",
-                                event.getEventId(), event.getEventType(), topic);
-                    }
-                });
+        try {
+            String payload = objectMapper.writeValueAsString(event);
+            outboxRepository.save(OutboxEvent.builder()
+                    .aggregateType("CHAT")
+                    .aggregateId(String.valueOf(event.getConversationId()))
+                    .eventType(event.getEventType())
+                    .topic(topic)
+                    .payload(payload)
+                    .build());
+            
+            log.debug("Enqueued ChatEvent [{}] to outbox for topic={}", event.getEventId(), topic);
+        } catch (Exception ex) {
+            log.error("Failed to serialize ChatEvent [{}]: {}", event.getEventId(), ex.getMessage());
+            throw new RuntimeException("Failed to enqueue chat event", ex);
+        }
     }
 
     private String resolveTopicForEvent(String eventType) {
@@ -51,10 +54,5 @@ public class ChatEventProducer {
             case "AI_RESPONSE_CREATED", "AI_DRAFT_CREATED", "AI_SUMMARY_CREATED" -> KafkaTopics.AI_EVENTS;
             default -> KafkaTopics.CHAT_EVENTS;
         };
-    }
-
-    private void publishFallback(ChatEvent event, Throwable t) {
-        log.error("CircuitBreaker OPEN — ChatEvent dropped [{}] type={}: {}",
-                event.getEventId(), event.getEventType(), t.getMessage());
     }
 }

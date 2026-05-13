@@ -51,6 +51,14 @@ public class ChatController {
         return ResponseEntity.ok(ApiResponse.ok(chatService.getMessages(id, principal.getId())));
     }
 
+    @GetMapping("/conversations/{id}")
+    @Operation(summary = "Get conversation metadata")
+    public ResponseEntity<ApiResponse<ConversationResponse>> getConversation(
+            @PathVariable Long id,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(chatService.getConversation(id, principal.getId())));
+    }
+
     // ── AI Operations (Doctor only) ───────────────────────────────────────────
 
     @PostMapping("/{conversationId}/ai/summary")

@@ -27,11 +27,11 @@ public class SafetyClassifier {
             "chest pain", "chest tightness", "chest pressure",
             "can't breathe", "cannot breathe", "shortness of breath", "difficulty breathing",
             "stroke", "face drooping", "arm weakness", "slurred speech", "sudden numbness",
-            "severe bleeding", "blood everywhere", "losing lots of blood",
+            "severe bleeding", "bleeding severely", "heavy bleeding", "blood everywhere", "losing lots of blood",
             "suicidal", "suicide", "kill myself", "end my life", "want to die",
             "overdose", "took too many pills", "unconscious", "not waking up",
             "severe pain", "unbearable pain", "excruciating pain",
-            "allergic reaction", "anaphylaxis", "throat closing", "tongue swelling",
+            "allergic reaction", "anaphylaxis", "throat closing", "throat is closing", "tongue swelling",
             "pregnancy emergency", "heavy bleeding pregnant", "water broke",
             "seizure", "convulsions", "won't stop shaking",
             "call 911", "call 999", "call ambulance", "emergency"

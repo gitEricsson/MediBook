@@ -90,6 +90,11 @@ public class ChatService {
     }
 
     @Transactional(readOnly = true)
+    public ConversationResponse getConversation(Long conversationId, Long requesterId) {
+        return toConversationResponse(loadAndAuthorize(conversationId, requesterId));
+    }
+
+    @Transactional(readOnly = true)
     public List<MessageResponse> getMessages(Long conversationId, Long requesterId) {
         ChatConversation conv = loadAndAuthorize(conversationId, requesterId);
         return messageRepo.findByConversationIdOrderByCreatedAtAsc(conv.getId())

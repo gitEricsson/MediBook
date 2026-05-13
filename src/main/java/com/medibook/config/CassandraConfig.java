@@ -3,8 +3,9 @@ package com.medibook.config;
 import com.datastax.oss.driver.api.core.config.DefaultDriverOption;
 import com.medibook.audit.repository.AuditLogRepository;
 import com.medibook.domain.notification.repository.NotificationRepository;
-import com.medibook.domain.telemedicine.repository.ChatMessageRepository;
+import com.medibook.domain.telemedicine.repository.CallParticipantRepository;
 import com.medibook.domain.telemedicine.repository.CassandraChatMessageRepository;
+import com.medibook.domain.telemedicine.repository.TelemedicineChatMessageRepository;
 import com.medibook.domain.telemedicine.repository.TelemedicineSessionRepository;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.ComponentScan;
@@ -29,8 +30,9 @@ import java.time.Duration;
         excludeFilters = @ComponentScan.Filter(
                 type = FilterType.ASSIGNABLE_TYPE,
                 classes = {
-                        ChatMessageRepository.class,
-                        TelemedicineSessionRepository.class
+                        TelemedicineChatMessageRepository.class,
+                        TelemedicineSessionRepository.class,
+                        CallParticipantRepository.class
                 }
         )
 )

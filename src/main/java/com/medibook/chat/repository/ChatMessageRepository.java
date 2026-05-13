@@ -17,7 +17,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     /** Build conversation context for AI — all non-system messages, oldest first */
     @Query("""
-           SELECT m FROM ChatMessage m
+           SELECT m FROM ConversationChatMessage m
            WHERE m.conversationId = :conversationId
            AND m.senderRole <> 'SYSTEM'
            ORDER BY m.createdAt ASC

@@ -1,10 +1,15 @@
 package com.medibook.domain.telemedicine.controller;
 
 import com.medibook.common.response.ApiResponse;
+import com.medibook.domain.telemedicine.dto.CallParticipantRequest;
 import com.medibook.domain.telemedicine.dto.ChatMessageRequest;
 import com.medibook.domain.telemedicine.dto.ChatMessageResponse;
+import com.medibook.domain.telemedicine.dto.EndCallRequest;
 import com.medibook.domain.telemedicine.dto.TelemedicineSessionResponse;
+import com.medibook.domain.telemedicine.dto.VideoCallResponse;
+import com.medibook.domain.telemedicine.dto.VideoTokenResponse;
 import com.medibook.domain.telemedicine.entity.TelemedicineSessionStatus;
+import com.medibook.domain.telemedicine.service.TelemedicineCallService;
 import com.medibook.domain.telemedicine.service.TelemedicineSessionService;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
@@ -25,6 +30,64 @@ import java.util.List;
 public class TelemedicineController {
 
     private final TelemedicineSessionService sessionService;
+    private final TelemedicineCallService callService;
+
+    @PostMapping("/appointment/{appointmentId}/start-video-call")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR')")
+    @Operation(summary = "Start or reuse an active Twilio Video call for an appointment")
+    public ApiResponse<VideoCallResponse> startVideoCall(
+            @PathVariable Long appointmentId,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(callService.startVideoCall(appointmentId, principal));
+    }
+
+    @PostMapping("/{id}/token")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR')")
+    @Operation(summary = "Generate a short-lived Twilio Video token for a call session")
+    public ApiResponse<VideoTokenResponse> getVideoToken(
+            @PathVariable Long id,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(callService.getToken(id, principal));
+    }
+
+    @PostMapping("/{id}/join")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR')")
+    @Operation(summary = "Mark the authenticated participant as joined")
+    public ApiResponse<VideoCallResponse> joinCall(
+            @PathVariable Long id,
+            @RequestBody(required = false) CallParticipantRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(callService.join(id, request, principal));
+    }
+
+    @PostMapping("/{id}/leave")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR')")
+    @Operation(summary = "Mark the authenticated participant as left")
+    public ApiResponse<VideoCallResponse> leaveCall(
+            @PathVariable Long id,
+            @RequestBody(required = false) CallParticipantRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(callService.leave(id, request, principal));
+    }
+
+    @PostMapping("/{id}/end-call")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR', 'ADMIN')")
+    @Operation(summary = "End the active Twilio Video call")
+    public ApiResponse<VideoCallResponse> endCall(
+            @PathVariable Long id,
+            @RequestBody(required = false) EndCallRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(callService.endCall(id, request == null ? null : request.reason(), principal));
+    }
+
+    @GetMapping("/appointment/{appointmentId}/active-call")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR', 'ADMIN')")
+    @Operation(summary = "Get the active call for an appointment, if one exists")
+    public ApiResponse<VideoCallResponse> getActiveCall(
+            @PathVariable Long appointmentId,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(callService.getActiveCall(appointmentId, principal));
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

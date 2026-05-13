@@ -3,9 +3,11 @@ package com.medibook.jobs;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
-import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.domain.waitlist.entity.WaitlistEntry;
 import com.medibook.domain.waitlist.repository.WaitlistRepository;
+import com.medibook.messaging.KafkaTopics;
+import com.medibook.messaging.event.WaitlistEvent;
+import com.medibook.messaging.producer.OutboxEventProducer;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -31,7 +33,7 @@ public class WaitlistPromotionJob {
 
     private final WaitlistRepository    waitlistRepository;
     private final AppointmentRepository appointmentRepository;
-    private final NotificationService   notificationService;
+    private final OutboxEventProducer   eventProducer;
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
     @Transactional
@@ -75,11 +77,19 @@ public class WaitlistPromotionJob {
             first.setPromotedAppointment(savedAppt);
             waitlistRepository.save(first);
 
-            notificationService.sendWaitlistPromoted(
-                    first.getPatient().getId(),
-                    savedAppt.getId(),
-                    cancelled.getDoctor().getUser().getFullName(),
-                    cancelled.getScheduledAt());
+            eventProducer.publish("WAITLIST", String.valueOf(first.getId()), "PROMOTED",
+                    KafkaTopics.WAITLIST_EVENTS,
+                    WaitlistEvent.builder()
+                            .eventId(UUID.randomUUID().toString())
+                            .eventType("PROMOTED")
+                            .waitlistId(first.getId())
+                            .patientId(first.getPatient().getId())
+                            .doctorId(cancelled.getDoctor().getId())
+                            .appointmentId(savedAppt.getId())
+                            .doctorName(cancelled.getDoctor().getUser().getFullName())
+                            .scheduledAt(cancelled.getScheduledAt())
+                            .occurredAt(LocalDateTime.now())
+                            .build());
 
             promoted++;
             log.info("Waitlist entry [{}] promoted: patient [{}] assigned to freed slot for doctor [{}] at [{}]",

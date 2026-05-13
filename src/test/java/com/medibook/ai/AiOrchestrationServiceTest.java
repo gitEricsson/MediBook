@@ -55,12 +55,12 @@ class AiOrchestrationServiceTest {
                 .intakeCompleted(false)
                 .build();
 
-        when(promptTemplates.assistantSystemPrompt(any(), any())).thenReturn("system-prompt");
-        when(promptTemplates.intakeSystemPrompt(any(), any())).thenReturn("intake-prompt");
-        when(promptTemplates.draftSystemPrompt(any(), any())).thenReturn("draft-prompt");
-        when(promptTemplates.summarySystemPrompt()).thenReturn("summary-prompt");
-        when(promptTemplates.urgencyEscalationMessage(any())).thenReturn("⚠ Emergency escalation message");
-        when(aiChatClient.modelId()).thenReturn("stub-v1");
+        lenient().when(promptTemplates.assistantSystemPrompt(any(), any())).thenReturn("system-prompt");
+        lenient().when(promptTemplates.intakeSystemPrompt(any(), any())).thenReturn("intake-prompt");
+        lenient().when(promptTemplates.draftSystemPrompt(any(), any())).thenReturn("draft-prompt");
+        lenient().when(promptTemplates.summarySystemPrompt()).thenReturn("summary-prompt");
+        lenient().when(promptTemplates.urgencyEscalationMessage(any())).thenReturn("⚠ Emergency escalation message");
+        lenient().when(aiChatClient.modelId()).thenReturn("stub-v1");
     }
 
     // ── BLOCKED messages must not reach AI client ─────────────────────────────
@@ -98,7 +98,7 @@ class AiOrchestrationServiceTest {
         AiOrchestrationResult result = service.processPatientMessage(conversation, "chest pain", 100L);
 
         assertThat(result.getType()).isEqualTo(AiOrchestrationResult.ResultType.URGENT);
-        assertThat(result.getMessage()).contains("emergency");
+        assertThat(result.getMessage()).containsIgnoringCase("emergency");
         assertThat(result.getUrgencyFlags()).contains("chest pain");
         verifyNoInteractions(aiChatClient);
     }

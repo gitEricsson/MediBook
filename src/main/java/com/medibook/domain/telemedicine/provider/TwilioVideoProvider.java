@@ -18,7 +18,7 @@ import java.util.Map;
 
 /**
  * Twilio Video provider.
- * Set TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_API_KEY, TWILIO_API_SECRET in environment.
+ * Set TWILIO_ACCOUNT_SID, TWILIO_API_KEY_SID, TWILIO_API_KEY_SECRET in environment.
  * Docs: https://www.twilio.com/docs/video/api
  */
 @Slf4j
@@ -29,9 +29,10 @@ public class TwilioVideoProvider implements VideoRoomPort {
     private static final String BASE_URL = "https://video.twilio.com/v1";
 
     @Value("${app.telemedicine.twilio.account-sid:#{null}}") private String accountSid;
-    @Value("${app.telemedicine.twilio.auth-token:#{null}}")  private String authToken;
-    @Value("${app.telemedicine.twilio.api-key:#{null}}")     private String apiKey;
-    @Value("${app.telemedicine.twilio.api-secret:#{null}}")  private String apiSecret;
+    @Value("${app.telemedicine.twilio.api-key-sid:#{null}}") private String apiKeySid;
+    @Value("${app.telemedicine.twilio.api-key-secret:#{null}}") private String apiKeySecret;
+    @Value("${app.telemedicine.twilio.video-room-type:group}") private String roomType;
+    @Value("${app.telemedicine.twilio.video-status-callback-url:}") private String statusCallbackUrl;
 
     private final ObjectMapper objectMapper;
 
@@ -52,8 +53,12 @@ public class TwilioVideoProvider implements VideoRoomPort {
 
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
             form.add("UniqueName",      roomName);
-            form.add("Type",            "go");          // Twilio Go = up to 2 participants
+            form.add("Type",            roomType);
             form.add("MaxParticipants", "2");
+            if (statusCallbackUrl != null && !statusCallbackUrl.isBlank()) {
+                form.add("StatusCallback", statusCallbackUrl);
+                form.add("StatusCallbackMethod", "POST");
+            }
 
             String response = client.post()
                     .uri("/Rooms")
@@ -106,16 +111,13 @@ public class TwilioVideoProvider implements VideoRoomPort {
             return new JoinTokenResult("dev-twilio-token-" + userId,
                     "https://meet.medibook.io/room/" + roomId + "?user=" + userId);
         }
-        // Production: use the Twilio JWT library to generate an Access Token with VideoGrant.
-        // Returning a formatted stub until the JWT library (com.twilio.sdk:twilio) is added.
-        // The JWT structure: header.payload.signature using apiKey/apiSecret and accountSid.
-        log.warn("Twilio JWT generation requires twilio-java SDK — returning formatted stub token");
-        String stub = "TWILIO_JWT_STUB_" + apiKey + "_" + roomId + "_" + userId;
+        // Legacy provider path. New chat-integrated calls use TwilioTokenService.
+        String stub = "legacy-twilio-token-" + roomId + "-" + userId;
         return new JoinTokenResult(stub, "https://meet.medibook.io/room/" + roomId);
     }
 
     private RestClient buildClient() {
-        String credentials = accountSid + ":" + authToken;
+        String credentials = apiKeySid + ":" + apiKeySecret;
         String encoded     = Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8));
         return RestClient.builder()
                 .baseUrl(BASE_URL)
@@ -125,7 +127,8 @@ public class TwilioVideoProvider implements VideoRoomPort {
 
     private boolean isConfigured() {
         return accountSid != null && !accountSid.isBlank()
-                && authToken != null && !authToken.isBlank();
+                && apiKeySid != null && !apiKeySid.isBlank()
+                && apiKeySecret != null && !apiKeySecret.isBlank();
     }
 
     private CreateRoomResult devStubRoom(Long appointmentId) {

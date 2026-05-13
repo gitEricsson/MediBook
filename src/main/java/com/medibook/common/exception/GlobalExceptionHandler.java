@@ -12,6 +12,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.LocalDateTime;
@@ -22,13 +23,13 @@ import java.util.List;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(MediBookException.class)
-    public ResponseEntity<ErrorResponse> handleMediBookException(MediBookException ex) {
+    public ResponseEntity<ErrorResponse> handleMediBookException(MediBookException ex, WebRequest request) {
         log.error("MediBookException: {}", ex.getMessage());
-        return buildResponse(ex.getStatus(), ex.getErrorCode(), ex.getMessage(), null);
+        return buildResponse(ex.getStatus(), ex.getErrorCode(), ex.getMessage(), null, request);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex) {
+    public ResponseEntity<ErrorResponse> handleValidationErrors(MethodArgumentNotValidException ex, WebRequest request) {
         List<ErrorResponse.FieldError> fieldErrors = ex.getBindingResult().getFieldErrors().stream()
                 .map(fe -> ErrorResponse.FieldError.builder()
                         .field(fe.getField())
@@ -36,59 +37,61 @@ public class GlobalExceptionHandler {
                         .build())
                 .toList();
         return buildResponse(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_FAILED",
-                "Request validation failed", fieldErrors);
+                "Request validation failed", fieldErrors, request);
     }
 
     @ExceptionHandler(MissingServletRequestParameterException.class)
-    public ResponseEntity<ErrorResponse> handleMissingRequestParameter(MissingServletRequestParameterException ex) {
+    public ResponseEntity<ErrorResponse> handleMissingRequestParameter(MissingServletRequestParameterException ex, WebRequest request) {
         return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
-                "Missing required parameter: " + ex.getParameterName(), null);
+                "Missing required parameter: " + ex.getParameterName(), null, request);
     }
 
     @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+    public ResponseEntity<ErrorResponse> handleTypeMismatch(MethodArgumentTypeMismatchException ex, WebRequest request) {
         return buildResponse(HttpStatus.BAD_REQUEST, "INVALID_REQUEST",
-                "Invalid value for parameter: " + ex.getName(), null);
+                "Invalid value for parameter: " + ex.getName(), null, request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)
-    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex) {
-        return buildResponse(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Access denied", null);
+    public ResponseEntity<ErrorResponse> handleAccessDenied(AccessDeniedException ex, WebRequest request) {
+        return buildResponse(HttpStatus.FORBIDDEN, "ACCESS_DENIED", "Access denied", null, request);
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex, WebRequest request) {
         log.warn("Data integrity violation: {}", ex.getMessage());
         return buildResponse(HttpStatus.CONFLICT, "DATA_INTEGRITY_VIOLATION",
-                "The request conflicts with existing data", null);
+                "The request conflicts with existing data", null, request);
     }
 
     @ExceptionHandler(BadCredentialsException.class)
-    public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex) {
-        return buildResponse(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid email or password", null);
+    public ResponseEntity<ErrorResponse> handleBadCredentials(BadCredentialsException ex, WebRequest request) {
+        return buildResponse(HttpStatus.UNAUTHORIZED, "INVALID_CREDENTIALS", "Invalid email or password", null, request);
     }
 
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex) {
+    public ResponseEntity<ErrorResponse> handleAuthenticationException(AuthenticationException ex, WebRequest request) {
         log.warn("Authentication failure: {}", ex.getMessage());
-        return buildResponse(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_FAILED", "Authentication failed", null);
+        return buildResponse(HttpStatus.UNAUTHORIZED, "AUTHENTICATION_FAILED", "Authentication failed", null, request);
     }
 
     @ExceptionHandler(org.springframework.web.servlet.resource.NoResourceFoundException.class)
-    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(org.springframework.web.servlet.resource.NoResourceFoundException ex) {
-        return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found", null);
+    public ResponseEntity<ErrorResponse> handleNoResourceFoundException(org.springframework.web.servlet.resource.NoResourceFoundException ex, WebRequest request) {
+        return buildResponse(HttpStatus.NOT_FOUND, "NOT_FOUND", "Resource not found", null, request);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex) {
+    public ResponseEntity<ErrorResponse> handleGenericException(Exception ex, WebRequest request) {
         log.error("Unhandled exception: ", ex);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "INTERNAL_ERROR",
-                "An unexpected error occurred", null);
+                "An unexpected error occurred", null, request);
     }
 
     private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status, String code,
                                                          String message,
-                                                         List<ErrorResponse.FieldError> errors) {
+                                                         List<ErrorResponse.FieldError> errors,
+                                                         WebRequest request) {
+        String path = request.getDescription(false).replace("uri=", "");
         ErrorResponse body = ErrorResponse.builder()
                 .status(status.value())
                 .error(code)
@@ -96,6 +99,7 @@ public class GlobalExceptionHandler {
                 .message(message)
                 .timestamp(LocalDateTime.now())
                 .correlationId(MDC.get("correlationId"))
+                .path(path)
                 .fieldErrors(errors)
                 .errors(errors)
                 .build();

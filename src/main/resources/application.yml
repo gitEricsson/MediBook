@@ -192,7 +192,7 @@ app:
       video-token-ttl-seconds: ${TWILIO_VIDEO_TOKEN_TTL_SECONDS:900}
       video-status-callback-url: ${TWILIO_VIDEO_STATUS_CALLBACK_URL:}
   api-docs:
-    enabled: ${OPENAPI_ENABLED:true}
+    enabled: ${OPENAPI_ENABLED:false}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:
@@ -287,10 +287,10 @@ resilience4j:
 # ─── Springdoc / Swagger ────────────────────────────────────────────────────
 springdoc:
   api-docs:
-    enabled: ${app.api-docs.enabled:true}
+    enabled: ${app.api-docs.enabled:false}
     path: /api-docs
   swagger-ui:
-    enabled: ${app.api-docs.enabled:true}
+    enabled: ${app.api-docs.enabled:false}
     path: /swagger-ui.html
     tags-sorter: alpha
     operations-sorter: alpha

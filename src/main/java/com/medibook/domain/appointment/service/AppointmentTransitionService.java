@@ -48,8 +48,8 @@ public class AppointmentTransitionService {
                 throw new MediBookException("Only CONFIRMED appointments can be marked as " + target, HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
             }
         } else if (target == AppointmentStatus.CANCELLED) {
-            if (current == AppointmentStatus.COMPLETED) {
-                throw new MediBookException("Cannot cancel a completed appointment", HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
+            if (current == AppointmentStatus.COMPLETED || current == AppointmentStatus.NO_SHOW) {
+                throw new MediBookException("Cannot cancel a completed or no-show appointment", HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
             }
             appt.setCancellationReason(request.getReason());
         } else {
@@ -67,7 +67,7 @@ public class AppointmentTransitionService {
                 .patientName(saved.getPatient().getFullName())
                 .status(saved.getStatus())
                 .build();
-        afterCommit(() -> eventProducer.publishAppointmentEvent(event));
+        eventProducer.publishAppointmentEvent(event);
 
         return AppointmentResponse.fromEntity(saved);
     }

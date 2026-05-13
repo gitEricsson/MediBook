@@ -90,6 +90,18 @@ public class ConsultationNoteService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<ConsultationNoteResponse> getPatientHistory(Long patientId, UserPrincipal principal) {
+        // Only allow if the caller is the patient themselves or an admin
+        if (!patientId.equals(principal.getId()) && !principal.hasRole("ROLE_ADMIN") && !principal.hasRole("ROLE_SUPER_ADMIN")) {
+            throw new MediBookException("Cannot access another patient's consultation history",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+        return noteRepository.findByPatientId(patientId).stream()
+                .map(ConsultationNoteResponse::fromEntity)
+                .toList();
+    }
+
     @Transactional
     public ConsultationNoteResponse update(Long id, ConsultationNoteRequest request) {
         ConsultationNote note = noteRepository.findById(id)

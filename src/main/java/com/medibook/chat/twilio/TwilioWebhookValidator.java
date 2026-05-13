@@ -26,13 +26,13 @@ public class TwilioWebhookValidator {
 
     /**
      * Returns true if the request is a valid Twilio webhook.
-     * In stub/test mode, always returns true with a warning.
+     * In stub/test mode, rejects webhooks with a warning.
      */
     public boolean isValid(HttpServletRequest request, Map<String, String[]> params) {
         if (authToken == null || authToken.isBlank()) {
-            log.warn("Twilio webhook validation SKIPPED — authToken not configured. " +
-                     "This is insecure in production.");
-            return true;
+            log.warn("Twilio webhook validation FAILED — authToken not configured. " +
+                     "Rejecting webhook. This is insecure in production.");
+            return false;
         }
 
         try {

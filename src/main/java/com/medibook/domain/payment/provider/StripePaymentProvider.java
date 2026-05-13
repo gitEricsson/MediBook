@@ -149,7 +149,7 @@ public class StripePaymentProvider implements PaymentProviderPort {
 
     @Override
     public boolean verifyWebhookSignature(String payload, String signature) {
-        if (webhookSecret == null || webhookSecret.isBlank()) return true;
+        if (webhookSecret == null || webhookSecret.isBlank()) return false;
         try {
             String[] parts = signature.split(",");
             String timestamp = null;
@@ -159,6 +159,15 @@ public class StripePaymentProvider implements PaymentProviderPort {
                 if (part.startsWith("v1=")) sig = part.substring(3);
             }
             if (timestamp == null || sig == null) return false;
+
+            // Validate timestamp freshness (prevent replay attacks)
+            long timestampSeconds = Long.parseLong(timestamp);
+            long currentSeconds = System.currentTimeMillis() / 1000;
+            if (Math.abs(currentSeconds - timestampSeconds) > 300) {  // 5 minutes = 300 seconds
+                log.warn("Stripe webhook timestamp is stale: {} seconds old", currentSeconds - timestampSeconds);
+                return false;
+            }
+
             String signed = timestamp + "." + payload;
             Mac mac = Mac.getInstance("HmacSHA256");
             mac.init(new SecretKeySpec(webhookSecret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));

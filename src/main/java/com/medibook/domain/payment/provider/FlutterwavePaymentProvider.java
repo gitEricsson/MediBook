@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
 import java.math.BigDecimal;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.util.Map;
 import java.util.UUID;
 
@@ -138,8 +140,8 @@ public class FlutterwavePaymentProvider implements PaymentProviderPort {
 
     @Override
     public boolean verifyWebhookSignature(String payload, String signature) {
-        if (!isConfigured()) return true;
-        return secretKey.equals(signature);
+        if (!isConfigured()) return false;
+        return MessageDigest.isEqual(secretKey.getBytes(StandardCharsets.UTF_8), signature.getBytes(StandardCharsets.UTF_8));
     }
 
     InitiateResult initiatePaymentFallback(InitiateRequest request, Exception ex) {

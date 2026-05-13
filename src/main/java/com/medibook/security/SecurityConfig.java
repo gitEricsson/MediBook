@@ -55,8 +55,6 @@ public class SecurityConfig {
             "/api/v1/chat/twilio/webhook",
             // MediBook Assistant support widget — auth optional; no PHI access
             "/api/v1/ai/chat",
-            // FHIR endpoints used by interop systems
-            "/api/v1/fhir/**",
             // WebSocket upgrade: HTTP auth is not used here.
             // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.
             "/ws/**",

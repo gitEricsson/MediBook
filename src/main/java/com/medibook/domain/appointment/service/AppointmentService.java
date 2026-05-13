@@ -113,10 +113,8 @@ public class AppointmentService {
 
         AppointmentEvent appointmentEvent = buildEvent(saved, "BOOKED");
         AuditEvent auditEvent = buildAuditEvent(saved, patientId, saved.getPatient().getEmail(), "APPOINTMENT_BOOKED");
-        afterCommit(() -> {
-            eventProducer.publishAppointmentEvent(appointmentEvent);
-            eventProducer.publishAuditEvent(auditEvent);
-        });
+        eventProducer.publishAppointmentEvent(appointmentEvent);
+        eventProducer.publishAuditEvent(auditEvent);
 
         log.info("Appointment [{}] booked by patient [{}] with doctor [{}]",
                 saved.getId(), patientId, request.getDoctorId());
@@ -160,10 +158,8 @@ public class AppointmentService {
             Appointment saved = appointmentRepository.save(appt);
             AppointmentEvent appointmentEvent = buildEvent(saved, "CANCELLED");
             AuditEvent auditEvent = buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_CANCELLED");
-            afterCommit(() -> {
-                eventProducer.publishAppointmentEvent(appointmentEvent);
-                eventProducer.publishAuditEvent(auditEvent);
-            });
+            eventProducer.publishAppointmentEvent(appointmentEvent);
+            eventProducer.publishAuditEvent(auditEvent);
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently. Please refresh.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
@@ -204,14 +200,22 @@ public class AppointmentService {
         try {
             Appointment saved = appointmentRepository.save(appt);
             if (request.getHoldId() != null) {
-                holdService.releaseHold(appt.getDoctor().getId(), request.getNewStart());
+                final java.time.LocalDateTime scheduledAt = request.getNewStart();
+                if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                        @Override
+                        public void afterCommit() {
+                            holdService.releaseHold(doctorId, scheduledAt);
+                        }
+                    });
+                } else {
+                    holdService.releaseHold(doctorId, scheduledAt);
+                }
             }
             AppointmentEvent appointmentEvent = buildEvent(saved, "RESCHEDULED");
             AuditEvent auditEvent = buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_RESCHEDULED");
-            afterCommit(() -> {
-                eventProducer.publishAppointmentEvent(appointmentEvent);
-                eventProducer.publishAuditEvent(auditEvent);
-            });
+            eventProducer.publishAppointmentEvent(appointmentEvent);
+            eventProducer.publishAuditEvent(auditEvent);
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");

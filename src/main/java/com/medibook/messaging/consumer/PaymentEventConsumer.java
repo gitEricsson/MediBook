@@ -28,16 +28,16 @@ public class PaymentEventConsumer {
             containerFactory = "paymentKafkaListenerContainerFactory"
     )
     public void onPaymentEvent(ConsumerRecord<String, PaymentEvent> record, Acknowledgment ack) {
-        PaymentEvent event = record.value();
-        log.info("Consumed PaymentEvent [{}] type={}", event.getEventId(), event.getEventType());
-
-        if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
-            log.info("Skipping duplicate PaymentEvent [{}]", event.getEventId());
-            ack.acknowledge();
-            return;
-        }
-
         try {
+            PaymentEvent event = record.value();
+            log.info("Consumed PaymentEvent [{}] type={}", event.getEventId(), event.getEventType());
+
+            if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
+                log.info("Skipping duplicate PaymentEvent [{}]", event.getEventId());
+                ack.acknowledge();
+                return;
+            }
+
             switch (event.getEventType()) {
                 case "SUCCEEDED" -> notificationService.sendPaymentSucceeded(
                         event.getPatientId(),
@@ -55,17 +55,16 @@ public class PaymentEventConsumer {
 
                 default -> log.debug("Unhandled payment event type: {}", event.getEventType());
             }
-        } catch (Exception ex) {
-            log.error("Failed to process payment notification for event [{}]: {}",
-                    event.getEventId(), ex.getMessage());
-        }
 
-        if (event.getEventId() != null) {
-            processedEventRepository.save(ProcessedEvent.builder()
-                    .eventId(event.getEventId())
-                    .eventType("PAYMENT_" + event.getEventType())
-                    .build());
+            if (event.getEventId() != null) {
+                processedEventRepository.save(ProcessedEvent.builder()
+                        .eventId(event.getEventId())
+                        .eventType("PAYMENT_" + event.getEventType())
+                        .build());
+            }
+            ack.acknowledge();
+        } catch (Exception ex) {
+            log.error("Failed to process payment event", ex);
         }
-        ack.acknowledge();
     }
 }

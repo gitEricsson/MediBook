@@ -16,6 +16,7 @@ public class ErrorResponse {
     private String message;
     private LocalDateTime timestamp;
     private String correlationId;
+    private String path;
     private List<FieldError> fieldErrors;
     private List<FieldError> errors;
 

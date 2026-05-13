@@ -28,30 +28,34 @@ public class WaitlistEventConsumer {
             containerFactory = "waitlistKafkaListenerContainerFactory"
     )
     public void onWaitlistEvent(ConsumerRecord<String, WaitlistEvent> record, Acknowledgment ack) {
-        WaitlistEvent event = record.value();
-        log.info("Consumed WaitlistEvent [{}] type={}", event.getEventId(), event.getEventType());
+        try {
+            WaitlistEvent event = record.value();
+            log.info("Consumed WaitlistEvent [{}] type={}", event.getEventId(), event.getEventType());
 
-        if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
+            if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
+                ack.acknowledge();
+                return;
+            }
+
+            switch (event.getEventType()) {
+                case "PROMOTED" -> notificationService.sendWaitlistPromoted(
+                        event.getPatientId(), event.getAppointmentId(), event.getDoctorName(), event.getScheduledAt());
+
+                case "JOINED" -> notificationService.sendWaitlistJoined(
+                        event.getPatientId(), event.getDoctorName());
+
+                default -> log.debug("No specific notification action for waitlist event: {}", event.getEventType());
+            }
+
+            if (event.getEventId() != null) {
+                processedEventRepository.save(ProcessedEvent.builder()
+                        .eventId(event.getEventId())
+                        .eventType("WAITLIST_" + event.getEventType())
+                        .build());
+            }
             ack.acknowledge();
-            return;
+        } catch (Exception e) {
+            log.error("Failed to process waitlist event", e);
         }
-
-        switch (event.getEventType()) {
-            case "PROMOTED" -> notificationService.sendWaitlistPromoted(
-                    event.getPatientId(), event.getAppointmentId(), event.getDoctorName(), event.getScheduledAt());
-            
-            case "JOINED" -> notificationService.sendWaitlistJoined(
-                    event.getPatientId(), event.getDoctorName());
-
-            default -> log.debug("No specific notification action for waitlist event: {}", event.getEventType());
-        }
-
-        if (event.getEventId() != null) {
-            processedEventRepository.save(ProcessedEvent.builder()
-                    .eventId(event.getEventId())
-                    .eventType("WAITLIST_" + event.getEventType())
-                    .build());
-        }
-        ack.acknowledge();
     }
 }

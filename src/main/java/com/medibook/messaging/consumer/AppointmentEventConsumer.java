@@ -29,27 +29,31 @@ public class AppointmentEventConsumer {
     )
     public void onAppointmentEvent(ConsumerRecord<String, AppointmentEvent> record,
                                    Acknowledgment ack) {
-        AppointmentEvent event = record.value();
-        log.info("Consumed AppointmentEvent [{}] type={}", event.getEventId(), event.getEventType());
-        if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
-            log.info("Skipping duplicate AppointmentEvent [{}]", event.getEventId());
-            ack.acknowledge();
-            return;
-        }
+        try {
+            AppointmentEvent event = record.value();
+            log.info("Consumed AppointmentEvent [{}] type={}", event.getEventId(), event.getEventType());
+            if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
+                log.info("Skipping duplicate AppointmentEvent [{}]", event.getEventId());
+                ack.acknowledge();
+                return;
+            }
 
-        switch (event.getEventType()) {
-            case "BOOKED" -> notificationService.sendAppointmentBooked(event);
-            case "CONFIRMED", "STATUS_CHANGED_TO_CONFIRMED" -> notificationService.sendAppointmentConfirmed(event);
-            case "CANCELLED", "STATUS_CHANGED_TO_CANCELLED" -> notificationService.sendAppointmentCancelled(event);
-            case "REMINDER" -> notificationService.sendAppointmentReminder(event);
-            default -> log.warn("Unhandled event type: {}", event.getEventType());
+            switch (event.getEventType()) {
+                case "BOOKED" -> notificationService.sendAppointmentBooked(event);
+                case "CONFIRMED", "STATUS_CHANGED_TO_CONFIRMED" -> notificationService.sendAppointmentConfirmed(event);
+                case "CANCELLED", "STATUS_CHANGED_TO_CANCELLED" -> notificationService.sendAppointmentCancelled(event);
+                case "REMINDER" -> notificationService.sendAppointmentReminder(event);
+                default -> log.warn("Unhandled event type: {}", event.getEventType());
+            }
+            if (event.getEventId() != null) {
+                processedEventRepository.save(ProcessedEvent.builder()
+                        .eventId(event.getEventId())
+                        .eventType(event.getEventType())
+                        .build());
+            }
+            ack.acknowledge();
+        } catch (Exception e) {
+            log.error("Failed to process appointment event", e);
         }
-        if (event.getEventId() != null) {
-            processedEventRepository.save(ProcessedEvent.builder()
-                    .eventId(event.getEventId())
-                    .eventType(event.getEventType())
-                    .build());
-        }
-        ack.acknowledge();
     }
 }

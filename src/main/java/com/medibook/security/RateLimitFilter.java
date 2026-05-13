@@ -79,6 +79,10 @@ public class RateLimitFilter extends OncePerRequestFilter {
         String method = request.getMethod();
         String path = request.getRequestURI();
 
+        // Password reset endpoints - limit to 3 per minute per IP
+        if ("POST".equals(method) && (path.contains("/auth/forgot-password") || path.contains("/auth/reset-password"))) {
+            return new RateLimitRule("auth:reset:password", 3, SubjectType.IP);
+        }
         if ("POST".equals(method) && "/api/v1/auth/login".equals(path)) {
             return new RateLimitRule("auth-login", 10, SubjectType.IP);
         }

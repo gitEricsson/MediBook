@@ -166,6 +166,10 @@ public class PaymentService {
         Payment payment = paymentRepository.findByIdWithDetails(paymentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payment", "id", paymentId));
 
+        if (!payment.getPatient().getId().equals(principal.getId()) && !principal.hasRole("ROLE_ADMIN")) {
+            throw new MediBookException("Not authorized", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+
         if (payment.getStatus() != PaymentStatus.SUCCESSFUL) {
             throw new MediBookException("Only successful payments can be refunded",
                     HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_STATUS");
@@ -282,6 +286,7 @@ public class PaymentService {
                     .build());
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize payment event for outbox", e);
+            throw new RuntimeException("Failed to serialize payment event", e);
         }
     }
 

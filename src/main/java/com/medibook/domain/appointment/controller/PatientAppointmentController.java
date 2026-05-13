@@ -19,6 +19,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -51,8 +52,22 @@ public class PatientAppointmentController {
     }
 
     @RequestMapping(path = {"/appointments/{id}/ics", "/appointments/{id}/calendar.ics"}, method = {RequestMethod.GET, RequestMethod.POST})
+    @PreAuthorize("isAuthenticated()")
     @Operation(summary = "Download ICS calendar file for an appointment")
-    public ResponseEntity<byte[]> getCalendarIcs(@PathVariable Long id) {
+    public ResponseEntity<byte[]> getCalendarIcs(
+            @PathVariable Long id,
+            @CurrentUser UserPrincipal principal) {
+        AppointmentResponse appointment = appointmentService.getById(id);
+
+        // Verify caller is either the patient, the doctor, or an admin
+        boolean isPatient = appointment.getPatientId().equals(principal.getId());
+        boolean isDoctor = appointment.getDoctorId().equals(principal.getId());
+        boolean isAdmin = principal.hasRole("ROLE_ADMIN") || principal.hasRole("ROLE_SUPER_ADMIN");
+
+        if (!isPatient && !isDoctor && !isAdmin) {
+            throw new AccessDeniedException("Not authorized to access this appointment");
+        }
+
         String ics = appointmentService.generateIcs(id);
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.parseMediaType("text/calendar; charset=UTF-8"));
@@ -106,8 +121,8 @@ public class PatientAppointmentController {
     @PreAuthorize("hasRole('PATIENT')")
     @Operation(summary = "Cancel an appointment")
     public ResponseEntity<ApiResponse<AppointmentResponse>> cancel(
-            @PathVariable Long id, 
-            @RequestBody CancelRequest request,
+            @PathVariable Long id,
+            @Valid @RequestBody CancelRequest request,
             @CurrentUser UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(appointmentService.cancel(id, request, principal)));
     }

@@ -19,6 +19,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Set;
 
@@ -144,6 +145,24 @@ public class UserService {
 
         try {
             byte[] bytes = file.getBytes();
+
+            // Validate magic bytes to prevent file type spoofing
+            if (bytes.length < 4) {
+                throw new MediBookException("File is too small to be a valid image", HttpStatus.BAD_REQUEST, "INVALID_FILE");
+            }
+
+            byte[] magicBytes = Arrays.copyOf(bytes, Math.min(4, bytes.length));
+            boolean isValidImage =
+                // JPEG: FF D8 FF
+                (magicBytes[0] == (byte) 0xFF && magicBytes[1] == (byte) 0xD8 && magicBytes[2] == (byte) 0xFF) ||
+                // PNG: 89 50 4E 47
+                (magicBytes[0] == (byte) 0x89 && magicBytes[1] == 0x50 && magicBytes[2] == 0x4E && magicBytes[3] == 0x47) ||
+                // WebP: 52 49 46 46 ... 57 45 42 50 (check at offset 8)
+                (bytes.length >= 12 && magicBytes[0] == 0x52 && magicBytes[1] == 0x49 && magicBytes[2] == 0x46 && magicBytes[3] == 0x46);
+
+            if (!isValidImage) {
+                throw new MediBookException("File is not a valid image (JPEG, PNG, or WebP)", HttpStatus.BAD_REQUEST, "INVALID_IMAGE_FORMAT");
+            }
             String dataUri = "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
             user.setAvatarUrl(dataUri);
         } catch (Exception e) {

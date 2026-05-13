@@ -34,6 +34,10 @@ public class OutboxRelayJob {
 
         log.debug("Outbox relay: processing {} events", pending.size());
 
+        // Mark all events as PROCESSING atomically to prevent duplicate publishing in multi-replica setups
+        List<Long> eventIds = pending.stream().map(OutboxEvent::getId).toList();
+        outboxRepository.markProcessing(eventIds);
+
         for (OutboxEvent event : pending) {
             try {
                 kafkaTemplate.send(event.getTopic(), event.getAggregateId(), event.getPayload())

@@ -153,7 +153,7 @@ public class PaystackPaymentProvider implements PaymentProviderPort {
 
     @Override
     public boolean verifyWebhookSignature(String payload, String signature) {
-        if (!isConfigured()) return true;
+        if (!isConfigured()) return false;
         try {
             Mac mac = Mac.getInstance("HmacSHA512");
             mac.init(new SecretKeySpec(secretKey.getBytes(StandardCharsets.UTF_8), "HmacSHA512"));

@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
                         .build())
                 .toList();
         log.warn("Validation error: {} validation errors", fieldErrors.size());
-        return buildResponse(HttpStatus.BAD_REQUEST, "VALIDATION_ERROR",
+        return buildResponse(HttpStatus.UNPROCESSABLE_ENTITY, "VALIDATION_FAILED",
                 "Request validation failed", fieldErrors, request);
     }
 

@@ -86,7 +86,9 @@ public class SecurityConfig {
             "/health",
             "/health/**",
             "/prometheus",
-            "/version"
+            "/version",
+            "/api/v1/departments",
+            "/api/v1/departments/**"
     };
 
     @Bean

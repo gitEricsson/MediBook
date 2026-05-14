@@ -1,6 +1,7 @@
 package com.medibook.common.exception;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.Builder;
 import lombok.Data;
 
@@ -14,10 +15,12 @@ public class ErrorResponse {
 
     private boolean success;           // Always false for error responses
     private String message;            // Human-readable error message
+    @JsonProperty("errorCode")
     private String code;               // Machine-readable error code
     private Instant timestamp;         // ISO 8601 timestamp (UTC)
     private String correlationId;      // UUID for request correlation
     private String path;               // Request path
+    @JsonProperty("errors")
     private List<FieldError> fieldErrors; // Validation errors
 
     @Data

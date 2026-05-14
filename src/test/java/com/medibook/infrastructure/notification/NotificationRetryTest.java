@@ -21,8 +21,6 @@ import org.springframework.cache.CacheManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.domain.notification.repository.NotificationRepository;
 
-import java.io.IOException;
-import java.net.SocketTimeoutException;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -80,23 +78,23 @@ class NotificationRetryTest {
     }
 
     @Test
-    void testRetryOnTransientFailure() throws IOException {
+    void testRetryOnTransientFailure() {
         // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock CassandraOperations to fail once, then succeed
-        doThrow(new SocketTimeoutException("Transient timeout"))
-            .doNothing()
+        doThrow(new RuntimeException("Transient timeout"))
+            .doReturn(null)
             .when(cassandraOperations).insert(any(Notification.class), any());
 
-        doNothing().when(stringRedisTemplate).convertAndSend(anyString(), anyString());
+        doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
 
         // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentBooked(event));
 
-        // Verify cassandraOperations was called twice (initial + 1 retry)
-        verify(cassandraOperations, times(4)).insert(any(Notification.class), any());
-        // Both metric calls should be recorded (patient notification succeeded on 2nd try, doctor on 2nd try)
+        // Attempt 1: patient insert fails (1 call) → retry
+        // Attempt 2: patient insert succeeds + doctor insert succeeds (2 calls)
+        verify(cassandraOperations, times(3)).insert(any(Notification.class), any());
         verify(notificationMetrics, atLeastOnce()).recordSuccess();
     }
 
@@ -124,16 +122,15 @@ class NotificationRetryTest {
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock CassandraOperations to always fail with transient error
-        doThrow(new SocketTimeoutException("Always times out"))
+        doThrow(new RuntimeException("Always times out"))
             .when(cassandraOperations).insert(any(Notification.class), any());
 
         // Act & Assert
         assertThrows(TemporaryFailureException.class,
             () -> notificationService.sendAppointmentBooked(event));
 
-        // Verify cassandraOperations was called 3 times (initial + 2 retries)
-        verify(cassandraOperations, times(6)).insert(any(Notification.class), any());
-        // Verify retry was recorded for transient failures
+        // 3 attempts, each only reaches the first save(patient) before failing
+        verify(cassandraOperations, times(3)).insert(any(Notification.class), any());
         verify(notificationMetrics, atLeast(2)).recordRetry();
     }
 
@@ -143,11 +140,11 @@ class NotificationRetryTest {
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock to fail once, then succeed
-        doThrow(new IOException("Network error"))
-            .doNothing()
+        doThrow(new RuntimeException("Network error"))
+            .doReturn(null)
             .when(cassandraOperations).insert(any(Notification.class), any());
 
-        doNothing().when(stringRedisTemplate).convertAndSend(anyString(), anyString());
+        doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
 
         // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentConfirmed(event));
@@ -162,17 +159,18 @@ class NotificationRetryTest {
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock to fail once, then succeed
-        doThrow(new SocketTimeoutException("Socket timeout"))
-            .doNothing()
+        doThrow(new RuntimeException("Socket timeout"))
+            .doReturn(null)
             .when(cassandraOperations).insert(any(Notification.class), any());
 
-        doNothing().when(stringRedisTemplate).convertAndSend(anyString(), anyString());
+        doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
 
         // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentCancelled(event));
 
-        // Verify that both patient and doctor notifications succeeded after retries
-        verify(cassandraOperations, times(4)).insert(any(Notification.class), any());
+        // Attempt 1: patient insert fails (1 call) → retry
+        // Attempt 2: patient insert succeeds + doctor insert succeeds (2 calls)
+        verify(cassandraOperations, times(3)).insert(any(Notification.class), any());
         verify(notificationMetrics, atLeastOnce()).recordSuccess();
     }
 
@@ -182,11 +180,11 @@ class NotificationRetryTest {
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock to fail once, then succeed
-        doThrow(new IOException("IO error"))
-            .doNothing()
+        doThrow(new RuntimeException("IO error"))
+            .doReturn(null)
             .when(cassandraOperations).insert(any(Notification.class), any());
 
-        doNothing().when(stringRedisTemplate).convertAndSend(anyString(), anyString());
+        doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
 
         // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentReminder(event));

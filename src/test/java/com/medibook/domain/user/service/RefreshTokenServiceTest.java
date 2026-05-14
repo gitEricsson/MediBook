@@ -30,6 +30,7 @@ class RefreshTokenServiceTest {
     @Mock RedisTemplate<String, Object> redisTemplate;
     @Mock ValueOperations<String, Object> valueOps;
     @Mock JwtTokenProvider tokenProvider;
+    @Mock com.medibook.infrastructure.metrics.TokenMetrics tokenMetrics;
 
     @InjectMocks RefreshTokenService refreshTokenService;
 

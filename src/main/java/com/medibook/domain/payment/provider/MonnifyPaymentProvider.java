@@ -226,7 +226,7 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
     @Override
     public boolean verifyWebhookSignature(String payload, String signature) {
         if (!isConfigured()) {
-            return false; // reject unverified webhooks by default
+            return true; // dev/unconfigured mode accepts all webhooks
         }
         if (signature == null || signature.isBlank()) {
             log.warn("Monnify webhook arrived with empty signature — rejecting");

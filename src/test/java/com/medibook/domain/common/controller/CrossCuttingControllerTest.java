@@ -23,6 +23,7 @@ public class CrossCuttingControllerTest {
     @MockBean JwtTokenProvider                       jwtTokenProvider;
     @MockBean CustomUserDetailsService               userDetailsService;
     @MockBean @SuppressWarnings("rawtypes") RedisTemplate redisTemplate;
+    @MockBean com.medibook.domain.user.service.SessionTimeoutService sessionTimeoutService;
 
     @Test
     @WithMockUser

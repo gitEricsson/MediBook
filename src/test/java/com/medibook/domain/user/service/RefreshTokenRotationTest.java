@@ -11,6 +11,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.SetOperations;
+import org.springframework.data.redis.core.ValueOperations;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -29,12 +31,22 @@ class RefreshTokenRotationTest {
     @Mock
     private TokenMetrics tokenMetrics;
 
+    @Mock
+    @SuppressWarnings("unchecked")
+    private ValueOperations<String, Object> valueOperations;
+
+    @Mock
+    @SuppressWarnings("unchecked")
+    private SetOperations<String, Object> setOperations;
+
     @InjectMocks
     private RefreshTokenService refreshTokenService;
 
     @BeforeEach
     void setUp() {
-        when(jwtTokenProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L); // 7 days
+        lenient().when(jwtTokenProvider.getRefreshTokenExpirationMs()).thenReturn(604800000L);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOperations);
+        lenient().when(redisTemplate.opsForSet()).thenReturn(setOperations);
     }
 
     @Test
@@ -46,7 +58,7 @@ class RefreshTokenRotationTest {
         // Assert
         assertNotNull(token);
         assertFalse(token.isEmpty());
-        verify(redisTemplate, times(1)).executePipelined(any(RedisCallback.class));
+        verify(redisTemplate, times(1)).executePipelined(any(org.springframework.data.redis.core.SessionCallback.class));
     }
 
     @Test
@@ -55,14 +67,14 @@ class RefreshTokenRotationTest {
         // Arrange
         String token = "test_refresh_token";
         when(redisTemplate.hasKey(anyString())).thenReturn(false); // Not revoked
-        when(redisTemplate.opsForValue().get(anyString())).thenReturn("1");
+        when(valueOperations.get(anyString())).thenReturn("1");
 
         // Act
         Long userId = refreshTokenService.validateAndGetUserId(token);
 
         // Assert
         assertEquals(1L, userId);
-        verify(redisTemplate, times(1)).opsForValue().get(anyString());
+        verify(valueOperations, times(1)).get(anyString());
     }
 
     @Test
@@ -84,7 +96,7 @@ class RefreshTokenRotationTest {
         // Arrange
         String token = "expired_token";
         when(redisTemplate.hasKey(anyString())).thenReturn(false); // Not revoked
-        when(redisTemplate.opsForValue().get(anyString())).thenReturn(null); // Expired
+        when(valueOperations.get(anyString())).thenReturn(null); // Expired
 
         // Act & Assert
         assertThrows(RuntimeException.class, () -> {
@@ -98,8 +110,8 @@ class RefreshTokenRotationTest {
         // Arrange
         String oldToken = "old_refresh_token";
         when(redisTemplate.hasKey(anyString())).thenReturn(false);
-        when(redisTemplate.opsForValue().get(anyString())).thenReturn("1");
-        when(redisTemplate.opsForValue().setIfAbsent(anyString(), anyString(), any())).thenReturn(true);
+        when(valueOperations.get(anyString())).thenReturn("1");
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(true);
 
         // Act
         RefreshTokenService.RotationResult result = refreshTokenService.rotate(oldToken);
@@ -109,7 +121,7 @@ class RefreshTokenRotationTest {
         assertEquals(1L, result.userId());
         assertNotNull(result.newToken());
         assertNotEquals(oldToken, result.newToken());
-        verify(redisTemplate, times(1)).executePipelined(any(RedisCallback.class));
+        verify(redisTemplate, times(1)).executePipelined(any(org.springframework.data.redis.core.SessionCallback.class));
         verify(tokenMetrics, times(1)).recordTokenRotation(1L);
     }
 
@@ -118,13 +130,13 @@ class RefreshTokenRotationTest {
     void testRotate_ConcurrentAttempt() {
         // Arrange
         String token = "token_being_rotated";
-        when(redisTemplate.opsForValue().setIfAbsent(anyString(), anyString(), any())).thenReturn(false);
+        when(valueOperations.setIfAbsent(anyString(), anyString(), any())).thenReturn(false);
 
         // Act & Assert
         assertThrows(RuntimeException.class, () -> {
             refreshTokenService.rotate(token);
         });
-        verify(redisTemplate, never()).executePipelined(any(RedisCallback.class));
+        verify(redisTemplate, never()).executePipelined(any(org.springframework.data.redis.core.SessionCallback.class));
     }
 
     @Test
@@ -132,13 +144,13 @@ class RefreshTokenRotationTest {
     void testRevoke_WithReason() {
         // Arrange
         String token = "token_to_revoke";
-        when(redisTemplate.opsForValue().get(anyString())).thenReturn("1");
+        when(valueOperations.get(anyString())).thenReturn("1");
 
         // Act
         refreshTokenService.revoke(token, "user_logout");
 
         // Assert
-        verify(redisTemplate, times(1)).executePipelined(any(RedisCallback.class));
+        verify(redisTemplate, times(1)).executePipelined(any(org.springframework.data.redis.core.SessionCallback.class));
         verify(tokenMetrics, times(1)).recordTokenRevocation(1L, "user_logout");
     }
 
@@ -147,7 +159,7 @@ class RefreshTokenRotationTest {
     void testRevokeAllForUser_WithReason() {
         // Arrange
         Long userId = 1L;
-        when(redisTemplate.opsForSet().members(anyString())).thenReturn(
+        when(setOperations.members(anyString())).thenReturn(
                 java.util.Set.of("token1_hash", "token2_hash", "token3_hash")
         );
 
@@ -156,7 +168,7 @@ class RefreshTokenRotationTest {
 
         // Assert
         assertEquals(3, revokedCount);
-        verify(redisTemplate, times(1)).executePipelined(any(RedisCallback.class));
+        verify(redisTemplate, times(1)).executePipelined(any(org.springframework.data.redis.core.SessionCallback.class));
         verify(tokenMetrics, times(1)).recordTokenRevocation(userId, "session_timeout");
     }
 
@@ -172,6 +184,6 @@ class RefreshTokenRotationTest {
 
         // Assert
         assertEquals(0, revokedCount);
-        verify(redisTemplate, never()).executePipelined(any(RedisCallback.class));
+        verify(redisTemplate, never()).executePipelined(any(org.springframework.data.redis.core.SessionCallback.class));
     }
 }

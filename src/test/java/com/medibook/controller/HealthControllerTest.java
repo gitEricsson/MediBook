@@ -27,6 +27,19 @@ public class HealthControllerTest {
     private MockMvc mockMvc;
 
     @MockBean
+    private com.medibook.security.JwtTokenProvider jwtTokenProvider;
+
+    @MockBean
+    private com.medibook.security.CustomUserDetailsService customUserDetailsService;
+
+    @MockBean
+    private com.medibook.domain.user.service.SessionTimeoutService sessionTimeoutService;
+
+    @MockBean
+    @SuppressWarnings("rawtypes")
+    private org.springframework.data.redis.core.RedisTemplate redisTemplate;
+
+    @MockBean
     private DatabaseHealthCheck databaseHealthCheck;
 
     @MockBean

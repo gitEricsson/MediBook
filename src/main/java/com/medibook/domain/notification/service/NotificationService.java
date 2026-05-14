@@ -87,6 +87,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send appointment booked notification", e);
@@ -107,6 +111,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send appointment confirmed notification", e);
@@ -130,6 +138,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send appointment cancelled notification", e);
@@ -150,6 +162,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send appointment reminder notification", e);
@@ -170,6 +186,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send payment succeeded notification", e);
@@ -190,6 +210,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send payment failed notification", e);
@@ -210,6 +234,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send refund issued notification", e);
@@ -230,6 +258,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send review approved notification", e);
@@ -250,6 +282,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send waitlist promoted notification", e);
@@ -270,6 +306,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send waitlist joined notification", e);
@@ -293,6 +333,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send telemedicine session ready notification", e);
@@ -313,6 +357,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send telemedicine patient waiting notification", e);
@@ -333,6 +381,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send urgency alert notification", e);
@@ -353,6 +405,10 @@ public class NotificationService implements MessageListener {
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
                 log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send chat escalation required notification", e);

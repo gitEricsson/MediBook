@@ -36,29 +36,18 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
     /**
      * Find invoice by ID including soft-deleted records (admin only).
      */
-    @Query("""
-        SELECT i FROM Invoice i
-        WHERE i.id = :id
-        """)
+    @Query(value = "SELECT * FROM invoices WHERE id = :id", nativeQuery = true)
     Optional<Invoice> findByIdIncludeDeleted(@Param("id") Long id);
 
     /**
      * Find deleted invoices in a date range for audit/recovery.
      */
-    @Query("""
-        SELECT i FROM Invoice i
-        WHERE i.deletedAt IS NOT NULL
-        AND i.deletedAt BETWEEN :from AND :to
-        ORDER BY i.deletedAt DESC
-        """)
+    @Query(value = "SELECT * FROM invoices WHERE deleted_at IS NOT NULL AND deleted_at BETWEEN :from AND :to ORDER BY deleted_at DESC", nativeQuery = true)
     List<Invoice> findDeletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     /**
      * Count soft-deleted invoices.
      */
-    @Query("""
-        SELECT COUNT(i) FROM Invoice i
-        WHERE i.deletedAt IS NOT NULL
-        """)
+    @Query(value = "SELECT COUNT(*) FROM invoices WHERE deleted_at IS NOT NULL", nativeQuery = true)
     long countDeleted();
 }

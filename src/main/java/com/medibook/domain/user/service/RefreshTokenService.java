@@ -108,6 +108,7 @@ public class RefreshTokenService {
                     return null;
                 }
             });
+            tokenMetrics.recordTokenRotation(userId);
             return new RotationResult(userId, newToken);
         } finally {
             redisTemplate.delete(ROTATION_LOCK_PREFIX + oldHash);

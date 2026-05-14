@@ -84,6 +84,7 @@ abstract class IntegrationTestSupport {
     static void integrationProperties(DynamicPropertyRegistry registry) {
         registry.add("spring.kafka.listener.auto-startup", () -> "false");
         registry.add("spring.kafka.admin.fail-fast", () -> "false");
+        registry.add("medibook.rate-limit.enabled", () -> "false");
 
         if (CONTAINERS_RUNNING) {
             registry.add("spring.datasource.url", MYSQL::getJdbcUrl);

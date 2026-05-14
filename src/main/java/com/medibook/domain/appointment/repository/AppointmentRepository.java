@@ -202,29 +202,18 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     /**
      * Find appointment by ID including soft-deleted records (admin only).
      */
-    @Query("""
-        SELECT a FROM Appointment a
-        WHERE a.id = :id
-        """)
+    @Query(value = "SELECT * FROM appointments WHERE id = :id", nativeQuery = true)
     Optional<Appointment> findByIdIncludeDeleted(@Param("id") Long id);
 
     /**
      * Find deleted appointments in a date range for audit/recovery.
      */
-    @Query("""
-        SELECT a FROM Appointment a
-        WHERE a.deletedAt IS NOT NULL
-        AND a.deletedAt BETWEEN :from AND :to
-        ORDER BY a.deletedAt DESC
-        """)
+    @Query(value = "SELECT * FROM appointments WHERE deleted_at IS NOT NULL AND deleted_at BETWEEN :from AND :to ORDER BY deleted_at DESC", nativeQuery = true)
     List<Appointment> findDeletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     /**
      * Count soft-deleted appointments.
      */
-    @Query("""
-        SELECT COUNT(a) FROM Appointment a
-        WHERE a.deletedAt IS NOT NULL
-        """)
+    @Query(value = "SELECT COUNT(*) FROM appointments WHERE deleted_at IS NOT NULL", nativeQuery = true)
     long countDeleted();
 }

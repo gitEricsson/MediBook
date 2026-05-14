@@ -6,6 +6,8 @@ import com.medibook.domain.appointment.entity.AppointmentType;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.consultation.entity.ConsultationNote;
 import com.medibook.domain.consultation.repository.ConsultationNoteRepository;
+import com.medibook.domain.department.entity.Department;
+import com.medibook.domain.department.repository.DepartmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.payment.entity.Invoice;
@@ -20,8 +22,9 @@ import com.medibook.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.transaction.annotation.Transactional;
+
+import jakarta.persistence.EntityManager;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -31,9 +34,11 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
 @Transactional
-public class SoftDeleteIntegrationTest {
+public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Autowired
     private AppointmentRepository appointmentRepository;
@@ -53,6 +58,9 @@ public class SoftDeleteIntegrationTest {
     @Autowired
     private DoctorRepository doctorRepository;
 
+    @Autowired
+    private DepartmentRepository departmentRepository;
+
     private User patient;
     private User doctor;
     private Doctor doctorEntity;
@@ -64,6 +72,7 @@ public class SoftDeleteIntegrationTest {
         // Create test patient
         patient = User.builder()
                 .email("patient@test.com")
+                .password("$2a$10$encodedPasswordForTesting")
                 .firstName("Patient")
                 .lastName("Test")
                 .phone("+1234567890")
@@ -75,6 +84,7 @@ public class SoftDeleteIntegrationTest {
         // Create test doctor user
         doctor = User.builder()
                 .email("doctor@test.com")
+                .password("$2a$10$encodedPasswordForTesting")
                 .firstName("Doctor")
                 .lastName("Test")
                 .phone("+9876543210")
@@ -83,11 +93,19 @@ public class SoftDeleteIntegrationTest {
                 .build();
         doctor = userRepository.save(doctor);
 
+        // Create department (required by Doctor)
+        long ts = System.nanoTime();
+        Department dept = departmentRepository.save(Department.builder()
+                .name("Cardiology-" + ts)
+                .code("CARD-" + (ts % 100000))
+                .build());
+
         // Create doctor entity
         doctorEntity = Doctor.builder()
                 .user(doctor)
+                .department(dept)
                 .specialization("Cardiology")
-                .licenseNumber("LIC123")
+                .licenseNumber("LIC123-" + System.nanoTime())
                 .yearsOfExperience(10)
                 .isActive(true)
                 .build();
@@ -128,6 +146,7 @@ public class SoftDeleteIntegrationTest {
         // Soft delete
         appointment.softDelete(1L);
         appointmentRepository.save(appointment);
+        flushAndClear();
 
         // Verify soft deleted - normal query should not find it
         Optional<Appointment> afterDelete = appointmentRepository.findById(appointment.getId());
@@ -146,14 +165,17 @@ public class SoftDeleteIntegrationTest {
         // Soft delete
         appointment.softDelete(1L);
         appointmentRepository.save(appointment);
+        flushAndClear();
 
         // Verify deleted
         Optional<Appointment> afterDelete = appointmentRepository.findById(appointment.getId());
         assertFalse(afterDelete.isPresent());
 
-        // Restore
-        appointment.restore();
-        appointmentRepository.save(appointment);
+        // Restore — load via include-deleted since @Where filters the entity
+        Appointment deleted = appointmentRepository.findByIdIncludeDeleted(appointment.getId()).orElseThrow();
+        deleted.restore();
+        appointmentRepository.save(deleted);
+        flushAndClear();
 
         // Verify restored
         Optional<Appointment> restored = appointmentRepository.findById(appointment.getId());
@@ -182,6 +204,7 @@ public class SoftDeleteIntegrationTest {
         // Soft delete
         note.softDelete(1L);
         consultationNoteRepository.save(note);
+        flushAndClear();
 
         // Verify soft deleted
         Optional<ConsultationNote> afterDelete = consultationNoteRepository.findById(note.getId());
@@ -202,6 +225,7 @@ public class SoftDeleteIntegrationTest {
         // Soft delete
         payment.softDelete(1L);
         paymentRepository.save(payment);
+        flushAndClear();
 
         // Verify soft deleted
         Optional<Payment> afterDelete = paymentRepository.findById(payment.getId());
@@ -237,6 +261,7 @@ public class SoftDeleteIntegrationTest {
         // Soft delete
         invoice.softDelete(1L);
         invoiceRepository.save(invoice);
+        flushAndClear();
 
         // Verify soft deleted
         Optional<Invoice> afterDelete = invoiceRepository.findById(invoice.getId());
@@ -253,6 +278,7 @@ public class SoftDeleteIntegrationTest {
         // Create and delete appointment
         appointment.softDelete(1L);
         appointmentRepository.save(appointment);
+        flushAndClear();
 
         LocalDateTime startRange = LocalDateTime.now().minusHours(1);
         LocalDateTime endRange = LocalDateTime.now().plusHours(1);
@@ -272,6 +298,7 @@ public class SoftDeleteIntegrationTest {
         // Delete appointment
         appointment.softDelete(1L);
         appointmentRepository.save(appointment);
+        flushAndClear();
 
         // Verify count increased
         long afterDelete = appointmentRepository.countDeleted();
@@ -280,6 +307,9 @@ public class SoftDeleteIntegrationTest {
 
     @Test
     void testMultipleDeletedRecords() {
+        long initialDeleted = appointmentRepository.countDeleted();
+        long initialTotal = appointmentRepository.findAll().size();
+
         // Create and delete multiple appointments
         Appointment apt2 = Appointment.builder()
                 .patient(patient)
@@ -297,12 +327,13 @@ public class SoftDeleteIntegrationTest {
         apt2.softDelete(2L);
         appointmentRepository.save(appointment);
         appointmentRepository.save(apt2);
+        flushAndClear();
 
-        // Verify deletion stats
-        assertEquals(2, appointmentRepository.countDeleted());
+        // Verify deletion stats — 2 more than before
+        assertEquals(initialDeleted + 2, appointmentRepository.countDeleted());
 
-        // Verify normal queries don't return deleted
-        assertEquals(0, appointmentRepository.findAll().size());
+        // setUp's appointment was in initialTotal and is now deleted; apt2 was created and deleted
+        assertEquals(initialTotal - 1, appointmentRepository.findAll().size());
     }
 
     @Test
@@ -310,6 +341,7 @@ public class SoftDeleteIntegrationTest {
         Long adminId = 42L;
         appointment.softDelete(adminId);
         appointmentRepository.save(appointment);
+        flushAndClear();
 
         Optional<Appointment> found = appointmentRepository.findByIdIncludeDeleted(appointment.getId());
         assertTrue(found.isPresent());
@@ -328,6 +360,7 @@ public class SoftDeleteIntegrationTest {
 
         appointment.softDelete(1L);
         appointmentRepository.save(appointment);
+        flushAndClear();
 
         Optional<Appointment> found = appointmentRepository.findByIdIncludeDeleted(appointment.getId());
         assertTrue(found.isPresent());
@@ -337,5 +370,10 @@ public class SoftDeleteIntegrationTest {
         assertEquals(createdAtBefore, deleted.getCreatedAt());
         // updatedAt may be updated by the database on save, but createdAt must not
         assertNotNull(deleted.getUpdatedAt());
+    }
+
+    private void flushAndClear() {
+        entityManager.flush();
+        entityManager.clear();
     }
 }

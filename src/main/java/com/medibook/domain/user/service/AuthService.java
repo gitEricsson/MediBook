@@ -113,7 +113,7 @@ public class AuthService {
         }
 
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
-        ensureCanAuthenticate(principal.isEnabled(), principal.getId());
+        ensureCanAuthenticate(principal.isAccountEnabled(), principal.getId());
 
         // Check email verification (skip for test users)
         if (!principal.isActive() && !isTestUser(principal.getEmail())) {

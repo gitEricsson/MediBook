@@ -41,14 +41,24 @@ class NotificationServiceTest {
     @Mock SimpMessagingTemplate           messagingTemplate;
     @Mock CacheManager                    cacheManager;
     @Mock Cache                           unreadCountCache;
+    @Mock com.medibook.infrastructure.metrics.NotificationMetrics notificationMetrics;
 
-    @InjectMocks NotificationService notificationService;
+    private org.springframework.retry.support.RetryTemplate notificationRetryTemplate;
+    private NotificationService notificationService;
 
     private AppointmentEvent event;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         lenient().when(cacheManager.getCache("notificationUnreadCounts")).thenReturn(unreadCountCache);
+        // Use a real single-attempt RetryTemplate so the callback executes directly
+        notificationRetryTemplate = new org.springframework.retry.support.RetryTemplate();
+        notificationRetryTemplate.setRetryPolicy(
+                new org.springframework.retry.policy.SimpleRetryPolicy(1));
+        notificationService = new NotificationService(
+                notificationRepository, cassandraOperations, stringRedisTemplate,
+                listenerContainer, objectMapper, messagingTemplate,
+                cacheManager, notificationRetryTemplate, notificationMetrics);
         event = AppointmentEvent.builder()
                 .appointmentId(100L)
                 .patientId(1L).patientName("Alice Patient").patientEmail("alice@test.com")

@@ -42,29 +42,18 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     /**
      * Find payment by ID including soft-deleted records (admin only).
      */
-    @Query("""
-        SELECT p FROM Payment p
-        WHERE p.id = :id
-        """)
+    @Query(value = "SELECT * FROM payments WHERE id = :id", nativeQuery = true)
     Optional<Payment> findByIdIncludeDeleted(@Param("id") Long id);
 
     /**
      * Find deleted payments in a date range for audit/recovery.
      */
-    @Query("""
-        SELECT p FROM Payment p
-        WHERE p.deletedAt IS NOT NULL
-        AND p.deletedAt BETWEEN :from AND :to
-        ORDER BY p.deletedAt DESC
-        """)
+    @Query(value = "SELECT * FROM payments WHERE deleted_at IS NOT NULL AND deleted_at BETWEEN :from AND :to ORDER BY deleted_at DESC", nativeQuery = true)
     List<Payment> findDeletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     /**
      * Count soft-deleted payments.
      */
-    @Query("""
-        SELECT COUNT(p) FROM Payment p
-        WHERE p.deletedAt IS NOT NULL
-        """)
+    @Query(value = "SELECT COUNT(*) FROM payments WHERE deleted_at IS NOT NULL", nativeQuery = true)
     long countDeleted();
 }

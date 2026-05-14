@@ -34,7 +34,7 @@ public class User extends AuditableEntity {
     @Column(name = "last_name", nullable = false, length = 100)
     private String lastName;
 
-    @Column(length = 20)
+    @Column(length = 128)
     @Convert(converter = EncryptedStringConverter.class)
     private String phone;
 

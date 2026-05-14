@@ -10,6 +10,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.concurrent.ConcurrentMapCacheManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
 import org.springframework.data.redis.cache.RedisCacheManager;
@@ -105,24 +106,28 @@ public class TestRedisConfig {
     }
 
     @Bean
+    @Primary
     @ConditionalOnProperty(name = "medibook.test.redis.mode", havingValue = "memory", matchIfMissing = true)
     public RedisTemplate<String, Object> inMemoryRedisTemplate() {
         return redisTemplateMock(new Store());
     }
 
     @Bean
+    @Primary
     @ConditionalOnProperty(name = "medibook.test.redis.mode", havingValue = "memory", matchIfMissing = true)
     public StringRedisTemplate inMemoryStringRedisTemplate() {
         return stringRedisTemplateMock(new Store());
     }
 
     @Bean
+    @Primary
     @ConditionalOnProperty(name = "medibook.test.redis.mode", havingValue = "memory", matchIfMissing = true)
     public RedisMessageListenerContainer inMemoryRedisMessageListenerContainer() {
         return mock(RedisMessageListenerContainer.class);
     }
 
     @Bean
+    @Primary
     @ConditionalOnProperty(name = "medibook.test.redis.mode", havingValue = "memory", matchIfMissing = true)
     public CacheManager inMemoryCacheManager() {
         return new ConcurrentMapCacheManager("users", "doctors", "departments", "appointments", "notificationUnreadCounts");

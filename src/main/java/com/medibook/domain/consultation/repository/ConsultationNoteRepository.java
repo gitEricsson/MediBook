@@ -31,29 +31,18 @@ public interface ConsultationNoteRepository extends JpaRepository<ConsultationNo
     /**
      * Find consultation note by ID including soft-deleted records (admin only).
      */
-    @Query("""
-        SELECT cn FROM ConsultationNote cn
-        WHERE cn.id = :id
-        """)
+    @Query(value = "SELECT * FROM consultation_notes WHERE id = :id", nativeQuery = true)
     Optional<ConsultationNote> findByIdIncludeDeleted(@Param("id") Long id);
 
     /**
      * Find deleted consultation notes in a date range for audit/recovery.
      */
-    @Query("""
-        SELECT cn FROM ConsultationNote cn
-        WHERE cn.deletedAt IS NOT NULL
-        AND cn.deletedAt BETWEEN :from AND :to
-        ORDER BY cn.deletedAt DESC
-        """)
+    @Query(value = "SELECT * FROM consultation_notes WHERE deleted_at IS NOT NULL AND deleted_at BETWEEN :from AND :to ORDER BY deleted_at DESC", nativeQuery = true)
     List<ConsultationNote> findDeletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
 
     /**
      * Count soft-deleted consultation notes.
      */
-    @Query("""
-        SELECT COUNT(cn) FROM ConsultationNote cn
-        WHERE cn.deletedAt IS NOT NULL
-        """)
+    @Query(value = "SELECT COUNT(*) FROM consultation_notes WHERE deleted_at IS NOT NULL", nativeQuery = true)
     long countDeleted();
 }

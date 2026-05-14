@@ -110,31 +110,31 @@ class AiSupportControllerIntegrationTest extends IntegrationTestSupport {
     class Validation {
 
         @Test
-        @DisplayName("blank message returns 400 Bad Request")
-        void blankMessageReturnsBadRequest() throws Exception {
+        @DisplayName("blank message returns 422 Unprocessable Entity")
+        void blankMessageReturnsUnprocessableEntity() throws Exception {
             mockMvc.perform(post("/api/v1/ai/chat")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("message", ""))))
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isUnprocessableEntity());
         }
 
         @Test
-        @DisplayName("missing message field returns 400 Bad Request")
-        void missingMessageReturnsBadRequest() throws Exception {
+        @DisplayName("missing message field returns 422 Unprocessable Entity")
+        void missingMessageReturnsUnprocessableEntity() throws Exception {
             mockMvc.perform(post("/api/v1/ai/chat")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isUnprocessableEntity());
         }
 
         @Test
-        @DisplayName("message over 2000 characters returns 400 Bad Request")
-        void oversizeMessageReturnsBadRequest() throws Exception {
+        @DisplayName("message over 2000 characters returns 422 Unprocessable Entity")
+        void oversizeMessageReturnsUnprocessableEntity() throws Exception {
             String longMessage = "a".repeat(2001);
             mockMvc.perform(post("/api/v1/ai/chat")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(Map.of("message", longMessage))))
-                    .andExpect(status().isBadRequest());
+                    .andExpect(status().isUnprocessableEntity());
         }
     }
 

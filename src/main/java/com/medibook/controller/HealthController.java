@@ -1,7 +1,7 @@
 package com.medibook.controller;
 
 import com.medibook.infrastructure.health.*;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -11,28 +11,27 @@ import org.springframework.web.bind.annotation.RestController;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
-/**
- * Health Check Controller for Kubernetes and orchestration probes.
- *
- * - GET /health/live: Liveness probe (is the app running?)
- *   Returns 200 if app is running, 503 otherwise.
- *   Minimal checks, can be called frequently (10-30s intervals).
- *
- * - GET /health/ready: Readiness probe (can it handle traffic?)
- *   Returns 200 only if all dependencies are healthy.
- *   Slower, called less frequently (30-60s intervals).
- *   Checks: Database, Redis, Kafka, Cassandra.
- */
 @RestController
 @RequestMapping("/health")
-@RequiredArgsConstructor
 public class HealthController {
 
     private final DatabaseHealthCheck databaseHealthCheck;
     private final RedisHealthCheck redisHealthCheck;
     private final KafkaHealthCheck kafkaHealthCheck;
-    private final CassandraHealthCheck cassandraHealthCheck;
+    private final Optional<CassandraHealthCheck> cassandraHealthCheck;
+
+    @Autowired
+    public HealthController(DatabaseHealthCheck databaseHealthCheck,
+                            RedisHealthCheck redisHealthCheck,
+                            KafkaHealthCheck kafkaHealthCheck,
+                            Optional<CassandraHealthCheck> cassandraHealthCheck) {
+        this.databaseHealthCheck   = databaseHealthCheck;
+        this.redisHealthCheck      = redisHealthCheck;
+        this.kafkaHealthCheck      = kafkaHealthCheck;
+        this.cassandraHealthCheck  = cassandraHealthCheck;
+    }
 
     /**
      * Liveness probe: Is the app running?
@@ -79,15 +78,18 @@ public class HealthController {
         HealthCheckResult kafka = kafkaHealthCheck.check();
         components.put("kafka", buildComponentResponse(kafka));
 
-        HealthCheckResult cassandra = cassandraHealthCheck.check();
-        components.put("cassandra", buildComponentResponse(cassandra));
+        boolean cassandraHealthy = true;
+        if (cassandraHealthCheck.isPresent()) {
+            HealthCheckResult cassandra = cassandraHealthCheck.get().check();
+            components.put("cassandra", buildComponentResponse(cassandra));
+            cassandraHealthy = cassandra.isHealthy();
+        }
 
         response.put("components", components);
         response.put("timestamp", Instant.now());
 
-        // Determine overall status
         boolean allHealthy = database.isHealthy() && redis.isHealthy() &&
-                           kafka.isHealthy() && cassandra.isHealthy();
+                           kafka.isHealthy() && cassandraHealthy;
 
         String status = allHealthy ? "UP" : "DOWN";
         response.put("status", status);

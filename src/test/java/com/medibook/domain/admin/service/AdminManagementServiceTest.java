@@ -38,6 +38,7 @@ class AdminManagementServiceTest {
     @Mock UserRepository      userRepository;
     @Mock PasswordEncoder     passwordEncoder;
     @Mock RefreshTokenService refreshTokenService;
+    @Mock com.medibook.messaging.producer.AppointmentEventProducer eventProducer;
 
     @InjectMocks AdminManagementService service;
 

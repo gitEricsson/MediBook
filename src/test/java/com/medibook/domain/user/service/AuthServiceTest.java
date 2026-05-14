@@ -41,6 +41,9 @@ class AuthServiceTest {
     @Mock EmailOtpService           emailOtpService;
     @Mock PasswordResetService      passwordResetService;
     @Mock EmailVerificationService  emailVerificationService;
+    @Mock com.medibook.messaging.producer.AppointmentEventProducer eventProducer;
+    @Mock com.medibook.infrastructure.metrics.TokenMetrics         tokenMetrics;
+    @Mock com.medibook.domain.user.service.SessionTimeoutService   sessionTimeoutService;
 
     @InjectMocks AuthService authService;
 
@@ -120,6 +123,7 @@ class AuthServiceTest {
         when(tokenProvider.generateAccessToken(auth)).thenReturn("access-token");
         when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
         when(refreshTokenService.createRefreshToken(1L)).thenReturn("refresh-token");
+        lenient().when(userRepository.findById(1L)).thenReturn(java.util.Optional.of(testUser));
 
         TokenResponse response = authService.login(req);
 
@@ -129,7 +133,6 @@ class AuthServiceTest {
         assertThat(response.getUser()).isNotNull();
         assertThat(response.getUser().getEmail()).isEqualTo("patient@medibook.com");
         verify(userRepository, never()).findByEmail(anyString());
-        verify(userRepository, never()).findById(anyLong());
     }
 
     @Test

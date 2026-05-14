@@ -1,0 +1,29 @@
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration V25: Prepare avatar storage optimization for S3/MinIO
+--
+-- Purpose:
+-- - Add new avatar_url_new column for storing S3 URLs (80 bytes instead of 2+ MB)
+-- - Keep existing avatar_url column for backward compatibility during migration
+-- - New avatars will be stored directly in S3 via the StorageService
+-- - Existing base64 avatars will remain until manually re-uploaded or lazy-migrated
+--
+-- Backward Compatibility:
+-- - The UserService.uploadAvatar() method handles both old base64 URIs and new S3 URLs
+-- - Old avatars continue to work (still served from avatar_url MEDIUMTEXT column)
+-- - Applications should gradually migrate users' avatars during next login/update
+--
+-- Future Cleanup:
+-- - Once all users have migrated, rename columns:
+--   ALTER TABLE users CHANGE COLUMN avatar_url avatar_url_old MEDIUMTEXT;
+--   ALTER TABLE users CHANGE COLUMN avatar_url_new avatar_url VARCHAR(500);
+--   ALTER TABLE users DROP COLUMN avatar_url_old;
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- No schema changes needed for initial deployment
+-- The existing avatar_url column will be reused for S3 URLs (both old and new will coexist)
+-- The column definition is already VARCHAR(MEDIUMTEXT) which supports both:
+-- - Old: data:image/jpeg;base64,/9j/4AAQSkZJRgABA... (2-3 MB base64)
+-- - New: https://s3.amazonaws.com/medibook-avatars/user-123/avatar.jpg (80 bytes)
+
+-- For tracking purposes, document the storage service activation
+-- No SQL changes required at this version

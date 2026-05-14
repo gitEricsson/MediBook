@@ -193,6 +193,11 @@ app:
       video-status-callback-url: ${TWILIO_VIDEO_STATUS_CALLBACK_URL:}
   api-docs:
     enabled: ${OPENAPI_ENABLED:false}
+  storage:
+    type: ${STORAGE_TYPE:local}
+    s3:
+      bucket: ${AWS_S3_BUCKET:medibook-avatars}
+      region: ${AWS_REGION:us-east-1}
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:

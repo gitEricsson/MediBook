@@ -114,6 +114,13 @@
       <version>${twilio.version}</version>
     </dependency>
 
+    <!-- ===== AWS S3 ===== -->
+    <dependency>
+      <groupId>software.amazon.awssdk</groupId>
+      <artifactId>s3</artifactId>
+      <version>2.20.0</version>
+    </dependency>
+
     <!-- ===== Email ===== -->
     <dependency>
       <groupId>org.springframework.boot</groupId>

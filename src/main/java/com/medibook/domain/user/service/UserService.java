@@ -8,8 +8,11 @@ import com.medibook.domain.user.dto.UserResponse;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
+import com.medibook.infrastructure.storage.StorageException;
+import com.medibook.infrastructure.storage.StorageService;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
@@ -20,11 +23,11 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Arrays;
-import java.util.Base64;
-import java.util.Set;
-
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class UserService {
@@ -33,6 +36,7 @@ public class UserService {
     private final AuthService       authService;
     private final RefreshTokenService refreshTokenService;
     private final AuditLogService   auditLogService;
+    private final StorageService    storageService;
 
     @Cacheable(value = "users", key = "#id")
     @Bulkhead(name = "patientService")
@@ -163,9 +167,27 @@ public class UserService {
             if (!isValidImage) {
                 throw new MediBookException("File is not a valid image (JPEG, PNG, or WebP)", HttpStatus.BAD_REQUEST, "INVALID_IMAGE_FORMAT");
             }
-            String dataUri = "data:" + mimeType + ";base64," + Base64.getEncoder().encodeToString(bytes);
-            user.setAvatarUrl(dataUri);
+
+            // Delete old avatar if it exists and is not a data URI
+            if (user.getAvatarUrl() != null && !user.getAvatarUrl().startsWith("data:")) {
+                try {
+                    storageService.deleteFile(user.getAvatarUrl());
+                } catch (StorageException e) {
+                    log.warn("Failed to delete old avatar for user {}: {}", userId, e.getMessage());
+                }
+            }
+
+            // Upload to storage service
+            String filename = "avatars/user-" + userId + "/" + UUID.randomUUID() + ".jpg";
+            String avatarUrl = storageService.uploadFile(bytes, filename, mimeType);
+            user.setAvatarUrl(avatarUrl);
+
+            log.info("Avatar uploaded successfully for user {}", userId);
+        } catch (StorageException e) {
+            log.error("Storage error while uploading avatar for user {}: {}", userId, e.getMessage());
+            throw new MediBookException("Failed to upload avatar to storage", HttpStatus.INTERNAL_SERVER_ERROR, "UPLOAD_FAILED");
         } catch (Exception e) {
+            log.error("Failed to process avatar image for user {}: {}", userId, e.getMessage());
             throw new MediBookException("Failed to process avatar image", HttpStatus.INTERNAL_SERVER_ERROR, "UPLOAD_FAILED");
         }
 

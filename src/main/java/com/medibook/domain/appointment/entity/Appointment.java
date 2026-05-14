@@ -1,6 +1,6 @@
 package com.medibook.domain.appointment.entity;
 
-import com.medibook.common.audit.AuditableEntity;
+import com.medibook.common.audit.SoftDeleteEntity;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.schedule.entity.AppointmentSeries;
@@ -8,6 +8,8 @@ import com.medibook.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
 import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
@@ -20,8 +22,10 @@ import java.time.LocalDateTime;
             @Index(name = "idx_appt_status",    columnList = "status"),
             @Index(name = "idx_appt_scheduled", columnList = "scheduled_at")
         })
+@SQLDelete(sql = "UPDATE appointments SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?1 WHERE id = ?2")
+@Where(clause = "deleted_at IS NULL")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Appointment extends AuditableEntity {
+public class Appointment extends SoftDeleteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,7 +1,9 @@
 package com.medibook.jobs;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.core.RedisCallback;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -22,11 +24,27 @@ import org.springframework.stereotype.Component;
 public class TokenCleanupJob {
 
     private final RedisTemplate<String, Object> redisTemplate;
+    private final MeterRegistry meterRegistry;
 
     @Scheduled(cron = "0 0 3 ? * SUN")   // Sunday 03:00
+    @SchedulerLock(name = "TokenCleanupJob_cleanRevokedTokens", lockAtMostFor = "2h", lockAtLeastFor = "1m")
     public void cleanRevokedTokens() {
-        long count = countKeys("revoked:*");
-        log.info("TokenCleanupJob: {} revoked token records in Redis (TTL-managed)", count);
+        try {
+            long count = countKeys("revoked:*");
+            log.info("TokenCleanupJob: {} revoked token records in Redis (TTL-managed)", count);
+
+            // Verify cleanup: check for expired tokens
+            long expiredCount = countKeys("refresh_token_*");
+            if (expiredCount > 0) {
+                log.warn("Token cleanup incomplete: {} expired tokens remain", expiredCount);
+            }
+
+            // Record metric for monitoring
+            meterRegistry.gauge("tokens.expired.remaining", expiredCount);
+        } catch (Exception ex) {
+            log.error("TokenCleanupJob failed with error", ex);
+            meterRegistry.counter("scheduled.job.failure", "job", "TokenCleanupJob").increment();
+        }
     }
 
     private long countKeys(String pattern) {

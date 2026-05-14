@@ -8,6 +8,7 @@ import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -29,7 +30,7 @@ public class WaitlistController {
     @PreAuthorize("hasRole('PATIENT')")
     @Operation(summary = "Join the waitlist for a doctor or specialty")
     public ApiResponse<WaitlistResponse> joinWaitlist(
-            @RequestBody WaitlistRequest request,
+            @Valid @RequestBody WaitlistRequest request,
             @CurrentUser UserPrincipal principal) {
         return ApiResponse.ok(waitlistService.joinWaitlist(request, principal));
     }

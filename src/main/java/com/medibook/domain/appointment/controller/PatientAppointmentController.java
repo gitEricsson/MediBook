@@ -37,7 +37,16 @@ public class PatientAppointmentController {
 
     @PostMapping("/appointments")
     @PreAuthorize("hasRole('PATIENT')")
-    @Operation(summary = "Book a new appointment")
+    @Operation(
+        summary = "Book a new appointment",
+        description = "Creates a new appointment request with a doctor. Supports idempotency via Idempotency-Key header.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="201", description = "Appointment successfully created")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="400", description = "Invalid appointment request")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized - authentication required")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - patient role required")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="409", description = "Conflict - slot not available")
     public ResponseEntity<ApiResponse<AppointmentResponse>> book(
             @CurrentUser UserPrincipal principal,
             @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
@@ -53,7 +62,15 @@ public class PatientAppointmentController {
 
     @RequestMapping(path = {"/appointments/{id}/ics", "/appointments/{id}/calendar.ics"}, method = {RequestMethod.GET, RequestMethod.POST})
     @PreAuthorize("isAuthenticated()")
-    @Operation(summary = "Download ICS calendar file for an appointment")
+    @Operation(
+        summary = "Download ICS calendar file",
+        description = "Exports appointment details as an iCalendar file for calendar applications.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "ICS file generated successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - not authorized to access this appointment")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found")
     public ResponseEntity<byte[]> getCalendarIcs(
             @PathVariable Long id,
             @CurrentUser UserPrincipal principal) {
@@ -77,7 +94,14 @@ public class PatientAppointmentController {
 
     @GetMapping("/me/appointments")
     @PreAuthorize("hasRole('PATIENT')")
-    @Operation(summary = "List my appointments")
+    @Operation(
+        summary = "List my appointments",
+        description = "Retrieves paginated list of appointments for authenticated patient (upcoming or past).",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointments retrieved successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden")
     public ResponseEntity<ApiResponse<Page<AppointmentResponse>>> myAppointments(
             @CurrentUser UserPrincipal principal,
             @RequestParam(defaultValue = "upcoming") String tab,
@@ -94,7 +118,14 @@ public class PatientAppointmentController {
 
     @GetMapping("/me/appointments/cursor")
     @PreAuthorize("hasRole('PATIENT')")
-    @Operation(summary = "List my appointments with cursor pagination")
+    @Operation(
+        summary = "List my appointments (cursor pagination)",
+        description = "Retrieves appointments using cursor-based pagination for efficient large dataset handling.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointments retrieved successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden")
     public ResponseEntity<ApiResponse<CursorPageResponse<AppointmentResponse>>> myAppointmentsCursor(
             @CurrentUser UserPrincipal principal,
             @RequestParam(defaultValue = "upcoming") String tab,
@@ -106,7 +137,15 @@ public class PatientAppointmentController {
 
     @GetMapping("/me/appointments/{id}")
     @PreAuthorize("hasRole('PATIENT')")
-    @Operation(summary = "Get full visit detail")
+    @Operation(
+        summary = "Get appointment detail",
+        description = "Retrieves complete details for a specific appointment owned by the authenticated patient.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointment details retrieved successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - not authorized to view this appointment")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found")
     public ResponseEntity<ApiResponse<AppointmentResponse>> getMyAppointmentDetail(
             @PathVariable Long id, @CurrentUser UserPrincipal principal) {
         AppointmentResponse appt = appointmentService.getById(id);
@@ -119,7 +158,17 @@ public class PatientAppointmentController {
 
     @PostMapping("/appointments/{id}/cancel")
     @PreAuthorize("hasRole('PATIENT')")
-    @Operation(summary = "Cancel an appointment")
+    @Operation(
+        summary = "Cancel an appointment",
+        description = "Cancels an appointment with optional cancellation reason. Subject to cancellation policy constraints.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointment cancelled successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="400", description = "Invalid cancellation request")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - cannot cancel appointment")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="409", description = "Conflict - appointment cannot be cancelled (e.g., already completed)")
     public ResponseEntity<ApiResponse<AppointmentResponse>> cancel(
             @PathVariable Long id,
             @Valid @RequestBody CancelRequest request,
@@ -129,7 +178,17 @@ public class PatientAppointmentController {
 
     @PostMapping("/appointments/{id}/reschedule")
     @PreAuthorize("hasRole('PATIENT')")
-    @Operation(summary = "Reschedule an appointment")
+    @Operation(
+        summary = "Reschedule an appointment",
+        description = "Changes appointment date/time to a new available slot. Subject to rescheduling policies.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointment rescheduled successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="400", description = "Invalid reschedule request")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - cannot reschedule appointment")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="409", description = "Conflict - new slot not available")
     public ResponseEntity<ApiResponse<AppointmentResponse>> reschedule(
             @PathVariable Long id, 
             @Valid @RequestBody RescheduleRequest request,
@@ -138,7 +197,12 @@ public class PatientAppointmentController {
     }
 
     @GetMapping("/policies/cancellation")
-    @Operation(summary = "Get cancellation policy details")
+    @Operation(
+        summary = "Get cancellation policy",
+        description = "Retrieves the platform's appointment cancellation policy and fee schedule.",
+        tags = {"Patient Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Cancellation policy retrieved successfully")
     public ResponseEntity<ApiResponse<CancellationPolicyResponse>> getCancellationPolicy() {
         return ResponseEntity.ok(ApiResponse.ok(appointmentService.getCancellationPolicy()));
     }

@@ -272,18 +272,16 @@ public class TelemedicineCallService {
     private VideoCallResponse responseWithToken(TelemedicineSession session, UserPrincipal principal) {
         TwilioTokenService.TokenResult token = twilioTokenService.generateVideoToken(
                 identity(principal.getId()), session.getTwilioRoomName());
-        return responseBuilder(session)
-                .token(token.token())
-                .identity(identity(principal.getId()))
-                .tokenExpiresAt(token.expiresAt())
-                .build();
+        return buildResponse(session, token.token(), identity(principal.getId()), token.expiresAt());
     }
 
     private VideoCallResponse response(TelemedicineSession session) {
-        return responseBuilder(session).build();
+        return buildResponse(session, null, null, null);
     }
 
-    private VideoCallResponse.VideoCallResponseBuilder responseBuilder(TelemedicineSession session) {
+    private VideoCallResponse buildResponse(TelemedicineSession session,
+                                             String token, String identity,
+                                             java.time.Instant tokenExpiresAt) {
         return VideoCallResponse.builder()
                 .sessionId(session.getId())
                 .appointmentId(session.getAppointment().getId())
@@ -296,7 +294,11 @@ public class TelemedicineCallService {
                 .startedAt(session.getStartedAt())
                 .acceptedAt(session.getAcceptedAt())
                 .endedAt(session.getEndedAt())
-                .durationSeconds(session.getDurationSeconds());
+                .durationSeconds(session.getDurationSeconds())
+                .token(token)
+                .identity(identity)
+                .tokenExpiresAt(tokenExpiresAt)
+                .build();
     }
 
     private String identity(Long userId) {

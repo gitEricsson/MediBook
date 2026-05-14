@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -35,4 +36,35 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
         GROUP BY p.status
         """)
     List<Object[]> getPaymentStats(java.time.LocalDateTime from, java.time.LocalDateTime to);
+
+    // Soft delete methods (admin only)
+
+    /**
+     * Find payment by ID including soft-deleted records (admin only).
+     */
+    @Query("""
+        SELECT p FROM Payment p
+        WHERE p.id = :id
+        """)
+    Optional<Payment> findByIdIncludeDeleted(@Param("id") Long id);
+
+    /**
+     * Find deleted payments in a date range for audit/recovery.
+     */
+    @Query("""
+        SELECT p FROM Payment p
+        WHERE p.deletedAt IS NOT NULL
+        AND p.deletedAt BETWEEN :from AND :to
+        ORDER BY p.deletedAt DESC
+        """)
+    List<Payment> findDeletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /**
+     * Count soft-deleted payments.
+     */
+    @Query("""
+        SELECT COUNT(p) FROM Payment p
+        WHERE p.deletedAt IS NOT NULL
+        """)
+    long countDeleted();
 }

@@ -7,6 +7,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
@@ -195,4 +196,35 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
         ORDER BY COUNT(a) DESC
         """)
     List<Object[]> getDepartmentCapacityStats(LocalDateTime from, LocalDateTime to);
+
+    // Soft delete methods (admin only)
+
+    /**
+     * Find appointment by ID including soft-deleted records (admin only).
+     */
+    @Query("""
+        SELECT a FROM Appointment a
+        WHERE a.id = :id
+        """)
+    Optional<Appointment> findByIdIncludeDeleted(@Param("id") Long id);
+
+    /**
+     * Find deleted appointments in a date range for audit/recovery.
+     */
+    @Query("""
+        SELECT a FROM Appointment a
+        WHERE a.deletedAt IS NOT NULL
+        AND a.deletedAt BETWEEN :from AND :to
+        ORDER BY a.deletedAt DESC
+        """)
+    List<Appointment> findDeletedBetween(@Param("from") LocalDateTime from, @Param("to") LocalDateTime to);
+
+    /**
+     * Count soft-deleted appointments.
+     */
+    @Query("""
+        SELECT COUNT(a) FROM Appointment a
+        WHERE a.deletedAt IS NOT NULL
+        """)
+    long countDeleted();
 }

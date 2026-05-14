@@ -8,8 +8,10 @@ import com.medibook.domain.waitlist.repository.WaitlistRepository;
 import com.medibook.messaging.KafkaTopics;
 import com.medibook.messaging.event.WaitlistEvent;
 import com.medibook.messaging.producer.OutboxEventProducer;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -24,6 +26,7 @@ import java.util.UUID;
  * Promotes waitlist entries when a cancellation opens a slot.
  * Runs every 5 minutes. For each cancelled appointment, checks if any waitlist
  * entry is eligible for the freed slot and creates a new appointment for them.
+ * Includes error handling with retry logic for critical job.
  */
 @Slf4j
 @Component
@@ -34,10 +37,33 @@ public class WaitlistPromotionJob {
     private final WaitlistRepository    waitlistRepository;
     private final AppointmentRepository appointmentRepository;
     private final OutboxEventProducer   eventProducer;
+    private final MeterRegistry meterRegistry;
 
     @Scheduled(fixedDelay = 300_000, initialDelay = 60_000)
+    @SchedulerLock(name = "WaitlistPromotionJob_promoteWaitlistEntries", lockAtMostFor = "5m", lockAtLeastFor = "30s")
     @Transactional
     public void promoteWaitlistEntries() {
+        try {
+            promoteWaitlistEntriesImpl();
+        } catch (Exception ex) {
+            log.error("WaitlistPromotionJob failed with error", ex);
+            meterRegistry.counter("scheduled.job.failure", "job", "WaitlistPromotionJob").increment();
+            // Retry once after 5 seconds for critical job
+            try {
+                Thread.sleep(5_000);
+                promoteWaitlistEntriesImpl();
+                log.info("WaitlistPromotionJob retry succeeded");
+            } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                log.error("WaitlistPromotionJob retry interrupted", ie);
+            } catch (Exception retryEx) {
+                log.error("WaitlistPromotionJob retry failed", retryEx);
+                meterRegistry.counter("scheduled.job.failure", "job", "WaitlistPromotionJob").increment();
+            }
+        }
+    }
+
+    private void promoteWaitlistEntriesImpl() {
         // Find recently cancelled appointments that were in the future
         List<Appointment> recentCancellations = appointmentRepository.findByStatus(
                 AppointmentStatus.CANCELLED, org.springframework.data.domain.Pageable.ofSize(50))

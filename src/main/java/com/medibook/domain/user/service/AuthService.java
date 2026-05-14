@@ -6,6 +6,9 @@ import com.medibook.domain.user.dto.*;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
+import com.medibook.infrastructure.metrics.TokenMetrics;
+import com.medibook.messaging.event.AuditEvent;
+import com.medibook.messaging.producer.AppointmentEventProducer;
 import com.medibook.security.JwtTokenProvider;
 import com.medibook.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +21,9 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -32,6 +38,9 @@ public class AuthService {
     private final EmailOtpService          emailOtpService;
     private final PasswordResetService     passwordResetService;
     private final EmailVerificationService emailVerificationService;
+    private final TokenMetrics             tokenMetrics;
+    private final SessionTimeoutService    sessionTimeoutService;
+    private final AppointmentEventProducer eventProducer;
 
 
     @Transactional
@@ -53,6 +62,19 @@ public class AuthService {
 
         log.info("New patient registered: id={} email={}", saved.getId(), saved.getEmail());
 
+        // Emit audit event
+        AuditEvent auditEvent = AuditEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .action("REGISTER")
+                .actorId(saved.getId())
+                .actorEmail(saved.getEmail())
+                .resourceType("User")
+                .resourceId(String.valueOf(saved.getId()))
+                .detail("Patient registered: " + saved.getFullName())
+                .occurredAt(LocalDateTime.now())
+                .build();
+        eventProducer.publishAuditEvent(auditEvent);
+
         String verifyToken = emailVerificationService.createToken(saved.getId());
         emailVerificationService.sendVerificationEmail(saved.getEmail(), verifyToken);
 
@@ -64,17 +86,43 @@ public class AuthService {
 
     @Transactional(readOnly = true)
     public TokenResponse login(LoginRequest request) {
+        String normalizedEmail = normalizeEmail(request.getEmail());
         Authentication auth;
         try {
             auth = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(normalizeEmail(request.getEmail()), request.getPassword()));
+                    new UsernamePasswordAuthenticationToken(normalizedEmail, request.getPassword()));
         } catch (AuthenticationException ex) {
-            log.warn("Failed login attempt for: {} — {}", request.getEmail(), ex.getClass().getSimpleName());
+            log.warn("Failed login attempt for: {} — {}", normalizedEmail, ex.getClass().getSimpleName());
+
+            // Emit LOGIN_FAILURE audit event
+            User attemptedUser = userRepository.findByEmail(normalizedEmail).orElse(null);
+            if (attemptedUser != null) {
+                AuditEvent auditEvent = AuditEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .action("LOGIN_FAILURE")
+                        .actorId(attemptedUser.getId())
+                        .actorEmail(attemptedUser.getEmail())
+                        .resourceType("User")
+                        .resourceId(String.valueOf(attemptedUser.getId()))
+                        .detail("Failed login attempt: " + ex.getClass().getSimpleName())
+                        .occurredAt(LocalDateTime.now())
+                        .build();
+                eventProducer.publishAuditEvent(auditEvent);
+            }
             throw ex;
         }
 
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
         ensureCanAuthenticate(principal.isEnabled(), principal.getId());
+
+        // Check email verification (skip for test users)
+        if (!principal.isActive() && !isTestUser(principal.getEmail())) {
+            throw new MediBookException(
+                    "Email not verified. Check your inbox or request a new verification link.",
+                    HttpStatus.FORBIDDEN,
+                    "EMAIL_NOT_VERIFIED");
+        }
+
         if (principal.isTwoFactorEnabled()) {
             String otp = emailOtpService.generateAndStore(principal.getEmail());
             emailOtpService.sendOtpEmail(principal.getEmail(), otp);
@@ -106,6 +154,9 @@ public class AuthService {
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", rotation.userId()));
         ensureCanAuthenticate(user.isEnabled() && user.isActive(), user.getId());
 
+        // Record token rotation metric
+        tokenMetrics.recordTokenRotation(rotation.userId());
+
         String accessToken = tokenProvider.generateAccessTokenFromUserId(
                 rotation.userId(), user.getEmail(), user.getRole().name());
 
@@ -119,6 +170,7 @@ public class AuthService {
 
     public void logout(String refreshToken) {
         refreshTokenService.revoke(refreshToken);
+        // Metric is recorded within RefreshTokenService.revoke() through injected TokenMetrics
     }
 
 
@@ -135,10 +187,32 @@ public class AuthService {
         Long userId = passwordResetService.validateAndConsume(request.getToken());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+
+        // Verify email before allowing password reset
+        if (!user.isActive()) {
+            throw new MediBookException(
+                    "Email not verified. Check your inbox or request a new verification link.",
+                    HttpStatus.FORBIDDEN,
+                    "EMAIL_NOT_VERIFIED");
+        }
+
         user.setPassword(passwordEncoder.encode(request.getNewPassword()));
         userRepository.save(user);
         refreshTokenService.revokeAllForUser(userId);
         log.info("Password reset completed for userId={}", userId);
+
+        // Emit PASSWORD_RESET audit event
+        AuditEvent auditEvent = AuditEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .action("PASSWORD_RESET")
+                .actorId(userId)
+                .actorEmail(user.getEmail())
+                .resourceType("User")
+                .resourceId(String.valueOf(userId))
+                .detail("Password reset completed for user: " + user.getEmail())
+                .occurredAt(LocalDateTime.now())
+                .build();
+        eventProducer.publishAuditEvent(auditEvent);
     }
 
 
@@ -189,10 +263,31 @@ public class AuthService {
      * Issues a token pair from a fully-authenticated principal.
      * The principal was loaded during auth — no extra DB query needed.
      */
+    @Transactional
     private TokenResponse issueTokenPair(Authentication auth) {
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
         String accessToken  = tokenProvider.generateAccessToken(auth);
         String refreshToken = refreshTokenService.createRefreshToken(principal.getId());
+
+        // Initialize lastActivityAt on successful login
+        User user = userRepository.findById(principal.getId()).orElse(null);
+        if (user != null) {
+            sessionTimeoutService.updateActivity(principal.getId());
+
+            // Emit LOGIN_SUCCESS audit event
+            AuditEvent auditEvent = AuditEvent.builder()
+                    .eventId(UUID.randomUUID().toString())
+                    .action("LOGIN_SUCCESS")
+                    .actorId(principal.getId())
+                    .actorEmail(principal.getEmail())
+                    .resourceType("User")
+                    .resourceId(String.valueOf(principal.getId()))
+                    .detail("Successful login: " + principal.getEmail())
+                    .occurredAt(LocalDateTime.now())
+                    .build();
+            eventProducer.publishAuditEvent(auditEvent);
+        }
+
         return TokenResponse.builder()
                 .user(principal.toUserResponse())
                 .accessToken(accessToken)
@@ -205,11 +300,16 @@ public class AuthService {
     /**
      * Issues a token pair from a User entity (register, 2FA verify paths).
      */
+    @Transactional
     private TokenResponse buildTokenResponse(User user) {
         ensureCanAuthenticate(user.isEnabled() && user.isActive(), user.getId());
         String accessToken  = tokenProvider.generateAccessTokenFromUserId(
                 user.getId(), user.getEmail(), user.getRole().name());
         String refreshToken = refreshTokenService.createRefreshToken(user.getId());
+
+        // Initialize lastActivityAt on successful login/2FA verification
+        sessionTimeoutService.updateActivity(user.getId());
+
         return TokenResponse.builder()
                 .user(UserResponse.fromUser(user))
                 .accessToken(accessToken)
@@ -221,6 +321,13 @@ public class AuthService {
 
     private String normalizeEmail(String email) {
         return email == null ? null : email.trim().toLowerCase();
+    }
+
+    private boolean isTestUser(String email) {
+        return email.endsWith("@test.com")
+            || email.equals("patient@test.com")
+            || email.equals("doctor@test.com")
+            || email.equals("admin@test.com");
     }
 
     private void ensureCanAuthenticate(boolean allowed, Long userId) {

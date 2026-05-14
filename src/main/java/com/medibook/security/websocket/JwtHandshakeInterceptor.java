@@ -1,5 +1,7 @@
 package com.medibook.security.websocket;
 
+import com.medibook.audit.service.AuditLogService;
+import com.medibook.messaging.event.AuditEvent;
 import com.medibook.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +13,9 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.socket.WebSocketHandler;
 import org.springframework.web.socket.server.HandshakeInterceptor;
 
+import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Validates the JWT token during the HTTP → WebSocket upgrade.
@@ -21,6 +25,7 @@ import java.util.Map;
  *
  * Stores userId in session attributes so JwtHandshakeHandler can build the Principal.
  * Rejects unauthenticated handshakes with HTTP 401 before the WebSocket session opens.
+ * Logs all successful WebSocket connections for audit trail.
  */
 @Slf4j
 @Component
@@ -28,6 +33,7 @@ import java.util.Map;
 public class JwtHandshakeInterceptor implements HandshakeInterceptor {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final AuditLogService auditLogService;
 
     @Override
     public boolean beforeHandshake(ServerHttpRequest request, ServerHttpResponse response,
@@ -45,6 +51,29 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         Long userId = jwtTokenProvider.getUserIdFromToken(token);
         attributes.put("userId", userId);
         log.debug("WebSocket handshake accepted; userId={}", userId);
+
+        // Audit log for successful WebSocket connection
+        try {
+            String remoteAddr = request.getRemoteAddress() != null
+                    ? request.getRemoteAddress().toString()
+                    : "unknown";
+            log.info("audit=WEBSOCKET_CONNECTED userId={} remoteAddr={}", userId, remoteAddr);
+
+            // Persist audit event asynchronously
+            auditLogService.persist(
+                    AuditEvent.builder()
+                            .eventId(UUID.randomUUID().toString())
+                            .action("WEBSOCKET_CONNECTED")
+                            .actorId(userId)
+                            .resourceType("WEBSOCKET_SESSION")
+                            .occurredAt(LocalDateTime.now())
+                            .build()
+            );
+        } catch (Exception ex) {
+            log.error("Failed to audit WebSocket connection for userId: {}", userId, ex);
+            // Don't fail the handshake due to audit logging errors
+        }
+
         return true;
     }
 

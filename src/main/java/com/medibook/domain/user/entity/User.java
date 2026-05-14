@@ -1,11 +1,13 @@
 package com.medibook.domain.user.entity;
 
 import com.medibook.common.audit.AuditableEntity;
+import com.medibook.infrastructure.crypto.EncryptedStringConverter;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "users")
@@ -33,6 +35,7 @@ public class User extends AuditableEntity {
     private String lastName;
 
     @Column(length = 20)
+    @Convert(converter = EncryptedStringConverter.class)
     private String phone;
 
     @Column(name = "date_of_birth")
@@ -70,6 +73,9 @@ public class User extends AuditableEntity {
 
     @Column(name = "avatar_url", columnDefinition = "MEDIUMTEXT")
     private String avatarUrl;
+
+    @Column(name = "last_activity_at")
+    private LocalDateTime lastActivityAt;
 
     @Version
     private Long version;

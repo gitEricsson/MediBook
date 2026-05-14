@@ -1,6 +1,21 @@
+server:
+  shutdown: graceful
+  tomcat:
+    max-http-form-post-size: 10MB
+    max-swallow-size: 10MB
+
 spring:
   application:
     name: medibook
+
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # ─── Request Size Limits ───────────────────────────────────────────────────
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 10MB
 
   cassandra:
     request:
@@ -23,7 +38,8 @@ spring:
       idle-timeout: 600000
       connection-timeout: 30000
       max-lifetime: 1800000
-      leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD_MS:60000}
+      leak-detection-threshold: ${DB_LEAK_DETECTION_THRESHOLD_MS:15000}
+      register-mbeans: true
 
   jpa:
     hibernate:
@@ -116,6 +132,13 @@ app:
     secret: ${JWT_SECRET}
     access-token-expiration-ms: 900000        # 15 min
     refresh-token-expiration-ms: 604800000    # 7 days
+  security:
+    https-redirect: ${HTTPS_REDIRECT:false}    # Redirect HTTP to HTTPS (production only)
+    session:
+      timeout-minutes: 30                      # Session inactivity timeout
+      refresh-token-rotation-enabled: true     # Enable token rotation on refresh
+      max-active-tokens: 5                     # Max concurrent sessions per user
+    encryption-key: ${FIELD_ENCRYPTION_KEY:0123456789abcdef0123456789abcdef}
   otp:
     expiration-minutes: 5
     length: 6
@@ -195,9 +218,18 @@ app:
     enabled: ${OPENAPI_ENABLED:false}
   storage:
     type: ${STORAGE_TYPE:local}
+    local:
+      path: ${STORAGE_LOCAL_PATH:./uploads}
+      base-url: ${STORAGE_BASE_URL:http://localhost:8080}
     s3:
       bucket: ${AWS_S3_BUCKET:medibook-avatars}
       region: ${AWS_REGION:us-east-1}
+  notification:
+    retry:
+      max-attempts: 3
+      initial-delay-ms: 1000
+      multiplier: 2.0
+      max-delay-ms: 10000
 
 # ─── Resilience4j ───────────────────────────────────────────────────────────
 resilience4j:
@@ -237,6 +269,32 @@ resilience4j:
         timeout-duration: 0s
   circuit-breaker:
     instances:
+      paymentProvider:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        record-exceptions:
+          - java.io.IOException
+          - java.net.ConnectException
+          - java.net.SocketTimeoutException
+          - com.medibook.common.exception.TemporaryFailureException
+      emailService:
+        sliding-window-type: COUNT_BASED
+        sliding-window-size: 10
+        minimum-number-of-calls: 5
+        failure-rate-threshold: 60
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+      externalApi:
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 60
+        minimum-number-of-calls: 10
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 45s
+        permitted-number-of-calls-in-half-open-state: 5
       kafkaProducer:
         failure-rate-threshold: 50
         slow-call-rate-threshold: 80
@@ -306,9 +364,11 @@ management:
     web:
       exposure:
         include: health,info,prometheus,metrics
+      base-path: /
   endpoint:
     health:
       show-details: when-authorized
+      show-components: always
       probes:
         enabled: true
       group:
@@ -316,6 +376,10 @@ management:
           include: readinessState,db,redis,kafka
         liveness:
           include: livenessState
+      liveness-state:
+        enabled: true
+      readiness-state:
+        enabled: true
     prometheus:
       enabled: true
   metrics:
@@ -327,6 +391,9 @@ management:
     tags:
       application: medibook
       env: ${spring.profiles.active:default}
+    export:
+      prometheus:
+        enabled: true
 
 # ─── Logging ────────────────────────────────────────────────────────────────
 logging:

@@ -31,14 +31,30 @@ public class DoctorAppointmentController {
     private final PatientHistoryService historyService;
 
     @GetMapping("/appointments/{id}")
-    @Operation(summary = "Get full appointment detail")
+    @Operation(
+        summary = "Get appointment detail",
+        description = "Retrieves full appointment details including patient information and consultation notes.",
+        tags = {"Doctor Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointment details retrieved successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - doctor role required")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found")
     public ResponseEntity<ApiResponse<AppointmentResponse>> getAppointmentDetail(
             @PathVariable Long id, @CurrentUser UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(appointmentService.getByIdForDoctor(id, principal)));
     }
 
     @GetMapping("/patients/{patientId}/summary")
-    @Operation(summary = "Get patient history summary")
+    @Operation(
+        summary = "Get patient history summary",
+        description = "Retrieves a summary of patient medical history, past diagnoses, and previous appointment records.",
+        tags = {"Doctor Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Patient summary retrieved successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - doctor role required or no access to patient")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Patient not found")
     public ResponseEntity<ApiResponse<PatientSummaryResponse>> getPatientSummary(
             @PathVariable Long patientId,
             @CurrentUser UserPrincipal principal) {
@@ -47,7 +63,17 @@ public class DoctorAppointmentController {
     }
 
     @PostMapping("/appointments/{id}/transition")
-    @Operation(summary = "Transition appointment status (Complete/Cancel/NoShow)")
+    @Operation(
+        summary = "Transition appointment status",
+        description = "Changes appointment state (Complete/Cancel/NoShow) and updates related records and notifications.",
+        tags = {"Doctor Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Appointment status changed successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="400", description = "Invalid transition request")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - doctor role required")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="409", description = "Conflict - invalid status transition")
     public ResponseEntity<ApiResponse<AppointmentResponse>> transition(
             @PathVariable Long id, 
             @Valid @RequestBody TransitionRequest request,
@@ -56,7 +82,15 @@ public class DoctorAppointmentController {
     }
 
     @PostMapping("/appointments/{id}/call")
-    @Operation(summary = "Get click-to-call URI")
+    @Operation(
+        summary = "Get click-to-call URI",
+        description = "Returns a tel: URI for initiating a direct call to the patient.",
+        tags = {"Doctor Appointments"}
+    )
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Click-to-call URI generated successfully")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="401", description = "Unauthorized")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - doctor role required")
+    @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="404", description = "Appointment not found or patient phone not available")
     public ResponseEntity<ApiResponse<String>> callPatient(
             @PathVariable Long id,
             @CurrentUser UserPrincipal principal) {

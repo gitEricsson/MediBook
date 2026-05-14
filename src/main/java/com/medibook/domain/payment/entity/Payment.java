@@ -1,11 +1,13 @@
 package com.medibook.domain.payment.entity;
 
-import com.medibook.common.audit.AuditableEntity;
+import com.medibook.common.audit.SoftDeleteEntity;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.user.entity.User;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.annotations.SQLDelete;
+import org.hibernate.annotations.Where;
 import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
@@ -19,8 +21,10 @@ import java.time.LocalDateTime;
             @Index(name = "idx_pay_status",       columnList = "status"),
             @Index(name = "idx_pay_created_at",   columnList = "created_at")
         })
+@SQLDelete(sql = "UPDATE payments SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?1 WHERE id = ?2")
+@Where(clause = "deleted_at IS NULL")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
-public class Payment extends AuditableEntity {
+public class Payment extends SoftDeleteEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -154,6 +154,51 @@ class AuthServiceTest {
         verify(emailOtpService).sendOtpEmail("patient@medibook.com", "123456");
     }
 
+    @Test
+    @DisplayName("login — email not verified, throws EMAIL_NOT_VERIFIED")
+    void login_emailNotVerified_throwsEmailNotVerified() {
+        testUser.setActive(false);
+        LoginRequest req = new LoginRequest();
+        req.setEmail("patient@medibook.com");
+        req.setPassword("Password1!");
+
+        UserPrincipal principal = UserPrincipal.fromUser(testUser);
+        Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+
+        when(authenticationManager.authenticate(any())).thenReturn(auth);
+
+        assertThatThrownBy(() -> authService.login(req))
+                .isInstanceOf(MediBookException.class)
+                .satisfies(ex -> {
+                    MediBookException mEx = (MediBookException) ex;
+                    assertThat(mEx.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
+                    assertThat(mEx.getErrorCode()).isEqualTo("EMAIL_NOT_VERIFIED");
+                });
+    }
+
+    @Test
+    @DisplayName("login — test user with unverified email bypasses check")
+    void login_testUser_bypassesEmailVerification() {
+        testUser.setEmail("patient@test.com");
+        testUser.setActive(false);
+        LoginRequest req = new LoginRequest();
+        req.setEmail("patient@test.com");
+        req.setPassword("Password1!");
+
+        UserPrincipal principal = UserPrincipal.fromUser(testUser);
+        Authentication auth = new UsernamePasswordAuthenticationToken(principal, null, principal.getAuthorities());
+
+        when(authenticationManager.authenticate(any())).thenReturn(auth);
+        when(tokenProvider.generateAccessToken(auth)).thenReturn("access-token");
+        when(tokenProvider.getAccessTokenExpirationMs()).thenReturn(900_000L);
+        when(refreshTokenService.createRefreshToken(1L)).thenReturn("refresh-token");
+
+        TokenResponse response = authService.login(req);
+
+        assertThat(response.getAccessToken()).isEqualTo("access-token");
+        assertThat(response.getRefreshToken()).isEqualTo("refresh-token");
+    }
+
 
     @Test
     @DisplayName("refresh — valid token rotates atomically and issues new access token")

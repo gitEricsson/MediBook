@@ -8,6 +8,7 @@ import com.medibook.security.UserPrincipal;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -68,7 +69,7 @@ public class NotificationController {
     public ResponseEntity<ApiResponse<Void>> markAsRead(
             @CurrentUser UserPrincipal principal,
             @PathVariable UUID id,
-            @RequestBody MarkReadRequest body) {
+            @Valid @RequestBody MarkReadRequest body) {
         notificationService.markAsRead(principal.getId(), body.getCreatedAt(), id);
         return ResponseEntity.ok(ApiResponse.ok(null));
     }

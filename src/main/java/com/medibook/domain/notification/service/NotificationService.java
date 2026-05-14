@@ -1,13 +1,17 @@
 package com.medibook.domain.notification.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.medibook.common.exception.TemporaryFailureException;
 import com.medibook.domain.notification.dto.NotificationResponse;
 import com.medibook.domain.notification.entity.Notification;
 import com.medibook.domain.notification.repository.NotificationRepository;
+import com.medibook.infrastructure.metrics.NotificationMetrics;
 import com.medibook.messaging.event.AppointmentEvent;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.cassandra.core.CassandraOperations;
 import org.springframework.data.cassandra.core.InsertOptions;
 import org.springframework.data.cassandra.core.query.Criteria;
@@ -18,8 +22,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.PatternTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
-import org.springframework.cache.Cache;
-import org.springframework.cache.CacheManager;
+import org.springframework.retry.support.RetryTemplate;
 import org.springframework.stereotype.Service;
 
 import java.nio.charset.StandardCharsets;
@@ -61,6 +64,8 @@ public class NotificationService implements MessageListener {
     private final ObjectMapper                  objectMapper;
     private final SimpMessagingTemplate         messagingTemplate;
     private final CacheManager                  cacheManager;
+    private final RetryTemplate                 notificationRetryTemplate;
+    private final NotificationMetrics           notificationMetrics;
 
     @PostConstruct
     public void registerPubSubListener() {
@@ -71,96 +76,292 @@ public class NotificationService implements MessageListener {
     // ─── Domain notification senders ────────────────────────────────────────
 
     public void sendAppointmentBooked(AppointmentEvent event) {
-        save(event.getPatientId(), "Appointment Booked",
-                "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is booked.",
-                "APPOINTMENT_BOOKED", event.getAppointmentId());
-        save(event.getDoctorId(), "New Appointment",
-                "Patient " + event.getPatientName() + " booked an appointment on " + event.getScheduledAt(),
-                "APPOINTMENT_BOOKED", event.getAppointmentId());
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(event.getPatientId(), "Appointment Booked",
+                        "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is booked.",
+                        "APPOINTMENT_BOOKED", event.getAppointmentId());
+                save(event.getDoctorId(), "New Appointment",
+                        "Patient " + event.getPatientName() + " booked an appointment on " + event.getScheduledAt(),
+                        "APPOINTMENT_BOOKED", event.getAppointmentId());
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send appointment booked notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending appointment booked notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendAppointmentConfirmed(AppointmentEvent event) {
-        save(event.getPatientId(), "Appointment Confirmed",
-                "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is confirmed.",
-                "APPOINTMENT_CONFIRMED", event.getAppointmentId());
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(event.getPatientId(), "Appointment Confirmed",
+                        "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is confirmed.",
+                        "APPOINTMENT_CONFIRMED", event.getAppointmentId());
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send appointment confirmed notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending appointment confirmed notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendAppointmentCancelled(AppointmentEvent event) {
-        save(event.getPatientId(), "Appointment Cancelled",
-                "Your appointment on " + event.getScheduledAt() + " has been cancelled.",
-                "APPOINTMENT_CANCELLED", event.getAppointmentId());
-        save(event.getDoctorId(), "Appointment Cancelled",
-                "Appointment with " + event.getPatientName() + " on " + event.getScheduledAt() + " has been cancelled.",
-                "APPOINTMENT_CANCELLED", event.getAppointmentId());
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(event.getPatientId(), "Appointment Cancelled",
+                        "Your appointment on " + event.getScheduledAt() + " has been cancelled.",
+                        "APPOINTMENT_CANCELLED", event.getAppointmentId());
+                save(event.getDoctorId(), "Appointment Cancelled",
+                        "Appointment with " + event.getPatientName() + " on " + event.getScheduledAt() + " has been cancelled.",
+                        "APPOINTMENT_CANCELLED", event.getAppointmentId());
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send appointment cancelled notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending appointment cancelled notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendAppointmentReminder(AppointmentEvent event) {
-        save(event.getPatientId(), "Appointment Reminder",
-                "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is tomorrow.",
-                "APPOINTMENT_REMINDER", event.getAppointmentId());
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(event.getPatientId(), "Appointment Reminder",
+                        "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is tomorrow.",
+                        "APPOINTMENT_REMINDER", event.getAppointmentId());
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send appointment reminder notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending appointment reminder notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendPaymentSucceeded(Long patientId, String providerRef, String amount, String currency) {
-        save(patientId, "Payment Successful",
-                String.format("Your payment of %s %s (ref: %s) was processed successfully.", amount, currency, providerRef),
-                "PAYMENT_SUCCEEDED", null);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Payment Successful",
+                        String.format("Your payment of %s %s (ref: %s) was processed successfully.", amount, currency, providerRef),
+                        "PAYMENT_SUCCEEDED", null);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send payment succeeded notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending payment succeeded notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendPaymentFailed(Long patientId, String providerRef) {
-        save(patientId, "Payment Failed",
-                "Your payment (ref: " + providerRef + ") could not be processed. Please try again or use a different payment method.",
-                "PAYMENT_FAILED", null);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Payment Failed",
+                        "Your payment (ref: " + providerRef + ") could not be processed. Please try again or use a different payment method.",
+                        "PAYMENT_FAILED", null);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send payment failed notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending payment failed notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendRefundIssued(Long patientId, String amount, String currency) {
-        save(patientId, "Refund Issued",
-                String.format("A refund of %s %s has been processed and will appear in your account within 3–7 business days.", amount, currency),
-                "REFUND_ISSUED", null);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Refund Issued",
+                        String.format("A refund of %s %s has been processed and will appear in your account within 3–7 business days.", amount, currency),
+                        "REFUND_ISSUED", null);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send refund issued notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending refund issued notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendReviewApproved(Long patientId, String doctorName) {
-        save(patientId, "Review Published",
-                "Your review for Dr. " + doctorName + " has been approved and is now visible.",
-                "REVIEW_APPROVED", null);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Review Published",
+                        "Your review for Dr. " + doctorName + " has been approved and is now visible.",
+                        "REVIEW_APPROVED", null);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send review approved notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending review approved notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendWaitlistPromoted(Long patientId, Long appointmentId, String doctorName, Object scheduledAt) {
-        save(patientId, "Waitlist: Slot Available!",
-                "Good news! A slot with Dr. " + doctorName + " on " + scheduledAt + " opened up and has been reserved for you.",
-                "WAITLIST_PROMOTED", appointmentId);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Waitlist: Slot Available!",
+                        "Good news! A slot with Dr. " + doctorName + " on " + scheduledAt + " opened up and has been reserved for you.",
+                        "WAITLIST_PROMOTED", appointmentId);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send waitlist promoted notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending waitlist promoted notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendWaitlistJoined(Long patientId, String doctorName) {
-        save(patientId, "Waitlist Joined",
-                "You've successfully joined the waitlist for Dr. " + doctorName,
-                "WAITLIST_JOINED", null);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Waitlist Joined",
+                        "You've successfully joined the waitlist for Dr. " + doctorName,
+                        "WAITLIST_JOINED", null);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send waitlist joined notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending waitlist joined notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendTelemedicineSessionReady(Long patientId, Long doctorId, Long appointmentId) {
-        save(patientId, "Video Consultation Ready",
-                "Your telemedicine session is ready. Click to join.",
-                "TELEMEDICINE_READY", appointmentId);
-        save(doctorId, "Patient Waiting",
-                "A patient is waiting for the telemedicine session.",
-                "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Video Consultation Ready",
+                        "Your telemedicine session is ready. Click to join.",
+                        "TELEMEDICINE_READY", appointmentId);
+                save(doctorId, "Patient Waiting",
+                        "A patient is waiting for the telemedicine session.",
+                        "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send telemedicine session ready notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending telemedicine session ready notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendTelemedicinePatientWaiting(Long doctorId, Long appointmentId) {
-        save(doctorId, "Patient Waiting",
-                "Your patient has entered the waiting room for appointment #" + appointmentId,
-                "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(doctorId, "Patient Waiting",
+                        "Your patient has entered the waiting room for appointment #" + appointmentId,
+                        "TELEMEDICINE_PATIENT_WAITING", appointmentId);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send telemedicine patient waiting notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending telemedicine patient waiting notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendUrgencyAlert(Long doctorId, Long conversationId, String urgencyKeywords) {
-        save(doctorId, "Urgent Chat Alert",
-                "A patient message may need urgent review: " + urgencyKeywords,
-                "CHAT_URGENCY_ALERT", conversationId);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(doctorId, "Urgent Chat Alert",
+                        "A patient message may need urgent review: " + urgencyKeywords,
+                        "CHAT_URGENCY_ALERT", conversationId);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send urgency alert notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending urgency alert notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     public void sendChatEscalationRequired(Long doctorId, Long appointmentId) {
-        save(doctorId, "Escalation Required",
-                "AI has flagged a conversation for your clinical review.",
-                "CHAT_ESCALATION", appointmentId);
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(doctorId, "Escalation Required",
+                        "AI has flagged a conversation for your clinical review.",
+                        "CHAT_ESCALATION", appointmentId);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send chat escalation required notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending chat escalation required notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
     }
 
     // ─── REST query methods ──────────────────────────────────────────────────

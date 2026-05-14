@@ -88,7 +88,7 @@ public class ChatController {
     public ResponseEntity<ApiResponse<AiDraftResponse>> approveDraft(
             @PathVariable Long conversationId,
             @PathVariable Long draftId,
-            @RequestBody(required = false) DraftApprovalRequest req,
+            @Valid @RequestBody(required = false) DraftApprovalRequest req,
             @CurrentUser UserPrincipal principal) {
         String editedBody = (req != null) ? req.editedBody() : null;
         return ResponseEntity.ok(ApiResponse.ok(
@@ -121,7 +121,7 @@ public class ChatController {
     @Operation(summary = "Grant or revoke AI participation consent (Patient only)")
     public ResponseEntity<ApiResponse<Void>> setConsent(
             @PathVariable Long conversationId,
-            @RequestBody ConsentRequest req,
+            @Valid @RequestBody ConsentRequest req,
             @CurrentUser UserPrincipal principal,
             HttpServletRequest httpReq) {
         chatService.grantConsent(conversationId, principal.getId(), req.granted(),

@@ -1,6 +1,7 @@
 package com.medibook.security;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -24,8 +25,10 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import jakarta.annotation.PostConstruct;
 import java.util.List;
 
+@Slf4j
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
@@ -36,9 +39,25 @@ public class SecurityConfig {
     private final JwtAuthFilter            jwtAuthFilter;
     private final RateLimitFilter          rateLimitFilter;
     private final SecurityResponseHeaderFilter securityResponseHeaderFilter;
+    private final SessionTimeoutFilter     sessionTimeoutFilter;
 
     @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
     private String allowedOrigins;
+
+    @Value("${app.security.https-redirect:false}")
+    private boolean httpsRedirectEnabled;
+
+    @PostConstruct
+    public void validateCorsConfig() {
+        String[] origins = allowedOrigins.split(",");
+        for (String origin : origins) {
+            String trimmedOrigin = origin.trim();
+            if (trimmedOrigin.startsWith("http://") && httpsRedirectEnabled) {
+                log.warn("CORS origin uses insecure HTTP while HTTPS redirect is enabled: {}. "
+                        + "Production deployments should use only HTTPS origins.", trimmedOrigin);
+            }
+        }
+    }
 
     private static final String[] PUBLIC_ENDPOINTS = {
             "/api/v1/auth/register",
@@ -58,11 +77,15 @@ public class SecurityConfig {
             // WebSocket upgrade: HTTP auth is not used here.
             // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.
             "/ws/**",
+            "/swagger-ui.html",
             "/swagger-ui/**",
+            "/api-docs",
             "/api-docs/**",
             "/actuator/health/**",
             "/actuator/prometheus",
             "/health",
+            "/health/**",
+            "/prometheus",
             "/version"
     };
 
@@ -107,7 +130,8 @@ public class SecurityConfig {
             )
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-            .addFilterAfter(rateLimitFilter, JwtAuthFilter.class)
+            .addFilterAfter(sessionTimeoutFilter, JwtAuthFilter.class)
+            .addFilterAfter(rateLimitFilter, SessionTimeoutFilter.class)
             .addFilterAfter(securityResponseHeaderFilter, JwtAuthFilter.class);
 
         return http.build();
@@ -133,6 +157,9 @@ public class SecurityConfig {
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
+        // IMPORTANT: Production deployments should use HTTPS origins only.
+        // Allowed origins are configured via app.cors.allowed-origins property.
+        // See @PostConstruct validateCorsConfig() for HTTPS enforcement warnings.
         CorsConfiguration configuration = new CorsConfiguration();
         configuration.setAllowedOriginPatterns(List.of(allowedOrigins.split(",")));
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));

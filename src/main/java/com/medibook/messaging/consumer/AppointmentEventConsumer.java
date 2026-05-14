@@ -1,9 +1,10 @@
 package com.medibook.messaging.consumer;
 
+import com.medibook.common.exception.TemporaryFailureException;
+import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.messaging.KafkaTopics;
 import com.medibook.messaging.entity.ProcessedEvent;
 import com.medibook.messaging.event.AppointmentEvent;
-import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.messaging.repository.ProcessedEventRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -52,8 +53,12 @@ public class AppointmentEventConsumer {
                         .build());
             }
             ack.acknowledge();
+        } catch (TemporaryFailureException e) {
+            // Kafka will retry this message (don't acknowledge)
+            log.warn("Transient notification failure, message will be retried: {}", e.getMessage());
         } catch (Exception e) {
             log.error("Failed to process appointment event", e);
+            // Still acknowledge to avoid infinite loop, but log for manual review
         }
     }
 }

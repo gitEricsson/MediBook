@@ -1,6 +1,7 @@
 package com.medibook.domain.user.service;
 
 import com.medibook.common.exception.MediBookException;
+import com.medibook.infrastructure.metrics.TokenMetrics;
 import com.medibook.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -37,6 +38,7 @@ public class RefreshTokenService {
 
     private final RedisTemplate<String, Object> redisTemplate;
     private final JwtTokenProvider              tokenProvider;
+    private final TokenMetrics                  tokenMetrics;
 
 
     @SuppressWarnings("unchecked")
@@ -114,6 +116,10 @@ public class RefreshTokenService {
 
 
     public void revoke(String token) {
+        revoke(token, "user_logout");
+    }
+
+    public void revoke(String token, String reason) {
         String tokenHash = hashToken(token);
         Long userId = null;
         try {
@@ -134,6 +140,10 @@ public class RefreshTokenService {
                 return null;
             }
         });
+
+        if (resolvedUserId != null) {
+            tokenMetrics.recordTokenRevocation(resolvedUserId, reason);
+        }
     }
 
     /**
@@ -141,6 +151,15 @@ public class RefreshTokenService {
      */
     @SuppressWarnings("unchecked")
     public int revokeAllForUser(Long userId) {
+        return revokeAllForUser(userId, "admin_force_logout");
+    }
+
+    /**
+     * Revokes all active refresh tokens for a user with a specific reason.
+     * Used by: admin force-logout, session timeout, suspicious activity detection, etc.
+     */
+    @SuppressWarnings("unchecked")
+    public int revokeAllForUser(Long userId, String reason) {
         java.util.Set<Object> tokens = redisTemplate.opsForSet().members(USER_SESSIONS_PREFIX + userId);
         if (tokens == null || tokens.isEmpty()) return 0;
 
@@ -157,7 +176,8 @@ public class RefreshTokenService {
                 return null;
             }
         });
-        log.info("Revoked {} session(s) for user [{}]", tokens.size(), userId);
+        log.info("Revoked {} session(s) for user [{}] — reason: {}", tokens.size(), userId, reason);
+        tokenMetrics.recordTokenRevocation(userId, reason);
         return tokens.size();
     }
 

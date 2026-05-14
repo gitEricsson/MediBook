@@ -12,6 +12,8 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
+import com.medibook.messaging.event.AuditEvent;
+import com.medibook.messaging.producer.AppointmentEventProducer;
 import com.medibook.security.UserPrincipal;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
 import lombok.RequiredArgsConstructor;
@@ -20,20 +22,24 @@ import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class DoctorService {
 
-    private final DoctorRepository doctorRepository;
-    private final UserRepository userRepository;
-    private final DepartmentRepository departmentRepository;
-    private final PasswordEncoder passwordEncoder;
+    private final DoctorRepository         doctorRepository;
+    private final UserRepository           userRepository;
+    private final DepartmentRepository     departmentRepository;
+    private final PasswordEncoder          passwordEncoder;
+    private final AppointmentEventProducer eventProducer;
 
     @Cacheable(value = "doctors", key = "#id")
     @Bulkhead(name = "doctorService")
@@ -122,7 +128,12 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
         doctor.setActive(true);
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        DoctorResponse result = DoctorResponse.fromEntity(doctorRepository.save(doctor));
+
+        // Emit DOCTOR_ACTIVATED audit event
+        emitDoctorAudit("DOCTOR_ACTIVATED", id, doctor.getUser().getId(), "Doctor profile activated");
+
+        return result;
     }
 
     @CacheEvict(value = "doctors", key = "#id")
@@ -131,7 +142,36 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
         doctor.setActive(false);
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        DoctorResponse result = DoctorResponse.fromEntity(doctorRepository.save(doctor));
+
+        // Emit DOCTOR_DEACTIVATED audit event
+        emitDoctorAudit("DOCTOR_DEACTIVATED", id, doctor.getUser().getId(), "Doctor profile deactivated");
+
+        return result;
+    }
+
+    private void emitDoctorAudit(String action, Long doctorId, Long userId, String detail) {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Long actorId = null;
+        String actorEmail = "SYSTEM";
+
+        if (auth != null && auth.getPrincipal() instanceof UserPrincipal) {
+            UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
+            actorId = principal.getId();
+            actorEmail = principal.getEmail();
+        }
+
+        AuditEvent auditEvent = AuditEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .action(action)
+                .actorId(actorId)
+                .actorEmail(actorEmail)
+                .resourceType("Doctor")
+                .resourceId(String.valueOf(doctorId))
+                .detail(detail + " (User ID: " + userId + ")")
+                .occurredAt(LocalDateTime.now())
+                .build();
+        eventProducer.publishAuditEvent(auditEvent);
     }
 
     private DoctorResponse updateLoaded(Doctor doctor, DoctorRequest request) {

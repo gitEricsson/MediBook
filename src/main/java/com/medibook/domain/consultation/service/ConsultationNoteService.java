@@ -8,6 +8,9 @@ import com.medibook.domain.consultation.dto.ConsultationNoteRequest;
 import com.medibook.domain.consultation.dto.ConsultationNoteResponse;
 import com.medibook.domain.consultation.entity.ConsultationNote;
 import com.medibook.domain.consultation.repository.ConsultationNoteRepository;
+import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.patient.entity.PatientAccessGrant;
+import com.medibook.domain.patient.repository.PatientAccessGrantRepository;
 import com.medibook.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -20,8 +23,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ConsultationNoteService {
 
-    private final ConsultationNoteRepository noteRepository;
-    private final AppointmentRepository appointmentRepository;
+    private final ConsultationNoteRepository   noteRepository;
+    private final AppointmentRepository        appointmentRepository;
+    private final PatientAccessGrantRepository accessGrantRepository;
+    private final DoctorRepository             doctorRepository;
 
     @Transactional
     public ConsultationNoteResponse create(Long appointmentId, ConsultationNoteRequest request) {
@@ -123,6 +128,35 @@ public class ConsultationNoteService {
         note.setPrescriptions(request.getPrescriptions());
         note.setFollowUpDate(request.getFollowUpDate());
         return ConsultationNoteResponse.fromEntity(noteRepository.save(note));
+    }
+
+    /**
+     * Doctor views a patient's consultation notes. Requires an APPROVED access grant.
+     * Notes are limited to those created before the grant's request time.
+     */
+    @Transactional(readOnly = true)
+    public List<ConsultationNoteResponse> getPatientNotesForDoctor(Long patientId, UserPrincipal doctorPrincipal) {
+        Long doctorId = doctorRepository.findByUserId(doctorPrincipal.getId())
+                .map(d -> d.getId())
+                .orElseThrow(() -> new MediBookException("Doctor profile not found", HttpStatus.NOT_FOUND, "DOCTOR_NOT_FOUND"));
+
+        PatientAccessGrant grant = accessGrantRepository
+                .findByPatientIdAndDoctorId(patientId, doctorId)
+                .orElseThrow(() -> new MediBookException(
+                        "No access grant found. Request patient access first.",
+                        HttpStatus.FORBIDDEN, "NO_ACCESS_GRANT"));
+
+        if (grant.getStatus() != PatientAccessGrant.AccessGrantStatus.APPROVED) {
+            throw new MediBookException(
+                    "Access has not been approved by the patient yet.",
+                    HttpStatus.FORBIDDEN, "ACCESS_NOT_APPROVED");
+        }
+
+        return noteRepository.findByPatientIdAndCreatedAtBefore(
+                patientId, grant.getGrantedAt())
+                .stream()
+                .map(ConsultationNoteResponse::fromEntity)
+                .toList();
     }
 
     private void ensureCanAccessAppointment(Appointment appointment, UserPrincipal principal) {

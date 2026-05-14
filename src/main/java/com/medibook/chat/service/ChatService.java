@@ -14,9 +14,11 @@ import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.messaging.event.ChatEvent;
 import com.medibook.messaging.producer.ChatEventProducer;
+import com.medibook.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -25,6 +27,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * Chat domain service.
@@ -53,6 +56,7 @@ public class ChatService {
     private final AiOrchestrationService     aiOrchestration;
     private final ChatEventProducer          eventProducer;
     private final NotificationService        notificationService;
+    private final SimpMessagingTemplate      messagingTemplate;
     private final ObjectMapper               objectMapper;
 
     // ── Conversation Lifecycle ────────────────────────────────────────────────
@@ -315,6 +319,41 @@ public class ChatService {
         }
 
         return new AiSummaryResponse(conversationId, result.getMessage(), LocalDateTime.now());
+    }
+
+    // ── Direct Messaging ─────────────────────────────────────────────────────
+
+    @Transactional
+    public MessageResponse sendDirectMessage(Long conversationId, String body, UserPrincipal principal) {
+        ChatConversation conv = loadAndAuthorize(conversationId, principal.getId());
+
+        ChatMessage.SenderRole role = switch (principal.getRole().name()) {
+            case "ROLE_DOCTOR" -> ChatMessage.SenderRole.DOCTOR;
+            case "ROLE_PATIENT" -> ChatMessage.SenderRole.PATIENT;
+            default -> ChatMessage.SenderRole.SYSTEM;
+        };
+
+        String sid = "DIRECT-" + UUID.randomUUID().toString().replace("-", "");
+        ChatMessage msg = ChatMessage.builder()
+                .conversationId(conv.getId())
+                .twilioMessageSid(sid)
+                .senderId(principal.getId())
+                .senderRole(role)
+                .body(body)
+                .aiGenerated(false)
+                .build();
+        ChatMessage saved = messageRepo.save(msg);
+
+        MessageResponse payload = toMessageResponse(saved);
+
+        // Push to both participants via WebSocket STOMP
+        afterCommit(() -> {
+            messagingTemplate.convertAndSendToUser(String.valueOf(conv.getPatientId()), "/queue/chat", payload);
+            messagingTemplate.convertAndSendToUser(String.valueOf(conv.getDoctorId()), "/queue/chat", payload);
+        });
+
+        log.debug("Direct message sent in conversation {} by user {} ({})", conversationId, principal.getId(), role);
+        return payload;
     }
 
     // ── Consent ───────────────────────────────────────────────────────────────

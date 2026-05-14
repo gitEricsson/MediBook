@@ -20,5 +20,7 @@ public interface PatientAccessGrantRepository extends JpaRepository<PatientAcces
 
     Page<PatientAccessGrant> findByDoctorIdAndStatus(Long doctorId, PatientAccessGrant.AccessGrantStatus status, Pageable pageable);
 
+    Page<PatientAccessGrant> findByDoctorId(Long doctorId, Pageable pageable);
+
     boolean existsByPatientIdAndDoctorIdAndStatus(Long patientId, Long doctorId, PatientAccessGrant.AccessGrantStatus status);
 }

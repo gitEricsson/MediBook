@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
+
 @Repository
 public interface ConsultationNoteRepository extends JpaRepository<ConsultationNote, Long> {
 
@@ -45,4 +46,21 @@ public interface ConsultationNoteRepository extends JpaRepository<ConsultationNo
      */
     @Query(value = "SELECT COUNT(*) FROM consultation_notes WHERE deleted_at IS NOT NULL", nativeQuery = true)
     long countDeleted();
+
+    /**
+     * Find notes for a patient created before a specific cutoff (for doctor access-grant limiting).
+     */
+    @Query("""
+           SELECT cn FROM ConsultationNote cn
+           JOIN FETCH cn.appointment a
+           JOIN FETCH a.patient
+           JOIN FETCH a.doctor d
+           JOIN FETCH d.user
+           WHERE a.patient.id = :patientId
+           AND cn.createdAt <= :cutoff
+           ORDER BY cn.createdAt DESC
+           """)
+    List<ConsultationNote> findByPatientIdAndCreatedAtBefore(
+            @Param("patientId") Long patientId,
+            @Param("cutoff") LocalDateTime cutoff);
 }

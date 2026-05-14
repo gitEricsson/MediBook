@@ -53,6 +53,11 @@ public class AppointmentService {
     @Bulkhead(name = "appointmentService")
     @Transactional
     public AppointmentResponse book(Long patientId, AppointmentRequest request) {
+        if (request.getScheduledAt().isBefore(LocalDateTime.now())) {
+            throw new MediBookException("Cannot book an appointment in the past.",
+                    HttpStatus.BAD_REQUEST, "SLOT_IN_PAST");
+        }
+
         LocalDateTime endTime = request.getScheduledAt().plusMinutes(request.getDurationMins());
 
         holdService.validateHold(request.getDoctorId(), request.getScheduledAt(), request.getHoldId());
@@ -178,6 +183,10 @@ public class AppointmentService {
             throw new MediBookException("Cannot reschedule a completed or cancelled appointment", HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
 
+        if (request.getNewStart().isBefore(LocalDateTime.now())) {
+            throw new MediBookException("Cannot reschedule to a time in the past.",
+                    HttpStatus.BAD_REQUEST, "SLOT_IN_PAST");
+        }
         if (!request.getNewStart().isBefore(request.getNewEnd())) {
             throw new MediBookException("New end time must be after new start time",
                     HttpStatus.BAD_REQUEST, "INVALID_TIME_RANGE");

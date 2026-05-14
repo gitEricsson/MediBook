@@ -84,7 +84,7 @@ public class AuthService {
     }
 
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenResponse login(LoginRequest request) {
         String normalizedEmail = normalizeEmail(request.getEmail());
         Authentication auth;
@@ -133,7 +133,7 @@ public class AuthService {
     }
 
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenResponse verifyTwoFactor(TwoFactorVerifyRequest request) {
         String email = normalizeEmail(request.getEmail());
         emailOtpService.verify(email, request.getOtp());
@@ -146,7 +146,7 @@ public class AuthService {
     }
 
 
-    @Transactional(readOnly = true)
+    @Transactional
     public TokenResponse refresh(RefreshTokenRequest request) {
         var rotation = refreshTokenService.rotate(request.getRefreshToken());
 
@@ -174,7 +174,7 @@ public class AuthService {
     }
 
 
-    @Transactional(readOnly = true)
+    @Transactional
     public void forgotPassword(ForgotPasswordRequest request) {
         userRepository.findByEmail(normalizeEmail(request.getEmail())).ifPresent(user -> {
             String token = passwordResetService.createToken(user.getId());
@@ -226,7 +226,7 @@ public class AuthService {
         log.info("Email verified for userId={}", userId);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public void resendVerificationEmail(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
@@ -237,7 +237,7 @@ public class AuthService {
         emailVerificationService.sendVerificationEmail(user.getEmail(), token);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public void resendVerificationEmail(ResendVerificationRequest request) {
         userRepository.findByEmail(normalizeEmail(request.getEmail())).ifPresent(user -> {
             if (user.isActive()) {
@@ -263,7 +263,6 @@ public class AuthService {
      * Issues a token pair from a fully-authenticated principal.
      * The principal was loaded during auth — no extra DB query needed.
      */
-    @Transactional
     private TokenResponse issueTokenPair(Authentication auth) {
         UserPrincipal principal = (UserPrincipal) auth.getPrincipal();
         String accessToken  = tokenProvider.generateAccessToken(auth);
@@ -300,7 +299,6 @@ public class AuthService {
     /**
      * Issues a token pair from a User entity (register, 2FA verify paths).
      */
-    @Transactional
     private TokenResponse buildTokenResponse(User user) {
         ensureCanAuthenticate(user.isEnabled() && user.isActive(), user.getId());
         String accessToken  = tokenProvider.generateAccessTokenFromUserId(

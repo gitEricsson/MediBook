@@ -11,32 +11,40 @@ services:
     ports:
       - "8080:8080"
     environment:
-      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-dev}
       SERVER_PORT: ${SERVER_PORT:-8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
+      SEED_DATA_ENABLED: ${SEED_DATA_ENABLED:-true}
+      # ─── Service hosts ─────────────────────────────────────────────────────
       DB_HOST: ${DB_HOST:-mysql}
       DB_PORT: ${DB_PORT:-3306}
       DB_NAME: ${DB_NAME:-medibook}
       DB_USER: ${DB_USER:-medibook}
       DB_PASSWORD: ${DB_PASSWORD:-medibook}
-      MEDIBOOK_DB_HOST: mysql
-      MEDIBOOK_DB_PORT: 3306
-      CASSANDRA_HOST: cassandra
-      CASSANDRA_PORT: 9042
+      MEDIBOOK_DB_HOST: ${MEDIBOOK_DB_HOST:-mysql}
+      MEDIBOOK_DB_PORT: ${MEDIBOOK_DB_PORT:-3306}
+      MEDIBOOK_DB_NAME: ${MEDIBOOK_DB_NAME:-medibook}
+      MEDIBOOK_DB_USER: ${MEDIBOOK_DB_USER:-medibook}
+      MEDIBOOK_DB_PASSWORD: ${MEDIBOOK_DB_PASSWORD:-medibook}
+      CASSANDRA_HOST: ${CASSANDRA_HOST:-cassandra}
+      CASSANDRA_PORT: ${CASSANDRA_PORT:-9042}
       CASSANDRA_KEYSPACE: ${CASSANDRA_KEYSPACE:-medibook}
       CASSANDRA_DATACENTER: ${CASSANDRA_DATACENTER:-datacenter1}
       CASSANDRA_USER: ${CASSANDRA_USER:-cassandra}
       CASSANDRA_PASSWORD: ${CASSANDRA_PASSWORD:-cassandra}
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
+      CASSANDRA_REQUEST_TIMEOUT: ${CASSANDRA_REQUEST_TIMEOUT:-30s}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-}
-      KAFKA_BROKERS: kafka:9092
-      MEDIBOOK_KAFKA_BROKERS: kafka:9092
-      # Dev-only defaults keep this local Compose stack runnable even when the
-      # caller's shell/IDE does not load the project root .env file. Override
-      # both values for any shared, staging, or production-like environment.
-      JWT_SECRET: ${JWT_SECRET:-medibook-local-dev-jwt-secret-change-before-shared-use-64-bytes-minimum}
-      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-medibook-local-dev-phi-encryption-key}
-      # ─── Monnify (disabled by default; override in .env for sandbox testing) ───
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      MEDIBOOK_KAFKA_BROKERS: ${MEDIBOOK_KAFKA_BROKERS:-kafka:9092}
+      MAIL_HOST: ${MAIL_HOST:-mailhog}
+      MAIL_PORT: ${MAIL_PORT:-1025}
+      # ─── Secrets ───────────────────────────────────────────────────────────
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-replace-in-prod-must-be-256-bits-long-for-hs256!!}
+      PHI_ENCRYPTION_KEY: ${PHI_ENCRYPTION_KEY:-dev-phi-key-replace-in-prod-min32chars!!}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-0123456789abcdef0123456789abcdef}
+      # ─── Monnify ───────────────────────────────────────────────────────────
       MONNIFY_ENABLED: ${MONNIFY_ENABLED:-false}
       MONNIFY_API_KEY: ${MONNIFY_API_KEY:-}
       MONNIFY_SECRET_KEY: ${MONNIFY_SECRET_KEY:-}
@@ -91,10 +99,11 @@ services:
         reservations:
           memory: 512M
 
-  # ─── Cassandra 
+  # ─── Cassandra
   cassandra:
     image: cassandra:4.1
     container_name: medibook-cassandra
+    init: true
     environment:
       CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-MediBookCluster}
       CASSANDRA_DC: ${CASSANDRA_DATACENTER:-datacenter1}

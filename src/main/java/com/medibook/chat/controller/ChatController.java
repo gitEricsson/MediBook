@@ -130,6 +130,18 @@ public class ChatController {
         return ResponseEntity.ok(ApiResponse.noContent(req.granted() ? "Consent granted" : "Consent revoked"));
     }
 
+    // ── Direct Messaging ────────────────────────────────────────────────────────
+
+    @PostMapping("/conversations/{id}/messages")
+    @Operation(summary = "Send a direct message in a conversation (patient or doctor)")
+    public ResponseEntity<ApiResponse<MessageResponse>> sendMessage(
+            @PathVariable Long id,
+            @Valid @RequestBody SendMessageRequest req,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.created(chatService.sendDirectMessage(id, req.body(), principal)));
+    }
+
     // ── Urgency ───────────────────────────────────────────────────────────────
 
     @PostMapping("/{conversationId}/urgency/{alertId}/acknowledge")

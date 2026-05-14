@@ -2,6 +2,7 @@ package com.medibook.domain.doctor.service;
 
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.config.HospitalProperties;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
 import com.medibook.domain.doctor.dto.AdminCreateDoctorRequest;
@@ -40,25 +41,26 @@ public class DoctorService {
     private final DepartmentRepository     departmentRepository;
     private final PasswordEncoder          passwordEncoder;
     private final AppointmentEventProducer eventProducer;
+    private final HospitalProperties       hospitalProperties;
 
     @Cacheable(value = "doctors", key = "#id")
     @Bulkhead(name = "doctorService")
     @Transactional(readOnly = true)
     public DoctorResponse getById(Long id) {
         return doctorRepository.findByIdWithDetails(id)
-                .map(DoctorResponse::fromEntity)
+                .map(d -> DoctorResponse.fromEntity(d, hospitalProperties))
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
     }
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> getAll(Pageable pageable) {
-        return doctorRepository.findAll(pageable).map(DoctorResponse::fromEntity);
+        return doctorRepository.findAll(pageable).map(d -> DoctorResponse.fromEntity(d, hospitalProperties));
     }
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> getByDepartment(Long departmentId, Pageable pageable) {
         return doctorRepository.findByDepartmentId(departmentId, pageable)
-                .map(DoctorResponse::fromEntity);
+                .map(d -> DoctorResponse.fromEntity(d, hospitalProperties));
     }
 
     @CacheEvict(value = "doctors", allEntries = true)
@@ -102,7 +104,7 @@ public class DoctorService {
         Doctor doctor = builder.build();
         doctor.setSearchVector(buildSearchVector(user.getFirstName(), user.getLastName(), request.getSpecialization()));
 
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
     }
 
     @CacheEvict(value = "doctors", key = "#id")
@@ -128,7 +130,7 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
         doctor.setActive(true);
-        DoctorResponse result = DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        DoctorResponse result = DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
 
         // Emit DOCTOR_ACTIVATED audit event
         emitDoctorAudit("DOCTOR_ACTIVATED", id, doctor.getUser().getId(), "Doctor profile activated");
@@ -142,7 +144,7 @@ public class DoctorService {
         Doctor doctor = doctorRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
         doctor.setActive(false);
-        DoctorResponse result = DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        DoctorResponse result = DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
 
         // Emit DOCTOR_DEACTIVATED audit event
         emitDoctorAudit("DOCTOR_DEACTIVATED", id, doctor.getUser().getId(), "Doctor profile deactivated");
@@ -200,7 +202,7 @@ public class DoctorService {
         doctor.setSearchVector(buildSearchVector(
                 doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
 
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
     }
 
     /**
@@ -242,7 +244,7 @@ public class DoctorService {
         doctor.setSearchVector(buildSearchVector(
                 request.getFirstName(), request.getLastName(), request.getSpecialization()));
 
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor));
+        return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
     }
 
     private void ensureCanManageDoctor(Doctor doctor, UserPrincipal principal) {

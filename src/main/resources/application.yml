@@ -184,6 +184,10 @@ app:
       # Sandbox: https://sandbox.monnify.com  |  Live: https://api.monnify.com
       base-url: ${MONNIFY_BASE_URL:https://sandbox.monnify.com}
       redirect-url: ${MONNIFY_REDIRECT_URL:http://localhost:3000/payment/callback}
+  hospital:
+    consultation-fee: ${HOSPITAL_CONSULTATION_FEE:5000.00}
+    experience-premium-percent: ${HOSPITAL_EXPERIENCE_PREMIUM_PERCENT:20}
+    experience-threshold-years: ${HOSPITAL_EXPERIENCE_THRESHOLD_YEARS:10}
   chat:
     baa-active: ${AI_CHAT_BAA_ACTIVE:false}   # Set true ONLY after BAA is executed with Twilio and AI provider
 

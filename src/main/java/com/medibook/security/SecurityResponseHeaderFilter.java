@@ -33,11 +33,11 @@ public class SecurityResponseHeaderFilter extends OncePerRequestFilter {
         // Content Security Policy
         response.setHeader("Content-Security-Policy",
                 "default-src 'self'; " +
-                "script-src 'self'; " +
-                "style-src 'self' 'unsafe-inline'; " +
+                "script-src 'self' blob:; " +
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
                 "img-src 'self' data: https:; " +
-                "font-src 'self'; " +
-                "connect-src 'self' wss: https:; " +
+                "font-src 'self' https://fonts.gstatic.com; " +
+                "connect-src 'self' wss: https: http://localhost:8080; " +
                 "frame-ancestors 'none'");
 
         // Prevent MIME type sniffing

@@ -1,6 +1,7 @@
 package com.medibook.domain.doctor.service;
 
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.config.HospitalProperties;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.doctor.dto.AvailabilityGridResponse;
@@ -35,6 +36,7 @@ public class DoctorSearchService {
     private final DoctorWorkingHoursRepository workingHoursRepository;
     private final AppointmentRepository appointmentRepository;
     private final com.medibook.domain.appointment.service.AppointmentHoldService holdService;
+    private final HospitalProperties hospitalProperties;
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> searchDoctors(
@@ -79,13 +81,13 @@ public class DoctorSearchService {
 
         spec = spec.and((root, q, cb) -> cb.isTrue(root.get("isActive")));
 
-        return doctorRepository.findAll(spec, sanitizedPageable).map(DoctorResponse::fromEntity);
+        return doctorRepository.findAll(spec, sanitizedPageable).map(d -> DoctorResponse.fromEntity(d, hospitalProperties));
     }
 
     @Transactional(readOnly = true)
     public DoctorResponse getDoctorById(Long id) {
         return doctorRepository.findByIdWithDetails(id)
-                .map(DoctorResponse::fromEntity)
+                .map(d -> DoctorResponse.fromEntity(d, hospitalProperties))
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
     }
 
@@ -94,6 +96,7 @@ public class DoctorSearchService {
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
         int slotDuration = doctor.getSlotDurationMins();
+        LocalDateTime now = LocalDateTime.now();
 
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
 
@@ -112,7 +115,11 @@ public class DoctorSearchService {
                 if (hours.getDayOfWeek() != dayOfWeek) continue;
                 LocalTime current = hours.getStartTime();
                 while (current.isBefore(hours.getEndTime())) {
-                    allSlotStarts.add(date.atTime(current));
+                    LocalDateTime slotStart = date.atTime(current);
+                    // Skip slots whose start time has already passed
+                    if (!slotStart.isBefore(now)) {
+                        allSlotStarts.add(slotStart);
+                    }
                     current = current.plusMinutes(slotDuration);
                 }
             }
@@ -130,13 +137,19 @@ public class DoctorSearchService {
                 LocalTime current = hours.getStartTime();
                 while (current.isBefore(hours.getEndTime())) {
                     LocalDateTime start = date.atTime(current);
-                    LocalDateTime end   = start.plusMinutes(slotDuration); // fixed: was hardcoded 30
+                    LocalDateTime end   = start.plusMinutes(slotDuration);
 
-                    String status = "OPEN";
-                    if (overlapsAnyAppointment(start, end, bookedAppointments)) {
+                    // Mark past slots as PAST instead of excluding them entirely
+                    // so the frontend can grey them out for visual context
+                    String status;
+                    if (start.isBefore(now)) {
+                        status = "PAST";
+                    } else if (overlapsAnyAppointment(start, end, bookedAppointments)) {
                         status = "TAKEN";
                     } else if (heldSlots.contains(start)) {
                         status = "HELD";
+                    } else {
+                        status = "OPEN";
                     }
 
                     slots.add(AvailabilityGridResponse.SlotInfo.builder()

@@ -27,7 +27,9 @@ LABEL org.opencontainers.image.title="MediBook API" \
 
 WORKDIR /app
 
-RUN addgroup -S medibook && adduser -S medibook -G medibook
+RUN addgroup -S medibook && adduser -S medibook -G medibook \
+ && mkdir -p /app/uploads/avatars \
+ && chown -R medibook:medibook /app/uploads
 
 COPY --from=builder --chown=medibook:medibook /app/target/medibook-*.jar app.jar
 
@@ -35,8 +37,8 @@ USER medibook
 
 EXPOSE 8080
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=90s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health/liveness 2>/dev/null | grep -q '"status":"UP"' || exit 1
+HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
+  CMD wget -qO- http://localhost:8080/health/liveness 2>/dev/null | grep -q '"status":"UP"' || exit 1
 
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \

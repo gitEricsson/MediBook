@@ -54,6 +54,15 @@ public class ConsultationNoteController {
         return ResponseEntity.ok(ApiResponse.ok(noteService.getPatientHistory(principal.getId())));
     }
 
+    @GetMapping("/patient/{patientId}")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(summary = "Doctor views a patient's consultation history (requires approved access grant, limited to grant request time)")
+    public ResponseEntity<ApiResponse<List<ConsultationNoteResponse>>> getPatientNotesForDoctor(
+            @PathVariable Long patientId,
+            @CurrentUser UserPrincipal principal) {
+        return ResponseEntity.ok(ApiResponse.ok(noteService.getPatientNotesForDoctor(patientId, principal)));
+    }
+
     @PutMapping("/{id}")
     @PreAuthorize("hasAnyRole('DOCTOR','ADMIN')")
     @Operation(summary = "Update a consultation note (Doctor/Admin)")

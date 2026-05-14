@@ -29,7 +29,7 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- Add index for avatar lookups (improves queries filtering by avatar_url presence)
-CREATE INDEX IF NOT EXISTS idx_user_avatar_url ON user(avatar_url(100));
+CREATE INDEX idx_user_avatar_url ON users(avatar_url(100));
 
 -- Add metadata comment for documentation
 -- ALTER TABLE user MODIFY COLUMN avatar_url MEDIUMTEXT COMMENT 'Avatar URL: S3/MinIO URL or legacy base64 data URI';

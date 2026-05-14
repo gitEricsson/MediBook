@@ -84,18 +84,16 @@ public class Doctor extends AuditableEntity {
     @Builder.Default
     private int reviewCount = 0;
 
+    /**
+     * @deprecated Use {@link com.medibook.config.HospitalProperties#getFeeForDoctor(int)} instead.
+     * Kept for backward compatibility with existing payment records.
+     */
+    @Deprecated
     public BigDecimal getEffectiveConsultationFee() {
-        BigDecimal base = department != null && department.getBaseConsultationFee() != null
-                ? department.getBaseConsultationFee()
-                : BigDecimal.valueOf(5000);
+        BigDecimal base = BigDecimal.valueOf(5000);
         BigDecimal premium = yearsOfExperience > 10
                 ? base.multiply(BigDecimal.valueOf(0.20))
                 : BigDecimal.ZERO;
-        BigDecimal override = consultationFee != null && consultationFee.compareTo(BigDecimal.ZERO) > 0
-                ? consultationFee
-                : BigDecimal.ZERO;
-        return override.compareTo(BigDecimal.ZERO) > 0
-                ? override
-                : base.add(premium);
+        return base.add(premium);
     }
 }

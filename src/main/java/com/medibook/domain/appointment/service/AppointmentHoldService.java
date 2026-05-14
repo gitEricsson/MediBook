@@ -34,6 +34,10 @@ public class AppointmentHoldService {
      * @throws MediBookException if the slot is already held.
      */
     public String holdSlot(Long doctorId, LocalDateTime scheduledAt) {
+        if (scheduledAt.isBefore(LocalDateTime.now())) {
+            throw new MediBookException("Cannot book a time slot in the past.",
+                    HttpStatus.BAD_REQUEST, "SLOT_IN_PAST");
+        }
         String slotKey = buildSlotKey(doctorId, scheduledAt);
         String holdId = UUID.randomUUID().toString();
         

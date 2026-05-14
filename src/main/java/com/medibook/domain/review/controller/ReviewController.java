@@ -53,7 +53,7 @@ public class ReviewController {
     }
 
     @PatchMapping("/{id}/moderate")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Approve or reject a review (admin only)")
     public ApiResponse<ReviewResponse> moderateReview(
             @PathVariable Long id,
@@ -63,8 +63,8 @@ public class ReviewController {
     }
 
     @GetMapping("/admin/pending")
-    @PreAuthorize("hasRole('ADMIN')")
-    @Operation(summary = "List all reviews pending moderation (admin only)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @Operation(summary = "List all reviews pending moderation (admin/super_admin only)")
     public ApiResponse<Page<ReviewResponse>> getPendingReviews(
             @PageableDefault(size = 20) Pageable pageable) {
         return ApiResponse.ok(reviewService.getPendingReviews(pageable));

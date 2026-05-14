@@ -4,6 +4,7 @@ import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.domain.patient.dto.AccessGrantRequest;
 import com.medibook.domain.patient.dto.AccessGrantResponse;
 import com.medibook.domain.patient.entity.PatientAccessGrant;
@@ -24,8 +25,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class AccessGrantService {
 
     private final PatientAccessGrantRepository accessGrantRepository;
-    private final UserRepository userRepository;
-    private final DoctorRepository doctorRepository;
+    private final UserRepository               userRepository;
+    private final DoctorRepository             doctorRepository;
+    private final NotificationService          notificationService;
 
     @Transactional
     public AccessGrantResponse grantAccess(Long patientId, AccessGrantRequest request) {
@@ -109,5 +111,99 @@ public class AccessGrantService {
                 doctorId,
                 PatientAccessGrant.AccessGrantStatus.APPROVED
         );
+    }
+
+    // ── Doctor-initiated request flow ────────────────────────────────────────
+
+    @Transactional
+    public AccessGrantResponse requestAccess(Long doctorId, Long patientId, String reason) {
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
+        User patient = userRepository.findById(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient", "id", patientId));
+
+        accessGrantRepository.findByPatientIdAndDoctorId(patientId, doctorId).ifPresent(existing -> {
+            switch (existing.getStatus()) {
+                case PENDING -> throw new MediBookException("Access request already pending", HttpStatus.CONFLICT, "REQUEST_PENDING");
+                case APPROVED -> throw new MediBookException("Access already granted", HttpStatus.CONFLICT, "ALREADY_GRANTED");
+                case REVOKED -> {
+                    accessGrantRepository.delete(existing);
+                    accessGrantRepository.flush();
+                }
+            }
+        });
+
+        PatientAccessGrant grant = PatientAccessGrant.builder()
+                .patient(patient)
+                .doctor(doctor)
+                .status(PatientAccessGrant.AccessGrantStatus.PENDING)
+                .reason(reason)
+                .build();
+
+        PatientAccessGrant saved = accessGrantRepository.save(grant);
+        log.info("Doctor [{}] requested access to patient [{}] records", doctorId, patientId);
+
+        String doctorName = doctor.getUser().getFirstName() + " " + doctor.getUser().getLastName();
+        notificationService.sendAccessRequestNotification(patientId, doctorName, saved.getId());
+
+        return AccessGrantResponse.fromEntity(saved);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AccessGrantResponse> getIncomingRequests(Long patientId, Pageable pageable) {
+        return accessGrantRepository.findByPatientIdAndStatus(
+                patientId, PatientAccessGrant.AccessGrantStatus.PENDING, pageable)
+                .map(AccessGrantResponse::fromEntity);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AccessGrantResponse> getOutgoingRequests(Long doctorId, Pageable pageable) {
+        return accessGrantRepository.findByDoctorIdAndStatus(
+                doctorId, PatientAccessGrant.AccessGrantStatus.PENDING, pageable)
+                .map(AccessGrantResponse::fromEntity);
+    }
+
+    @Transactional(readOnly = true)
+    public Page<AccessGrantResponse> getAllDoctorGrants(Long doctorId, Pageable pageable) {
+        return accessGrantRepository.findByDoctorId(doctorId, pageable)
+                .map(AccessGrantResponse::fromEntity);
+    }
+
+    @Transactional
+    public AccessGrantResponse approveRequest(Long patientId, Long grantId) {
+        PatientAccessGrant grant = accessGrantRepository.findById(grantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Access Grant", "id", grantId));
+        if (!grant.getPatient().getId().equals(patientId)) {
+            throw new MediBookException("Not authorized to approve this request", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+        if (grant.getStatus() != PatientAccessGrant.AccessGrantStatus.PENDING) {
+            throw new MediBookException("Only pending requests can be approved", HttpStatus.BAD_REQUEST, "INVALID_STATE");
+        }
+        grant.setStatus(PatientAccessGrant.AccessGrantStatus.APPROVED);
+        PatientAccessGrant saved = accessGrantRepository.save(grant);
+        log.info("Patient [{}] approved access for doctor [{}]", patientId, grant.getDoctor().getId());
+
+        String doctorUserId = String.valueOf(grant.getDoctor().getUser().getId());
+        notificationService.sendAccessGrantedNotification(grant.getDoctor().getUser().getId(),
+                grant.getPatient().getFirstName() + " " + grant.getPatient().getLastName());
+
+        return AccessGrantResponse.fromEntity(saved);
+    }
+
+    @Transactional
+    public AccessGrantResponse denyRequest(Long patientId, Long grantId) {
+        PatientAccessGrant grant = accessGrantRepository.findById(grantId)
+                .orElseThrow(() -> new ResourceNotFoundException("Access Grant", "id", grantId));
+        if (!grant.getPatient().getId().equals(patientId)) {
+            throw new MediBookException("Not authorized to deny this request", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+        if (grant.getStatus() != PatientAccessGrant.AccessGrantStatus.PENDING) {
+            throw new MediBookException("Only pending requests can be denied", HttpStatus.BAD_REQUEST, "INVALID_STATE");
+        }
+        grant.setStatus(PatientAccessGrant.AccessGrantStatus.REVOKED);
+        grant.setRevokedAt(java.time.LocalDateTime.now());
+        PatientAccessGrant saved = accessGrantRepository.save(grant);
+        log.info("Patient [{}] denied access for doctor [{}]", patientId, grant.getDoctor().getId());
+        return AccessGrantResponse.fromEntity(saved);
     }
 }

@@ -14,9 +14,6 @@ public interface NotificationRepository extends CassandraRepository<Notification
     @Query("SELECT * FROM notifications WHERE user_id = ?0 LIMIT 30")
     List<Notification> findRecentByUserId(Long userId);
 
-    @Query("SELECT * FROM notifications WHERE user_id = ?0 AND is_read = false LIMIT 50")
+    @Query("SELECT * FROM notifications WHERE user_id = ?0 AND is_read = false LIMIT 50 ALLOW FILTERING")
     List<Notification> findUnreadByUserId(Long userId);
-
-    @Query("SELECT COUNT(*) FROM notifications WHERE user_id = ?0 AND is_read = false")
-    long countUnreadByUserId(Long userId);
 }

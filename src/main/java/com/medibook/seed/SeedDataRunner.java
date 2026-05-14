@@ -87,6 +87,7 @@ public class SeedDataRunner implements ApplicationRunner {
     private final WaitlistRepository          waitlistRepo;
     private final NotificationService         notificationService;
     private final PasswordEncoder             passwordEncoder;
+    private final com.medibook.config.HospitalProperties hospitalProperties;
 
     // ══════════════════════════════════════════════════════════════════════════
     // Static seed data specs
@@ -107,7 +108,7 @@ public class SeedDataRunner implements ApplicationRunner {
     private record DoctorSpec(
         String email, String firstName, String lastName, String phone,
         String deptName, String specialization, String license,
-        String bio, int years, BigDecimal fee, String gender, boolean telemedicine
+        String bio, int years, int slotMins, String gender, boolean telemedicine
     ) {}
 
     private static final List<DoctorSpec> DOCTOR_SPECS = List.of(
@@ -115,31 +116,31 @@ public class SeedDataRunner implements ApplicationRunner {
             "dr.chukwuemeka@medibook.local", "Chukwuemeka", "Obiora", "+2348012345001",
             "Cardiology", "Interventional Cardiology", "LIC-CARD-001",
             "Senior cardiologist with 15 years of experience in interventional procedures and heart failure management. Fellow of the Nigerian Cardiac Society.",
-            15, new BigDecimal("18000.00"), "Male", true
+            15, 45, "Male", true
         ),
         new DoctorSpec(
             "dr.aisha@medibook.local", "Aisha", "Mohammed", "+2348012345002",
             "Dermatology", "Clinical Dermatology", "LIC-DERM-002",
             "Specialist in inflammatory skin disorders, cosmetic dermatology, and paediatric skin conditions. MSc Dermatology, University of Lagos.",
-            8, new BigDecimal("10000.00"), "Female", false
+            8, 20, "Female", false
         ),
         new DoctorSpec(
             "dr.adaeze@medibook.local", "Adaeze", "Nwosu", "+2348012345003",
             "Pediatrics", "General Pediatrics", "LIC-PEDS-003",
             "Compassionate paediatrician dedicated to children's health from newborns through adolescence. Special interest in developmental and nutritional disorders.",
-            12, new BigDecimal("8500.00"), "Female", true
+            12, 30, "Female", true
         ),
         new DoctorSpec(
             "dr.ibrahim@medibook.local", "Ibrahim", "Aliyu", "+2348012345004",
             "Neurology", "Neurology", "LIC-NEUR-004",
             "Consultant neurologist specialising in epilepsy, stroke, and neurodegenerative disorders. 20 years of academic and clinical neurology practice.",
-            20, new BigDecimal("15000.00"), "Male", false
+            20, 60, "Male", false
         ),
         new DoctorSpec(
             "dr.taiwo@medibook.local", "Taiwo", "Ogunleye", "+2348012345005",
             "General Medicine", "Family Medicine", "LIC-GMED-005",
             "Family physician providing holistic primary care and chronic disease management. Certified in preventive medicine and lifestyle medicine.",
-            6, new BigDecimal("6000.00"), "Female", true
+            6, 15, "Female", true
         )
     );
 
@@ -232,7 +233,7 @@ public class SeedDataRunner implements ApplicationRunner {
         log.info("[Seed]   Super admin : superadmin@medibook.local");
         log.info("[Seed]   Admin ops   : admin.ops@medibook.local");
         log.info("[Seed]   Doctor      : dr.chukwuemeka@medibook.local");
-        log.info("[Seed]   Patient     : patient.james@medibook.local");
+        log.info("[Seed]   Patient     : patient.<firstName>.<index>@medibook.local (e.g. patient.james.0@medibook.local)");
         log.info("[Seed] ══════════════════════════════════════════════════");
     }
 
@@ -325,9 +326,9 @@ public class SeedDataRunner implements ApplicationRunner {
                 .isActive(true)
                 .languages("English, Hausa, Yoruba, Igbo")
                 .acceptingNew(true)
-                .slotDurationMins(30)
+                .slotDurationMins(s.slotMins())
                 .yearsOfExperience(s.years())
-                .consultationFee(s.fee())
+                .consultationFee(BigDecimal.ZERO)
                 .gender(s.gender())
                 .telemedicineEnabled(s.telemedicine())
                 .averageRating(0.0)
@@ -541,7 +542,7 @@ public class SeedDataRunner implements ApplicationRunner {
             String idemKey = "SEED-PAY-" + appt.getConfirmationCode();
             if (paymentRepo.findByIdempotencyKey(idemKey).isPresent()) continue;
 
-            BigDecimal amount = appt.getDoctor().getEffectiveConsultationFee();
+            BigDecimal amount = hospitalProperties.getFeeForDoctor(appt.getDoctor().getYearsOfExperience());
 
             Payment payment = Payment.builder()
                 .appointment(appt)

@@ -38,6 +38,7 @@ import java.util.List;
 import java.util.UUID;
 
 import com.medibook.common.sequence.SequenceService;
+import com.medibook.config.HospitalProperties;
 
 @Slf4j
 @Service
@@ -51,6 +52,7 @@ public class PaymentService {
     private final OutboxEventRepository      outboxRepository;
     private final ObjectMapper               objectMapper;
     private final SequenceService            sequenceService;
+    private final HospitalProperties         hospitalProperties;
 
     @Transactional
     public PaymentResponse initiatePayment(InitiatePaymentRequest req, UserPrincipal principal) {
@@ -89,7 +91,7 @@ public class PaymentService {
         Doctor doctor = appointment.getDoctor();
         BigDecimal amount = req.getAmount() != null
                 ? req.getAmount()
-                : doctor.getEffectiveConsultationFee();
+                : hospitalProperties.getFeeForDoctor(doctor.getYearsOfExperience());
 
         PaymentProviderPort providerPort = providerFactory.get(req.getProvider());
         PaymentProviderPort.InitiateResult result = providerPort.initiatePayment(

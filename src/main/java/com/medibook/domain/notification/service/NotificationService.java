@@ -396,6 +396,50 @@ public class NotificationService implements MessageListener {
         });
     }
 
+    public void sendAccessRequestNotification(Long patientId, String doctorName, Long grantId) {
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(patientId, "Record Access Request",
+                        "Dr. " + doctorName + " has requested access to view your consultation history. You can approve or deny this request.",
+                        "ACCESS_REQUEST", grantId);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send access request notification", e);
+            } catch (Exception e) {
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
+    }
+
+    public void sendAccessGrantedNotification(Long doctorId, String patientName) {
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(doctorId, "Record Access Approved",
+                        patientName + " has approved your request to view their consultation history.",
+                        "ACCESS_GRANTED", null);
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send access granted notification", e);
+            } catch (Exception e) {
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
+    }
+
     public void sendChatEscalationRequired(Long doctorId, Long appointmentId) {
         notificationRetryTemplate.execute(context -> {
             try {
@@ -443,7 +487,7 @@ public class NotificationService implements MessageListener {
             }
         }
 
-        long count = notificationRepository.countUnreadByUserId(userId);
+        long count = notificationRepository.findUnreadByUserId(userId).size();
         if (cache != null) {
             cache.put(userId, count);
         }

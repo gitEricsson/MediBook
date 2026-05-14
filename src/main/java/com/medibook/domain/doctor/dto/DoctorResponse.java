@@ -1,6 +1,7 @@
 package com.medibook.domain.doctor.dto;
 
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.config.HospitalProperties;
 import com.medibook.domain.doctor.entity.Doctor;
 import lombok.Builder;
 import lombok.Data;
@@ -26,20 +27,25 @@ public class DoctorResponse {
     private int slotDurationMins;
     private int yearsOfExperience;
     private BigDecimal consultationFee;
-    private BigDecimal effectiveConsultationFee;
+    private boolean seniorConsultant;
     private String gender;
     private boolean telemedicineEnabled;
     private double averageRating;
     private int reviewCount;
     private LocalDateTime createdAt;
 
-    public static DoctorResponse fromEntity(Doctor d) {
+    /**
+     * Build response using hospital-wide pricing.
+     * All doctors share the same base fee; senior consultants (&gt;threshold years) get a premium.
+     */
+    public static DoctorResponse fromEntity(Doctor d, HospitalProperties hospitalProps) {
         if (d.getUser() == null) {
             throw new ResourceNotFoundException("User account", "doctor.id", d.getId());
         }
         if (d.getDepartment() == null) {
             throw new ResourceNotFoundException("Department", "doctor.id", d.getId());
         }
+        boolean senior = hospitalProps.isSeniorConsultant(d.getYearsOfExperience());
         return DoctorResponse.builder()
                 .id(d.getId())
                 .userId(d.getUser().getId())
@@ -54,8 +60,42 @@ public class DoctorResponse {
                 .acceptingNew(d.isAcceptingNew())
                 .slotDurationMins(d.getSlotDurationMins())
                 .yearsOfExperience(d.getYearsOfExperience())
-                .consultationFee(d.getConsultationFee())
-                .effectiveConsultationFee(d.getEffectiveConsultationFee())
+                .consultationFee(hospitalProps.getFeeForDoctor(d.getYearsOfExperience()))
+                .seniorConsultant(senior)
+                .gender(d.getGender())
+                .telemedicineEnabled(d.isTelemedicineEnabled())
+                .averageRating(d.getAverageRating())
+                .reviewCount(d.getReviewCount())
+                .createdAt(d.getCreatedAt())
+                .build();
+    }
+
+    /** @deprecated Use {@link #fromEntity(Doctor, HospitalProperties)} instead */
+    @Deprecated
+    public static DoctorResponse fromEntity(Doctor d) {
+        if (d.getUser() == null) {
+            throw new ResourceNotFoundException("User account", "doctor.id", d.getId());
+        }
+        if (d.getDepartment() == null) {
+            throw new ResourceNotFoundException("Department", "doctor.id", d.getId());
+        }
+        boolean senior = d.getYearsOfExperience() > 10;
+        return DoctorResponse.builder()
+                .id(d.getId())
+                .userId(d.getUser().getId())
+                .fullName(d.getUser().getFullName())
+                .email(d.getUser().getEmail())
+                .specialization(d.getSpecialization())
+                .licenseNumber(d.getLicenseNumber())
+                .bio(d.getBio())
+                .departmentId(d.getDepartment().getId())
+                .departmentName(d.getDepartment().getName())
+                .languages(d.getLanguages())
+                .acceptingNew(d.isAcceptingNew())
+                .slotDurationMins(d.getSlotDurationMins())
+                .yearsOfExperience(d.getYearsOfExperience())
+                .consultationFee(d.getEffectiveConsultationFee())
+                .seniorConsultant(senior)
                 .gender(d.getGender())
                 .telemedicineEnabled(d.isTelemedicineEnabled())
                 .averageRating(d.getAverageRating())

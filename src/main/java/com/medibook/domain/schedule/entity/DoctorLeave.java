@@ -39,9 +39,16 @@ public class DoctorLeave extends AuditableEntity {
 
     @Column(nullable = false, length = 20)
     @Builder.Default
-    private String status = "APPROVED";
+    private String status = "PENDING";
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_by")
     private User createdBy;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by")
+    private User reviewedBy;
+
+    @Column(name = "reviewed_at")
+    private java.time.Instant reviewedAt;
 }

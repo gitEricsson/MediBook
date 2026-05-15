@@ -61,14 +61,22 @@ public class OllamaSupportProvider implements SupportAiProvider {
     @Override
     @CircuitBreaker(name = "ollamaProvider", fallbackMethod = "fallback")
     public String generate(String systemPrompt, String userMessage) {
+        return generate(systemPrompt, List.of(), userMessage);
+    }
+
+    @Override
+    @CircuitBreaker(name = "ollamaProvider", fallbackMethod = "fallbackWithHistory")
+    public String generate(String systemPrompt, List<Map<String, String>> conversationHistory, String userMessage) {
         try {
+            List<Map<String, String>> messages = new java.util.ArrayList<>();
+            messages.add(Map.of("role", "system", "content", systemPrompt));
+            messages.addAll(conversationHistory);
+            messages.add(Map.of("role", "user", "content", userMessage));
+
             String requestBody = objectMapper.writeValueAsString(Map.of(
                     "model",    model,
                     "stream",   false,
-                    "messages", List.of(
-                            Map.of("role", "system", "content", systemPrompt),
-                            Map.of("role", "user",   "content", userMessage)
-                    ),
+                    "messages", messages,
                     "options",  Map.of("num_predict", maxTokens, "temperature", 0.7)
             ));
 
@@ -101,6 +109,12 @@ public class OllamaSupportProvider implements SupportAiProvider {
 
     @SuppressWarnings("unused")
     public String fallback(String systemPrompt, String userMessage, Throwable t) {
+        log.warn("OllamaSupportProvider circuit breaker OPEN — model={}: {}", model, t.getMessage());
+        return FALLBACK_REPLY;
+    }
+
+    @SuppressWarnings("unused")
+    public String fallbackWithHistory(String systemPrompt, List<Map<String, String>> history, String userMessage, Throwable t) {
         log.warn("OllamaSupportProvider circuit breaker OPEN — model={}: {}", model, t.getMessage());
         return FALLBACK_REPLY;
     }

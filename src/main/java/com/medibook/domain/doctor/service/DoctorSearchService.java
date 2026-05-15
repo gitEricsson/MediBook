@@ -10,6 +10,7 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
+import com.medibook.domain.schedule.service.DoctorLeaveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -37,6 +38,7 @@ public class DoctorSearchService {
     private final AppointmentRepository appointmentRepository;
     private final com.medibook.domain.appointment.service.AppointmentHoldService holdService;
     private final HospitalProperties hospitalProperties;
+    private final DoctorLeaveService doctorLeaveService;
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> searchDoctors(
@@ -130,6 +132,7 @@ public class DoctorSearchService {
         List<AvailabilityGridResponse.DaySlots> days = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
             int dayOfWeek = date.getDayOfWeek().getValue();
+            boolean onLeave = doctorLeaveService.isDoctorOnLeave(doctorId, date);
             List<AvailabilityGridResponse.SlotInfo> slots = new ArrayList<>();
 
             for (DoctorWorkingHours hours : workingHours) {
@@ -144,6 +147,8 @@ public class DoctorSearchService {
                     String status;
                     if (start.isBefore(now)) {
                         status = "PAST";
+                    } else if (onLeave) {
+                        status = "ON_LEAVE";
                     } else if (overlapsAnyAppointment(start, end, bookedAppointments)) {
                         status = "TAKEN";
                     } else if (heldSlots.contains(start)) {

@@ -11,8 +11,11 @@ import com.medibook.domain.telemedicine.dto.VideoTokenResponse;
 import com.medibook.domain.telemedicine.entity.TelemedicineSessionStatus;
 import com.medibook.domain.telemedicine.service.TelemedicineCallService;
 import com.medibook.domain.telemedicine.service.TelemedicineSessionService;
+import com.medibook.ai.support.dto.SupportChatRequest;
+import com.medibook.ai.support.service.AiSupportService;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
+import org.springframework.security.core.Authentication;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -31,6 +34,7 @@ public class TelemedicineController {
 
     private final TelemedicineSessionService sessionService;
     private final TelemedicineCallService callService;
+    private final AiSupportService aiSupportService;
 
     @PostMapping("/appointment/{appointmentId}/start-video-call")
     @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR')")
@@ -155,5 +159,19 @@ public class TelemedicineController {
             @PathVariable Long id,
             @CurrentUser UserPrincipal principal) {
         return ApiResponse.ok(sessionService.getChatHistory(id, principal));
+    }
+
+    @PostMapping("/{id}/ai-assist")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR')")
+    @Operation(summary = "Get AI assistance during a telemedicine session")
+    public ApiResponse<com.medibook.ai.support.dto.SupportChatResponse> getAiAssistance(
+            @PathVariable Long id,
+            @Valid @RequestBody SupportChatRequest request,
+            Authentication authentication) {
+        String sessionKey = "telemedicine-" + id + "-" + authentication.getName();
+        return ApiResponse.ok(aiSupportService.chat(
+                new SupportChatRequest(request.message(), "telemedicine", sessionKey),
+                authentication
+        ));
     }
 }

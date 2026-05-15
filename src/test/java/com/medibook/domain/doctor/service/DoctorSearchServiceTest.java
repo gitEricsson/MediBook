@@ -12,6 +12,7 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
+import com.medibook.config.HospitalProperties;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import org.junit.jupiter.api.BeforeEach;
@@ -48,12 +49,14 @@ class DoctorSearchServiceTest {
     @Mock DoctorWorkingHoursRepository workingHoursRepository;
     @Mock AppointmentRepository appointmentRepository;
     @Mock AppointmentHoldService holdService;
+    @Mock com.medibook.domain.schedule.service.DoctorLeaveService doctorLeaveService;
 
+    HospitalProperties hospitalProperties = new HospitalProperties();
     DoctorSearchService service;
 
     @BeforeEach
     void setUp() {
-        service = new DoctorSearchService(doctorRepository, workingHoursRepository, appointmentRepository, holdService);
+        service = new DoctorSearchService(doctorRepository, workingHoursRepository, appointmentRepository, holdService, hospitalProperties, doctorLeaveService);
     }
 
     @Test

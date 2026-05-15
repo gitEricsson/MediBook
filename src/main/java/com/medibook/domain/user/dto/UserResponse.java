@@ -28,6 +28,7 @@ public class UserResponse {
     private String locale;
     private String avatarUrl;
     private LocalDateTime createdAt;
+    private Long doctorProfileId;
 
     public static UserResponse fromUser(User user) {
         return UserResponse.builder()

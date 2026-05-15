@@ -10,6 +10,7 @@ import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.schedule.service.DoctorLeaveService;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
 import com.medibook.messaging.event.AppointmentEvent;
@@ -49,6 +50,7 @@ public class AppointmentService {
     private final AppointmentEventProducer eventProducer;
     private final AppointmentHoldService holdService;
     private final SystemConfigRepository configRepository;
+    private final DoctorLeaveService doctorLeaveService;
 
     @Bulkhead(name = "appointmentService")
     @Transactional
@@ -71,6 +73,11 @@ public class AppointmentService {
         if (!doctor.isActive()) {
             throw new MediBookException("Doctor is not currently accepting appointments",
                     HttpStatus.CONFLICT, "DOCTOR_INACTIVE");
+        }
+
+        if (doctorLeaveService.isDoctorOnLeave(request.getDoctorId(), request.getScheduledAt().toLocalDate())) {
+            throw new MediBookException("Doctor is on leave on the requested date",
+                    HttpStatus.CONFLICT, "DOCTOR_ON_LEAVE");
         }
 
         if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt(), endTime)) {
@@ -197,6 +204,11 @@ public class AppointmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
 
         holdService.validateHold(doctorId, request.getNewStart(), request.getHoldId());
+
+        if (doctorLeaveService.isDoctorOnLeave(doctorId, request.getNewStart().toLocalDate())) {
+            throw new MediBookException("Doctor is on leave on the requested date",
+                    HttpStatus.CONFLICT, "DOCTOR_ON_LEAVE");
+        }
 
         if (appointmentRepository.existsConflictExcluding(appt.getId(), doctorId, request.getNewStart(), request.getNewEnd())) {
             throw new MediBookException("New slot is taken", HttpStatus.CONFLICT, "SLOT_TAKEN");

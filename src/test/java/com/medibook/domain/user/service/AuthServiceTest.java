@@ -44,6 +44,7 @@ class AuthServiceTest {
     @Mock com.medibook.messaging.producer.AppointmentEventProducer eventProducer;
     @Mock com.medibook.infrastructure.metrics.TokenMetrics         tokenMetrics;
     @Mock com.medibook.domain.user.service.SessionTimeoutService   sessionTimeoutService;
+    @Mock com.medibook.domain.doctor.repository.DoctorRepository   doctorRepository;
 
     @InjectMocks AuthService authService;
 

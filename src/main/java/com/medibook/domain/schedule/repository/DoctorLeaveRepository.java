@@ -13,6 +13,8 @@ public interface DoctorLeaveRepository extends JpaRepository<DoctorLeave, Long> 
 
     List<DoctorLeave> findByDoctorId(Long doctorId);
 
+    List<DoctorLeave> findByStatus(String status);
+
     @Query("""
         SELECT l FROM DoctorLeave l
         WHERE l.doctor.id = :doctorId
@@ -20,4 +22,12 @@ public interface DoctorLeaveRepository extends JpaRepository<DoctorLeave, Long> 
           AND l.startDate <= :date AND l.endDate >= :date
         """)
     List<DoctorLeave> findActiveLeaveOnDate(Long doctorId, LocalDate date);
+
+    @Query("""
+        SELECT l FROM DoctorLeave l
+        WHERE l.doctor.id = :doctorId
+          AND l.status IN ('PENDING', 'APPROVED')
+          AND l.startDate <= :endDate AND l.endDate >= :startDate
+        """)
+    List<DoctorLeave> findOverlapping(Long doctorId, LocalDate startDate, LocalDate endDate);
 }

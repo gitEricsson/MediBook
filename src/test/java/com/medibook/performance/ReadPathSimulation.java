@@ -28,7 +28,7 @@ import static io.gatling.javaapi.http.HttpDsl.status;
 public class ReadPathSimulation extends Simulation {
 
     private static final String BASE_URL = setting("GATLING_BASE_URL", "http://localhost:8080");
-    private static final String USERNAME = setting("GATLING_USERNAME", "patient.james@medibook.local");
+    private static final String USERNAME = setting("GATLING_USERNAME", "patient.fatima.0@medibook.local");
     private static final String PASSWORD = setting("GATLING_PASSWORD", "Password123!");
 
     private static final double START_RATE = doubleSetting("GATLING_START_RATE", 5);

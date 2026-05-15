@@ -1,213 +1,91 @@
-name: CI
+name: Backend CI
 
 on:
-  pull_request:
   push:
     branches:
       - main
+      - develop
+  pull_request:
+    branches:
       - master
-
-concurrency:
-  group: medibook-ci-${{ github.ref }}
-  cancel-in-progress: true
-
-env:
-  REGISTRY: gcr.io/${{ vars.GCP_PROJECT_ID }}
-  IMAGE_NAME: medibook-api
+      - develop
 
 jobs:
-  unit-tests:
-    name: Unit tests
+  test:
+    name: Run Backend Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
+    services:
+      mysql:
+        image: mysql:8.0
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: medibook
+          MYSQL_USER: medibook
+          MYSQL_PASSWORD: medibook
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+
+      zookeeper:
+        image: bitnami/zookeeper:3.9
+        ports:
+          - 2181:2181
+        env:
+          ALLOW_ANONYMOUS_LOGIN: yes
+
+      kafka:
+        image: bitnami/kafka:3.7
+        ports:
+          - 9092:9092
+        env:
+          KAFKA_CFG_ZOOKEEPER_CONNECT: zookeeper:2181
+          ALLOW_PLAINTEXT_LISTENER: yes
+          KAFKA_CFG_LISTENERS: PLAINTEXT://:9092
+          KAFKA_CFG_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092
+        options: >-
+          --health-cmd="kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"
+          --health-interval=15s
+          --health-timeout=10s
+          --health-retries=10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '21'
+          java-version: 21
           cache: maven
 
-      - name: Run unit suite
-        run: mvn -B -Dmedibook.integration.docker=false "-Dtest=*Test,!*IntegrationTest" test
+      - name: Run tests
+        env:
+          SPRING_PROFILES_ACTIVE: test
 
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: jacoco-unit
-          path: target/site/jacoco/
+          DB_HOST: localhost
+          DB_PORT: 3306
+          DB_NAME: medibook
+          DB_USER: medibook
+          DB_PASSWORD: medibook
 
-  integration-tests:
-    name: Integration tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    needs: unit-tests
-    steps:
-      - uses: actions/checkout@v4
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
+          KAFKA_BROKERS: localhost:9092
 
-      - name: Run integration suite
-        run: mvn -B -Dmedibook.integration.docker=true "-Dtest=*IntegrationTest,!OpenApiContractIntegrationTest" test
+          JWT_SECRET: testtesttesttesttesttesttesttesttesttesttesttesttest
+          PHI_ENCRYPTION_KEY: 12345678901234567890123456789012
 
-  flyway-validation:
-    name: Flyway validation
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    needs: unit-tests
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Run Flyway-backed integration suite
-        run: mvn -B -Dmedibook.integration.docker=true -Dmedibook.integration.schema=flyway "-Dtest=*IntegrationTest,!OpenApiContractIntegrationTest" test
-
-  openapi-contract:
-    name: OpenAPI contract
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    needs: unit-tests
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '21'
-          cache: maven
-
-      - name: Validate generated OpenAPI document
-        run: mvn -B -Dmedibook.integration.docker=false -Dtest=OpenApiContractIntegrationTest test
-
-  build-and-scan:
-    name: Build image + Trivy scan
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - integration-tests
-      - flyway-validation
-      - openapi-contract
-    permissions:
-      contents: read
-      security-events: write
-    outputs:
-      image-digest: ${{ steps.build.outputs.digest }}
-      image-tag: ${{ steps.meta.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Docker meta
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=sha-,format=short
-            type=ref,event=branch
-            type=ref,event=pr
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Authenticate to GCR
-        if: github.event_name == 'push'
-        uses: google-github-actions/auth@v2
-        with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Configure Docker for GCR
-        if: github.event_name == 'push'
-        run: gcloud auth configure-docker gcr.io --quiet
-
-      - name: Build image (push on main/master only)
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          build-args: |
-            BUILD_VERSION=${{ steps.meta.outputs.version }}
-            BUILD_SHA=${{ github.sha }}
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-
-      - name: Run Trivy vulnerability scan
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          format: sarif
-          output: trivy-results.sarif
-          severity: CRITICAL,HIGH
-          exit-code: '1'
-        continue-on-error: true
-
-      - name: Upload Trivy SARIF to GitHub Security
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
-        with:
-          sarif_file: trivy-results.sarif
-
-  zap-baseline:
-    name: ZAP DAST baseline
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs: build-and-scan
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Prepare env file for compose
-        run: cp .env.example .env
-
-      - name: Start application stack
-        run: docker compose -f docker/docker-compose.yml up -d --build app
-
-      - name: Wait for application health
         run: |
-          for i in {1..60}; do
-            if curl -fsS http://localhost:8080/actuator/health > /dev/null 2>&1; then
-              echo "App healthy after $((i * 10))s"
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "Application did not become healthy in time" >&2
-          docker logs medibook-app --tail 50
-          exit 1
-
-      - name: Run ZAP baseline
-        run: |
-          docker run --rm --network host \
-            -v "${{ github.workspace }}:/zap/wrk:rw" \
-            ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py \
-            -t http://localhost:8080/swagger-ui.html \
-            -J zap-baseline.json \
-            -r zap-baseline.html \
-            -I
-
-      - name: Upload ZAP report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: zap-baseline-report
-          path: |
-            zap-baseline.json
-            zap-baseline.html
-
-      - name: Stop application stack
-        if: always()
-        run: docker compose -f docker/docker-compose.yml down -v
+          mvn clean verify

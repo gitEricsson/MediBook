@@ -31,6 +31,9 @@ class UserServiceTest {
     @Mock UserRepository userRepository;
     @Mock AuthService    authService;
     @Mock RefreshTokenService refreshTokenService;
+    @Mock com.medibook.audit.service.AuditLogService auditLogService;
+    @Mock com.medibook.infrastructure.storage.StorageService storageService;
+    @Mock com.medibook.domain.doctor.repository.DoctorRepository doctorRepository;
 
     @InjectMocks UserService userService;
 

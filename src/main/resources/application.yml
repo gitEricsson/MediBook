@@ -377,7 +377,7 @@ management:
         enabled: true
       group:
         readiness:
-          include: readinessState,db,redis,kafka
+          include: readinessState,db,redis
         liveness:
           include: livenessState
       liveness-state:

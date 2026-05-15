@@ -19,6 +19,19 @@ public interface SupportAiProvider {
      */
     String generate(String systemPrompt, String userMessage);
 
+    /**
+     * Generate a support response with conversation history for context continuity.
+     *
+     * @param systemPrompt       The safety-controlled system instruction
+     * @param conversationHistory Previous messages as role/content pairs (oldest first)
+     * @param userMessage         The current user message
+     * @return                    Generated text; never null.
+     */
+    default String generate(String systemPrompt, java.util.List<java.util.Map<String, String>> conversationHistory, String userMessage) {
+        // Default implementation ignores history for backward compatibility
+        return generate(systemPrompt, userMessage);
+    }
+
     /** Provider identifier for audit logs */
     String providerId();
 }

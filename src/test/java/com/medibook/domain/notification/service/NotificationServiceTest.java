@@ -260,15 +260,17 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("getUnreadCount — uses COUNT query, not full list load")
-    void getUnreadCount_usesCountQuery() {
-        when(notificationRepository.countUnreadByUserId(1L)).thenReturn(5L);
+    @DisplayName("getUnreadCount — uses findUnreadByUserId list size")
+    void getUnreadCount_usesListSize() {
+        var n1 = new com.medibook.domain.notification.entity.Notification();
+        var n2 = new com.medibook.domain.notification.entity.Notification();
+        var n3 = new com.medibook.domain.notification.entity.Notification();
+        when(notificationRepository.findUnreadByUserId(1L)).thenReturn(List.of(n1, n2, n3));
 
         long count = notificationService.getUnreadCount(1L);
 
-        assertThat(count).isEqualTo(5L);
-        verify(notificationRepository).countUnreadByUserId(1L);
-        verify(notificationRepository, never()).findUnreadByUserId(anyLong());
+        assertThat(count).isEqualTo(3L);
+        verify(notificationRepository).findUnreadByUserId(1L);
     }
 
     @Test
@@ -279,7 +281,7 @@ class NotificationServiceTest {
         long count = notificationService.getUnreadCount(1L);
 
         assertThat(count).isEqualTo(7L);
-        verify(notificationRepository, never()).countUnreadByUserId(anyLong());
+        verify(notificationRepository, never()).findUnreadByUserId(anyLong());
     }
 
     @Test

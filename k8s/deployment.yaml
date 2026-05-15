@@ -12,7 +12,7 @@ spec:
   replicas: 2
   selector:
     matchLabels:
-      app: medibook
+      app: medibook-api
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -21,7 +21,7 @@ spec:
   template:
     metadata:
       labels:
-        app: medibook
+        app: medibook-api
         app.kubernetes.io/name: medibook
       annotations:
         prometheus.io/scrape: "true"
@@ -35,7 +35,7 @@ spec:
       terminationGracePeriodSeconds: 60
       containers:
         - name: medibook
-          image: REGISTRY/medibook-api:TAG
+          image: us-central1-docker.pkg.dev/medibook-prod/medibook-repo/medibook-api:v1
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -130,6 +130,16 @@ spec:
                 configMapKeyRef:
                   name: medibook-config
                   key: frontend-url
+            - name: SUPER_ADMIN_EMAIL
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: super-admin-email
+            - name: SUPER_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: super-admin-password
             - name: MEDIBOOK_RATE_LIMIT_TRUST_FORWARDED_HEADERS
               value: "true"
           resources:

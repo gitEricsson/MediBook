@@ -49,6 +49,7 @@ class AppointmentServiceTest {
     @Mock private AppointmentEventProducer eventProducer;
     @Mock private AppointmentHoldService holdService;
     @Mock private SystemConfigRepository configRepository;
+    @Mock private com.medibook.domain.schedule.service.DoctorLeaveService doctorLeaveService;
 
     @InjectMocks
     private AppointmentService appointmentService;

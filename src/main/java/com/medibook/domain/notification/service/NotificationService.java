@@ -467,15 +467,25 @@ public class NotificationService implements MessageListener {
     // ─── REST query methods ──────────────────────────────────────────────────
 
     public List<NotificationResponse> getRecent(Long userId) {
-        return notificationRepository.findRecentByUserId(userId).stream()
-                .map(NotificationResponse::fromEntity)
-                .collect(Collectors.toList());
+        try {
+            return notificationRepository.findRecentByUserId(userId).stream()
+                    .map(NotificationResponse::fromEntity)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Failed to fetch recent notifications for user {}: {}", userId, e.getMessage());
+            return List.of();
+        }
     }
 
     public List<NotificationResponse> getUnread(Long userId) {
-        return notificationRepository.findUnreadByUserId(userId).stream()
-                .map(NotificationResponse::fromEntity)
-                .collect(Collectors.toList());
+        try {
+            return notificationRepository.findUnreadByUserId(userId).stream()
+                    .map(NotificationResponse::fromEntity)
+                    .collect(Collectors.toList());
+        } catch (Exception e) {
+            log.warn("Failed to fetch unread notifications for user {}: {}", userId, e.getMessage());
+            return List.of();
+        }
     }
 
     public long getUnreadCount(Long userId) {
@@ -487,7 +497,14 @@ public class NotificationService implements MessageListener {
             }
         }
 
-        long count = notificationRepository.findUnreadByUserId(userId).size();
+        long count;
+        try {
+            count = notificationRepository.findUnreadByUserId(userId).size();
+        } catch (Exception e) {
+            log.warn("Failed to query unread notification count for user {} from Cassandra: {}",
+                    userId, e.getMessage());
+            return 0L;
+        }
         if (cache != null) {
             cache.put(userId, count);
         }

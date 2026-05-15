@@ -9,7 +9,7 @@ metadata:
     app.kubernetes.io/component: api
 spec:
   selector:
-    app: medibook
+    app: medibook-api
   type: ClusterIP
   ports:
     - name: http
@@ -26,31 +26,25 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-body-size: "10m"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
     nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
-    # Rate limiting — adjust to match Resilience4j settings
+
+    # Rate limiting
     nginx.ingress.kubernetes.io/limit-rps: "50"
     nginx.ingress.kubernetes.io/limit-connections: "20"
-    # Security headers
-    nginx.ingress.kubernetes.io/configuration-snippet: |
-      more_set_headers "X-Frame-Options: DENY";
-      more_set_headers "X-Content-Type-Options: nosniff";
-      more_set_headers "X-XSS-Protection: 1; mode=block";
-      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
-      more_set_headers "Permissions-Policy: geolocation=(), microphone=(), camera=()";
-    # HSTS (1 year)
-    nginx.ingress.kubernetes.io/server-snippet: |
-      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
     # Timeouts
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
     nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
-    # Enable CORS at ingress for preflight
+
+    # CORS handled by backend
     nginx.ingress.kubernetes.io/enable-cors: "false"
+
     # cert-manager TLS
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 spec:
   ingressClassName: nginx
   rules:
-    - host: api.medibook.com
+    - host: api.dreammedibook.com
       http:
         paths:
           - path: /
@@ -62,5 +56,5 @@ spec:
                   number: 80
   tls:
     - hosts:
-        - api.medibook.com
+        - api.dreammedibook.com
       secretName: medibook-tls

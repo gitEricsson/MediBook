@@ -2,6 +2,7 @@ package com.medibook.domain.user.service;
 
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.user.dto.*;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
@@ -41,6 +42,7 @@ public class AuthService {
     private final TokenMetrics             tokenMetrics;
     private final SessionTimeoutService    sessionTimeoutService;
     private final AppointmentEventProducer eventProducer;
+    private final DoctorRepository         doctorRepository;
 
 
     @Transactional
@@ -287,8 +289,11 @@ public class AuthService {
             eventProducer.publishAuditEvent(auditEvent);
         }
 
+        UserResponse userResponse = principal.toUserResponse();
+        enrichDoctorProfileId(userResponse, principal.getId());
+
         return TokenResponse.builder()
-                .user(principal.toUserResponse())
+                .user(userResponse)
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
@@ -308,13 +313,23 @@ public class AuthService {
         // Initialize lastActivityAt on successful login/2FA verification
         sessionTimeoutService.updateActivity(user.getId());
 
+        UserResponse userResponse = UserResponse.fromUser(user);
+        enrichDoctorProfileId(userResponse, user.getId());
+
         return TokenResponse.builder()
-                .user(UserResponse.fromUser(user))
+                .user(userResponse)
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresIn(tokenProvider.getAccessTokenExpirationMs() / 1000)
                 .build();
+    }
+
+    private void enrichDoctorProfileId(UserResponse response, Long userId) {
+        if (response.getRole() == Role.ROLE_DOCTOR) {
+            doctorRepository.findByUserId(userId)
+                    .ifPresent(doctor -> response.setDoctorProfileId(doctor.getId()));
+        }
     }
 
     private String normalizeEmail(String email) {

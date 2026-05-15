@@ -12,7 +12,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
-import java.util.UUID;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -30,9 +31,14 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class AiSupportService {
 
+    private static final int MAX_HISTORY_PER_SESSION = 20;
+
     private final SupportMessageClassifier classifier;
     private final SupportAiProvider        provider;
     private final SupportPromptBuilder     promptBuilder;
+
+    /** In-memory conversation history keyed by sessionId. Entries evicted when session count exceeds threshold. */
+    private final Map<String, List<Map<String, String>>> conversationHistory = new ConcurrentHashMap<>();
 
     public SupportChatResponse chat(SupportChatRequest request, Authentication authentication) {
         long start = System.currentTimeMillis();
@@ -87,15 +93,22 @@ public class AiSupportService {
                     ? promptBuilder.buildHealthEducationPrompt()
                     : promptBuilder.buildSystemPrompt();
 
-            String reply = provider.generate(systemPrompt, message);
+            List<Map<String, String>> history = conversationHistory.getOrDefault(sessionId, List.of());
+            String reply = provider.generate(systemPrompt, history, message);
 
             boolean requiresHumanSupport = cls == SupportMessageClassification.UNKNOWN
                     || reply.isBlank();
 
+            String finalReply = reply.isBlank()
+                    ? "I'm not sure I can help with that. Please contact MediBook support."
+                    : reply;
+
+            // Store conversation turn in history
+            addToHistory(sessionId, "user", message);
+            addToHistory(sessionId, "assistant", finalReply);
+
             return SupportChatResponse.builder()
-                    .reply(reply.isBlank()
-                            ? "I'm not sure I can help with that. Please contact MediBook support."
-                            : reply)
+                    .reply(finalReply)
                     .classification(cls)
                     .requiresHumanSupport(requiresHumanSupport)
                     .sessionId(sessionId)
@@ -105,6 +118,20 @@ public class AiSupportService {
             log.error("AiSupportService provider error session={} latencyMs={}: {}",
                     sessionId, System.currentTimeMillis() - start, ex.getMessage());
             return SupportChatResponse.serviceUnavailable(sessionId);
+        }
+    }
+
+    private void addToHistory(String sessionId, String role, String content) {
+        conversationHistory.computeIfAbsent(sessionId, k -> Collections.synchronizedList(new ArrayList<>()));
+        List<Map<String, String>> history = conversationHistory.get(sessionId);
+        history.add(Map.of("role", role, "content", content));
+        // Trim oldest entries if too long
+        while (history.size() > MAX_HISTORY_PER_SESSION * 2) {
+            history.remove(0);
+        }
+        // Evict oldest sessions if too many (simple memory guard)
+        if (conversationHistory.size() > 1000) {
+            conversationHistory.keySet().stream().findFirst().ifPresent(conversationHistory::remove);
         }
     }
 

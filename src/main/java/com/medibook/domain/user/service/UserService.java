@@ -4,6 +4,7 @@ import com.medibook.audit.entity.AuditLog;
 import com.medibook.audit.service.AuditLogService;
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.user.dto.UserResponse;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
@@ -37,14 +38,20 @@ public class UserService {
     private final RefreshTokenService refreshTokenService;
     private final AuditLogService   auditLogService;
     private final StorageService    storageService;
+    private final DoctorRepository  doctorRepository;
 
     @Cacheable(value = "users", key = "#id")
     @Bulkhead(name = "patientService")
     @Transactional(readOnly = true)
     public UserResponse getUserById(Long id) {
-        return userRepository.findById(id)
-                .map(UserResponse::fromUser)
+        User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", id));
+        UserResponse response = UserResponse.fromUser(user);
+        if (user.getRole() == Role.ROLE_DOCTOR) {
+            doctorRepository.findByUserId(id)
+                    .ifPresent(doctor -> response.setDoctorProfileId(doctor.getId()));
+        }
+        return response;
     }
 
     @Transactional(readOnly = true)

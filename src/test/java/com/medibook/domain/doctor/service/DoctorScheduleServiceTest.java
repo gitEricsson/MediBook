@@ -101,6 +101,35 @@ class DoctorScheduleServiceTest {
         assertThat(response.getFreeSlots()).hasSize(8);
     }
 
+    @Test
+    @DisplayName("getDailySchedule — invalid slot duration falls back to 30 minutes")
+    void getDailySchedule_invalidSlotDuration_usesDefaultDuration() {
+        doctor.setSlotDurationMins(0);
+        when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of());
+        when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
+                eq(DOCTOR_ID), any(), any())).thenReturn(List.of());
+
+        ScheduleDayResponse response = scheduleService.getDailySchedule(DOCTOR_ID, DATE);
+
+        assertThat(response.getFreeSlots()).hasSize(16);
+        assertThat(response.getFreeSlots().get(0).getEnd()).isEqualTo(LocalTime.of(9, 30));
+    }
+
+    @Test
+    @DisplayName("getDailySchedule — partial final window is not emitted")
+    void getDailySchedule_partialFinalWindow_isNotEmitted() {
+        DoctorWorkingHours hours = buildHours(LocalTime.of(0, 0), LocalTime.of(23, 59));
+        when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of(hours));
+        when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
+                eq(DOCTOR_ID), any(), any())).thenReturn(List.of());
+
+        ScheduleDayResponse response = scheduleService.getDailySchedule(DOCTOR_ID, DATE);
+
+        assertThat(response.getFreeSlots()).hasSize(47);
+        assertThat(response.getFreeSlots().get(46).getStart()).isEqualTo(LocalTime.of(23, 0));
+        assertThat(response.getFreeSlots().get(46).getEnd()).isEqualTo(LocalTime.of(23, 30));
+    }
+
 
     @Test
     @DisplayName("getDailySchedule — PENDING/CONFIRMED/COMPLETED appointments block their time slots")
@@ -195,6 +224,20 @@ class DoctorScheduleServiceTest {
     @Test
     @DisplayName("getScheduleSummary — no custom hours → totalSlots=16 (default 8-hour day)")
     void getScheduleSummary_defaultHours_sixteenTotalSlots() {
+        when(appointmentRepository.countByDoctorIdAndDateAndStatus(any(), any(), any(), any())).thenReturn(0L);
+        when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of());
+        when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
+                eq(DOCTOR_ID), any(), any())).thenReturn(List.of());
+
+        ScheduleSummaryResponse response = scheduleService.getScheduleSummary(DOCTOR_ID, DATE);
+
+        assertThat(response.getFreeSlots()).isEqualTo(16);
+    }
+
+    @Test
+    @DisplayName("getScheduleSummary — invalid slot duration falls back to 30 minutes")
+    void getScheduleSummary_invalidSlotDuration_usesDefaultDuration() {
+        doctor.setSlotDurationMins(0);
         when(appointmentRepository.countByDoctorIdAndDateAndStatus(any(), any(), any(), any())).thenReturn(0L);
         when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of());
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(

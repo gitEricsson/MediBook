@@ -18,6 +18,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -35,6 +36,7 @@ public class DoctorScheduleService {
     private final AppointmentRepository appointmentRepository;
     private final DoctorWorkingHoursRepository workingHoursRepository;
     private final DoctorRepository doctorRepository;
+    private static final int DEFAULT_SLOT_DURATION_MINS = 30;
 
     @Bulkhead(name = "doctorSchedule")
     @CircuitBreaker(name = "doctorSchedule")
@@ -44,7 +46,7 @@ public class DoctorScheduleService {
         LocalDateTime endOfDay = date.atTime(23, 59, 59);
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
-        int slotDuration = doctor.getSlotDurationMins();
+        int slotDuration = resolveSlotDurationMins(doctor);
 
         List<Appointment> appointments = appointmentRepository
                 .findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(doctorId, startOfDay, endOfDay);
@@ -61,10 +63,11 @@ public class DoctorScheduleService {
         }
 
         List<ScheduleDayResponse.TimeSlot> freeSlots = new ArrayList<>();
-        LocalTime current = workStart;
-        while (current.isBefore(workEnd)) {
-            final LocalTime slotTime = current;
-            LocalDateTime slotStart = date.atTime(slotTime);
+        LocalDateTime workStartAt = date.atTime(workStart);
+        LocalDateTime workEndAt = date.atTime(workEnd);
+        LocalDateTime current = workStartAt;
+        while (!current.plusMinutes(slotDuration).isAfter(workEndAt)) {
+            final LocalDateTime slotStart = current;
             LocalDateTime slotEnd = slotStart.plusMinutes(slotDuration);
             boolean isTaken = appointments.stream().anyMatch(a -> {
                 LocalDateTime appointmentEnd = a.getEndTime() != null
@@ -77,8 +80,8 @@ public class DoctorScheduleService {
             });
             if (!isTaken) {
                 freeSlots.add(ScheduleDayResponse.TimeSlot.builder()
-                        .start(slotTime)
-                        .end(slotTime.plusMinutes(slotDuration))
+                        .start(slotStart.toLocalTime())
+                        .end(slotEnd.toLocalTime())
                         .build());
             }
             current = current.plusMinutes(slotDuration);
@@ -99,7 +102,7 @@ public class DoctorScheduleService {
         LocalDateTime endOfDay = date.atTime(23, 59, 59);
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
-        int slotDuration = doctor.getSlotDurationMins();
+        int slotDuration = resolveSlotDurationMins(doctor);
 
         long done = appointmentRepository.countByDoctorIdAndDateAndStatus(doctorId, startOfDay, endOfDay, AppointmentStatus.COMPLETED);
         long upcoming = appointmentRepository.countByDoctorIdAndDateAndStatus(doctorId, startOfDay, endOfDay, AppointmentStatus.CONFIRMED);
@@ -109,7 +112,7 @@ public class DoctorScheduleService {
         List<DoctorWorkingHours> hoursList = workingHoursRepository.findByDoctorIdAndDayOfWeek(doctorId, dayOfWeek);
         long totalPossibleSlots = 480 / slotDuration; // Default 8-hour day
         if (!hoursList.isEmpty()) {
-            totalPossibleSlots = java.time.Duration.between(hoursList.get(0).getStartTime(), hoursList.get(0).getEndTime()).toMinutes() / slotDuration;
+            totalPossibleSlots = Duration.between(hoursList.get(0).getStartTime(), hoursList.get(0).getEndTime()).toMinutes() / slotDuration;
         }
         
         long taken = appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(doctorId, startOfDay, endOfDay)
@@ -144,5 +147,15 @@ public class DoctorScheduleService {
         Optional<Appointment> next = appointmentRepository.findFirstByDoctorIdAndScheduledAtAfterAndStatusOrderByScheduledAtAsc(
                 doctorId, LocalDateTime.now(), AppointmentStatus.CONFIRMED);
         return next.map(AppointmentResponse::fromEntity).orElse(null);
+    }
+
+    private int resolveSlotDurationMins(Doctor doctor) {
+        int configured = doctor.getSlotDurationMins();
+        if (configured > 0) {
+            return configured;
+        }
+        log.warn("Doctor [{}] has invalid slotDurationMins [{}]; using default {} minutes",
+                doctor.getId(), configured, DEFAULT_SLOT_DURATION_MINS);
+        return DEFAULT_SLOT_DURATION_MINS;
     }
 }

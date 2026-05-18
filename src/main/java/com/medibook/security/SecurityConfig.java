@@ -72,9 +72,7 @@ public class SecurityConfig {
             "/api/v1/auth/email/resend",
             // Payment provider webhooks must be accessible without a JWT token
             "/api/v1/payments/webhooks/**",
-            // Twilio Conversations webhook — authenticated by X-Twilio-Signature HMAC, not JWT
             "/api/v1/chat/twilio/webhook",
-            // MediBook Assistant support widget — auth optional; no PHI access
             "/api/v1/ai/chat",
             // WebSocket upgrade: HTTP auth is not used here.
             // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.

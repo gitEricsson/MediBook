@@ -73,7 +73,6 @@ public class ClaudeSupportProvider implements SupportAiProvider {
                 String role    = turn.getOrDefault("role", "user");
                 String content = turn.getOrDefault("content", "");
                 if (content.isBlank()) continue;
-                // Normalize "ai"/"assistant"/"bot" → "assistant"; everything else → "user".
                 String mapped = role.equalsIgnoreCase("assistant")
                         || role.equalsIgnoreCase("ai")
                         || role.equalsIgnoreCase("bot")

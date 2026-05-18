@@ -32,8 +32,6 @@ public class SupportMessageClassifier {
 
     private final SafetyClassifier safetyClassifier;
 
-    // ── Stage-2 intent patterns ───────────────────────────────────────────────
-
     private static final List<Pattern> BOOKING_PATTERNS = compile(
             "book", "schedule", "reschedule", "cancel",
             "slot", "available", "availability", "reserve"
@@ -64,8 +62,6 @@ public class SupportMessageClassifier {
             "my insurance number", "my medical record"
     );
 
-    // ── Public API ────────────────────────────────────────────────────────────
-
     public ClassificationResult classify(String message) {
         if (message == null || message.isBlank()) {
             return new ClassificationResult(SupportMessageClassification.SUPPORT,
@@ -73,8 +69,6 @@ public class SupportMessageClassifier {
         }
 
         String lower = message.toLowerCase();
-
-        // PHI check FIRST — data-protection concern independent of clinical safety routing.
         // Checked before SafetyClassifier so PHI statements that look clinical (e.g. "my diagnosis is X")
         // are caught here and not forwarded to any AI provider.
         List<String> phiMatches = matchAll(PHI_PATTERNS, lower);
@@ -82,8 +76,6 @@ public class SupportMessageClassifier {
             return new ClassificationResult(SupportMessageClassification.PHI_DETECTED,
                     SafetyClassification.safe(), phiMatches);
         }
-
-        // Stage 1 — safety gate
         SafetyClassification safety = safetyClassifier.classify(message);
 
         if (safety.getLabel() == SafetyLabel.BLOCKED) {
@@ -98,8 +90,6 @@ public class SupportMessageClassifier {
             return new ClassificationResult(SupportMessageClassification.MEDICAL_SYMPTOM,
                     safety, safety.getMatchedPatterns());
         }
-
-        // Stage 2 — support intent (payment checked before booking to avoid false positives
         // when "appointment" appears in payment-related messages like "refund for my appointment")
         try {
             if (!matchAll(PAYMENT_PATTERNS, lower).isEmpty()) {
@@ -126,8 +116,6 @@ public class SupportMessageClassifier {
         }
     }
 
-    // ── Helpers ───────────────────────────────────────────────────────────────
-
     private List<String> matchAll(List<Pattern> patterns, String text) {
         List<String> hits = new ArrayList<>();
         for (Pattern p : patterns) {
@@ -143,8 +131,6 @@ public class SupportMessageClassifier {
         }
         return List.copyOf(list);
     }
-
-    // ── Result record ─────────────────────────────────────────────────────────
 
     public record ClassificationResult(
             SupportMessageClassification classification,

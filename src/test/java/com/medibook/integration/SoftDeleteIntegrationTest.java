@@ -170,8 +170,6 @@ public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
         // Verify deleted
         Optional<Appointment> afterDelete = appointmentRepository.findById(appointment.getId());
         assertFalse(afterDelete.isPresent());
-
-        // Restore — load via include-deleted since @Where filters the entity
         Appointment deleted = appointmentRepository.findByIdIncludeDeleted(appointment.getId()).orElseThrow();
         deleted.restore();
         appointmentRepository.save(deleted);
@@ -328,8 +326,6 @@ public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
         appointmentRepository.save(appointment);
         appointmentRepository.save(apt2);
         flushAndClear();
-
-        // Verify deletion stats — 2 more than before
         assertEquals(initialDeleted + 2, appointmentRepository.countDeleted());
 
         // setUp's appointment was in initialTotal and is now deleted; apt2 was created and deleted

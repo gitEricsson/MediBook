@@ -186,8 +186,6 @@ public class AppointmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
 
         holdService.validateHold(doctorId, request.getNewStart(), request.getHoldId());
-
-        // Same booking policy as initial book — past time, leave, working hours.
         // Overlap is checked with an "excluding self" variant below so the current
         // appointment's own row doesn't trip the conflict guard.
         schedulingPolicy.checkBookable(doctorId, request.getNewStart());
@@ -357,8 +355,6 @@ public class AppointmentService {
         return appointmentRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
     }
-
-    // Working-hours validation now lives in AppointmentSchedulingPolicy.checkBookable — see there.
 
     private void ensureDoctorOwnsAppointment(Appointment appointment, UserPrincipal principal) {
         if (!appointment.getDoctor().getUser().getId().equals(principal.getId())) {

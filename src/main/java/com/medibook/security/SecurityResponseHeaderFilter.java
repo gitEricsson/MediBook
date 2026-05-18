@@ -20,7 +20,6 @@ public class SecurityResponseHeaderFilter extends OncePerRequestFilter {
                                     FilterChain filterChain) throws ServletException, IOException {
         filterChain.doFilter(request, response);
 
-        // Always set security headers for all responses
         setSecurityHeaders(response);
 
         if (isAuthenticatedApiRequest(request)) {
@@ -30,7 +29,6 @@ public class SecurityResponseHeaderFilter extends OncePerRequestFilter {
     }
 
     private void setSecurityHeaders(HttpServletResponse response) {
-        // Content Security Policy
         response.setHeader("Content-Security-Policy",
                 "default-src 'self'; " +
                 "script-src 'self' blob:; " +
@@ -40,20 +38,10 @@ public class SecurityResponseHeaderFilter extends OncePerRequestFilter {
                 "connect-src 'self' wss: https: http://localhost:8080; " +
                 "frame-ancestors 'none'");
 
-        // Prevent MIME type sniffing
         response.setHeader("X-Content-Type-Options", "nosniff");
-
-        // Clickjacking protection
         response.setHeader("X-Frame-Options", "DENY");
-
-        // XSS protection (0 = modern browsers rely on CSP)
         response.setHeader("X-XSS-Protection", "0");
-
-        // Restrict browser features
         response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-
-        // HSTS (optional: only enable if HTTPS is enforced)
-        // response.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains; preload");
     }
 
     private boolean isAuthenticatedApiRequest(HttpServletRequest request) {

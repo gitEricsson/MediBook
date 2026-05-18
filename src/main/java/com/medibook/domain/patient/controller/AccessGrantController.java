@@ -33,8 +33,6 @@ public class AccessGrantController {
     private final AccessGrantService accessGrantService;
     private final DoctorRepository   doctorRepository;
 
-    // ── Patient-initiated grants ──────────────────────────────────────────────
-
     @PostMapping("/api/v1/patients/{patientId}/access-grants")
     @Operation(summary = "Patient directly grants doctor access to their records")
     public ResponseEntity<ApiResponse<AccessGrantResponse>> grantAccess(
@@ -87,8 +85,6 @@ public class AccessGrantController {
         accessGrantService.revokeAccess(patientId, grantId);
         return ResponseEntity.ok(ApiResponse.ok("Access revoked successfully"));
     }
-
-    // ── Doctor-initiated request flow ────────────────────────────────────────
 
     @PostMapping("/api/v1/access-requests")
     @PreAuthorize("hasRole('DOCTOR')")

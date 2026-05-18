@@ -64,9 +64,6 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
         if (destination == null) {
             return;
         }
-
-        // We deliberately never push chat/notification frames to /topic/conversations/* —
-        // all per-user fan-out goes through convertAndSendToUser → /user/{id}/queue/*.
         // Reject any /topic/conversations/... subscribe attempts so a curious client
         // can't fish for messages by guessing conversation IDs (defense in depth).
         if (destination.startsWith("/topic/conversations/")
@@ -81,9 +78,6 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
         if (!destination.startsWith("/user/")) {
             return; // public topics (/topic/admin broadcasts, etc.) are unrestricted here
         }
-
-        // /user/queue/...  — Spring rewrites to /user/{principalName}/queue/... automatically
-        // /user/{otherId}/queue/... — explicit cross-user subscribe attempt; block it
         String afterPrefix = destination.substring("/user/".length());
         String firstSegment = afterPrefix.split("/")[0];
 

@@ -64,7 +64,6 @@ public class SeedDataRunner implements ApplicationRunner {
     private static final String  DEMO_PASSWORD = "Password123!";
     private static final LocalDate TODAY        = LocalDate.now();
 
-    // ── Repositories ────────────────────────────────────────────────────────
     private final SeedDataProperties          seedProps;
     private final UserRepository              userRepo;
     private final DepartmentRepository        deptRepo;
@@ -81,10 +80,6 @@ public class SeedDataRunner implements ApplicationRunner {
     private final WaitlistRepository          waitlistRepo;
     private final NotificationService         notificationService;
     private final PasswordEncoder             passwordEncoder;
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Static seed data specs
-    // ══════════════════════════════════════════════════════════════════════════
 
     private record DeptSpec(String name, String code, String desc, BigDecimal fee) {}
 
@@ -162,7 +157,6 @@ public class SeedDataRunner implements ApplicationRunner {
     ) {}
 
     private static final List<ApptSpec> APPT_SPECS = List.of(
-        // ── Doctor 0: Cardiology (Chukwuemeka) ──────────────────────────────
         new ApptSpec(0, 0, -14,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Chest pain evaluation and stress test"),
         new ApptSpec(0, 1, -10,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Hypertension management and medication review"),
         new ApptSpec(0, 2,  -7,  9, AppointmentStatus.COMPLETED,  AppointmentType.TELEHEALTH, "Post-PTCA cardiac follow-up"),
@@ -174,8 +168,6 @@ public class SeedDataRunner implements ApplicationRunner {
         new ApptSpec(0, 8,   4, 14, AppointmentStatus.CONFIRMED,  AppointmentType.TELEHEALTH, "Medication review"),
         new ApptSpec(0, 9,   8,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Pre-surgery cardiac clearance"),
         new ApptSpec(0, 0,  12, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Annual cardiac screening"),
-
-        // ── Doctor 1: Dermatology (Aisha) ────────────────────────────────────
         new ApptSpec(1, 1, -13, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Eczema flare-up evaluation"),
         new ApptSpec(1, 2,  -9, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Acne vulgaris treatment review"),
         new ApptSpec(1, 3,  -6, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Psoriasis plaque management"),
@@ -187,8 +179,6 @@ public class SeedDataRunner implements ApplicationRunner {
         new ApptSpec(1, 9,   5, 15, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Mole mapping and dermoscopy"),
         new ApptSpec(1, 0,   9, 10, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Keloid scar treatment consultation"),
         new ApptSpec(1, 1,  13, 15, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Vitiligo management plan"),
-
-        // ── Doctor 2: Pediatrics (Adaeze) ────────────────────────────────────
         new ApptSpec(2, 2, -12,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Child wellness check-up, age 5"),
         new ApptSpec(2, 3,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Fever, cough, and sore throat"),
         new ApptSpec(2, 4,  -5,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Asthma management and inhaler technique"),
@@ -200,8 +190,6 @@ public class SeedDataRunner implements ApplicationRunner {
         new ApptSpec(2, 0,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Food allergy testing referral"),
         new ApptSpec(2, 1,   9,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Child nutrition and growth consultation"),
         new ApptSpec(2, 2,  14, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "School readiness and vision screening"),
-
-        // ── Doctor 3: Neurology (Ibrahim) ─────────────────────────────────────
         new ApptSpec(3, 3, -11,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Chronic migraine management"),
         new ApptSpec(3, 4,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Epilepsy medication and seizure diary review"),
         new ApptSpec(3, 5,  -4,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Ischaemic stroke rehabilitation follow-up"),
@@ -213,8 +201,6 @@ public class SeedDataRunner implements ApplicationRunner {
         new ApptSpec(3, 1,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Multiple sclerosis disease monitoring"),
         new ApptSpec(3, 2,  10,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Peripheral neuropathy evaluation"),
         new ApptSpec(3, 3,  14, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Sleep disorder and narcolepsy consultation"),
-
-        // ── Doctor 4: General Medicine (Taiwo) ───────────────────────────────
         new ApptSpec(4, 4, -13,  8, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Annual physical examination and wellness screen"),
         new ApptSpec(4, 5,  -9,  8, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Type 2 diabetes — HbA1c and medication review"),
         new ApptSpec(4, 6,  -5,  8, AppointmentStatus.COMPLETED,  AppointmentType.TELEHEALTH, "Blood pressure monitoring review"),
@@ -227,8 +213,6 @@ public class SeedDataRunner implements ApplicationRunner {
         new ApptSpec(4, 3,   9,  8, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Pre-employment medical examination"),
         new ApptSpec(4, 4,  13, 14, AppointmentStatus.PENDING,    AppointmentType.TELEHEALTH, "General wellness and lifestyle consultation")
     );
-
-    // Consultation notes for COMPLETED appointments (same order as APPT_SPECS — first 3 per doctor)
     private record NoteSpec(String diagnosis, String treatmentPlan, String prescriptions, int followUpDays) {}
 
     private static final List<NoteSpec> NOTE_SPECS = List.of(
@@ -329,10 +313,6 @@ public class SeedDataRunner implements ApplicationRunner {
         )
     );
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // Entry point
-    // ══════════════════════════════════════════════════════════════════════════
-
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
@@ -369,10 +349,6 @@ public class SeedDataRunner implements ApplicationRunner {
         log.info("[Seed]   Patient     : patient.james@medibook.local");
         log.info("[Seed] ══════════════════════════════════════════════════");
     }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Seed methods
-    // ══════════════════════════════════════════════════════════════════════════
 
     private Map<String, Department> seedDepartments() {
         Map<String, Department> result = new HashMap<>();
@@ -432,8 +408,6 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private List<Doctor> seedDoctors(Map<String, Department> depts) {
-        // Every doctor defaults to a 60-min slot. Patients who need a shorter window
-        // (e.g. 30 min) use the manual start/end picker on the booking page.
         int[] slotDurations = { 60, 60, 60, 60, 60, 60, 60, 60 };
         List<Doctor> doctors = new ArrayList<>();
         for (int idx = 0; idx < DOCTOR_SPECS.size(); idx++) {
@@ -441,8 +415,6 @@ public class SeedDataRunner implements ApplicationRunner {
             int slotDuration = slotDurations[idx % slotDurations.length];
             if (doctorRepo.existsByLicenseNumber(s.license())) {
                 doctorRepo.findByLicenseNumber(s.license()).ifPresent(existing -> {
-                    // Refresh slot duration on existing seeded doctors so the booking
-                    // grid step varies (the original seed pinned everyone to 30 min).
                     if (existing.getSlotDurationMins() != slotDuration) {
                         existing.setSlotDurationMins(slotDuration);
                         doctorRepo.save(existing);
@@ -479,14 +451,9 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private void seedWorkingHours(List<Doctor> doctors) {
-        // Unified shift: every doctor is on duty 08:00–22:00, Mon–Sat. With the 60-min
-        // default slot duration this gives the patient a clean hourly grid from 8 AM
-        // through 9 PM (the last slot starts at 21:00 and ends at 22:00). Patients who
-        // want a shorter consultation (e.g. 30 min) use the manual start/end picker.
-        // Always wipe + reseed in dev so any old fixed-09:00–17:00 rows are replaced.
         LocalTime shiftStart = LocalTime.of(8, 0);
         LocalTime shiftEnd   = LocalTime.of(22, 0);
-        int[] daysOfWeek     = { 1, 2, 3, 4, 5, 6 };   // Mon … Sat (Sun closed)
+        int[] daysOfWeek     = { 1, 2, 3, 4, 5, 6 };
 
         int created = 0;
         for (Doctor d : doctors) {
@@ -523,7 +490,6 @@ public class SeedDataRunner implements ApplicationRunner {
                 .isActive(true)
                 .build());
         }
-        // Doctor-specific templates
         if (!doctors.isEmpty()) {
             Doctor cardiologist = doctors.get(0);
             if (templateRepo.findAvailableForDoctor(cardiologist.getId()).stream()
@@ -556,7 +522,6 @@ public class SeedDataRunner implements ApplicationRunner {
     private List<Appointment> seedAppointments(List<User> patients, List<Doctor> doctors,
                                                 Map<String, Department> depts) {
         List<Appointment> saved = new ArrayList<>();
-        // Track (doctorIdx → localSeqNum) for generating stable confirmation codes
         Map<Integer, Integer> seq = new HashMap<>();
 
         for (ApptSpec s : APPT_SPECS) {
@@ -602,7 +567,6 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private void seedConsultationNotes(List<Appointment> appointments, List<Doctor> doctors) {
-        // NOTE_SPECS[dIdx * 3 + localPos] aligns with the first 3 COMPLETED appointments per doctor
         int doctorBlockSize = 11;
         int created = 0;
 
@@ -667,7 +631,6 @@ public class SeedDataRunner implements ApplicationRunner {
             reviewRepo.save(review);
             created++;
 
-            // Sync doctor's average rating
             Doctor doc = appt.getDoctor();
             long approvedCount = reviewRepo.countApprovedByDoctorId(doc.getId());
             double avg = reviewRepo.findAverageRatingByDoctorId(doc.getId()).orElse(0.0);
@@ -680,7 +643,6 @@ public class SeedDataRunner implements ApplicationRunner {
 
     private void seedPayments(List<Appointment> appointments) {
         int created = 0;
-        // One SUCCESSFUL payment per COMPLETED appointment
         List<Appointment> completed = appointments.stream()
             .filter(a -> a.getStatus() == AppointmentStatus.COMPLETED)
             .toList();
@@ -704,7 +666,6 @@ public class SeedDataRunner implements ApplicationRunner {
             Payment saved = paymentRepo.save(payment);
             created++;
 
-            // Invoice
             String invoiceNumber = "INV-SEED-" + appt.getConfirmationCode();
             if (invoiceRepo.findByInvoiceNumber(invoiceNumber).isEmpty()) {
                 InvoiceLineItem lineItem = InvoiceLineItem.builder()
@@ -822,10 +783,6 @@ public class SeedDataRunner implements ApplicationRunner {
         }
         log.info("[Seed] Notifications dispatched ({} appointments processed)", sent);
     }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Helper methods
-    // ══════════════════════════════════════════════════════════════════════════
 
     private User findOrCreateUser(String email, String firstName, String lastName,
                                    String phone, LocalDate dob, Role role) {

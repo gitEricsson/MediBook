@@ -43,9 +43,6 @@ public class AppointmentHoldService {
      * Pass 0 to fall back to the doctor's configured slot duration.
      */
     public String holdSlot(Long doctorId, LocalDateTime scheduledAt, int durationMins) {
-        // Fail-fast: past time, outside hours, doctor on leave, doctor inactive AND
-        // overlapping confirmed appointment — all surface here so the patient sees the
-        // error *before* the "slot held" UI.
         LocalDateTime end = durationMins > 0
                 ? scheduledAt.plusMinutes(durationMins)
                 : scheduledAt.plusMinutes(resolveDefaultDurationMins(doctorId));
@@ -56,10 +53,7 @@ public class AppointmentHoldService {
             schedulingPolicy.checkOverlapForDefaultSlot(doctorId, scheduledAt);
         }
 
-        // Detect overlapping *active Redis holds* by another patient that haven't yet
-        // been confirmed into the DB. existsConflict() only sees the DB, so without
-        // this check a manual window of 08:30–09:30 could slip past a held 08:00–09:00.
-        if (overlapsActiveHold(doctorId, scheduledAt, end, /*excludeKey*/ null)) {
+        if (overlapsActiveHold(doctorId, scheduledAt, end, null)) {
             log.warn("Hold rejected — overlapping active hold for doctor {} at {}", doctorId, scheduledAt);
             throw new MediBookException(
                     "Doctor is not available for booking at this time. Please pick a different window.",
@@ -68,7 +62,6 @@ public class AppointmentHoldService {
 
         String slotKey = buildSlotKey(doctorId, scheduledAt);
         String holdId  = UUID.randomUUID().toString();
-        // Value encodes endTime so future holds can detect overlap: "holdId|endIso".
         String holdValue = holdId + "|" + end.format(formatter);
 
         Boolean acquired = redisTemplate.opsForValue().setIfAbsent(slotKey, holdValue, HOLD_DURATION);
@@ -96,9 +89,6 @@ public class AppointmentHoldService {
         if (keys == null) return false;
         for (String key : keys) {
             if (key.equals(excludeKey)) continue;
-            // Key format: appt_hold:{doctorId}:{startIso}. The ISO string itself contains
-            // colons (HH:mm:ss), so we strip the known prefix instead of using
-            // lastIndexOf(':') — that would mistakenly grab the seconds segment.
             if (!key.startsWith(prefix)) continue;
             LocalDateTime holdStart;
             try {
@@ -114,7 +104,6 @@ public class AppointmentHoldService {
                     holdEnd = holdStart.plusMinutes(60);
                 }
             } else {
-                // Legacy value with no end time encoded — assume 60-min window.
                 holdEnd = holdStart.plusMinutes(60);
             }
             if (start.isBefore(holdEnd) && end.isAfter(holdStart)) {

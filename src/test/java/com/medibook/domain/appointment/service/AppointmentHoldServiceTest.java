@@ -62,7 +62,6 @@ class AppointmentHoldServiceTest {
             String id = holdService.holdSlot(DOCTOR_ID, START, 30);
 
             assertThat(id).isNotBlank();
-            // Value is "holdId|endIso" — required for downstream overlap detection.
             verify(valueOps).setIfAbsent(
                     eq("appt_hold:1:2026-05-18T10:00:00"),
                     argThat((String v) -> v.contains("|") && v.endsWith("10:30:00")),
@@ -73,8 +72,6 @@ class AppointmentHoldServiceTest {
     @Nested @DisplayName("holdSlot — overlap with active Redis holds")
     class OverlapWithRedisHolds {
         @Test void rejectsRequestThatOverlapsHeldWindow() {
-            // Existing hold: 10:00–11:00 held by patient A.
-            // Patient B requests 10:30–11:30 → overlap.
             doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
             String existingKey = "appt_hold:1:2026-05-18T10:00:00";
             when(redisTemplate.keys("appt_hold:1:*")).thenReturn(Set.of(existingKey));
@@ -88,7 +85,6 @@ class AppointmentHoldServiceTest {
         }
 
         @Test void acceptsRequestThatJustTouchesShiftBoundary() {
-            // Existing hold 10:00–10:30. New request 10:30–11:00 → touching, not overlapping.
             doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
             String existingKey = "appt_hold:1:2026-05-18T10:00:00";
             when(redisTemplate.keys("appt_hold:1:*")).thenReturn(Set.of(existingKey));
@@ -105,7 +101,6 @@ class AppointmentHoldServiceTest {
             String existingKey = "appt_hold:1:2026-05-18T10:00:00";
             when(redisTemplate.keys("appt_hold:1:*")).thenReturn(Set.of(existingKey));
             when(valueOps.get(existingKey)).thenReturn("bare-holdid-no-end");
-            // Patient B asks for 10:30–11:00 — legacy 60-min assumption makes that an overlap.
             assertThatThrownBy(() -> holdService.holdSlot(DOCTOR_ID, START.plusMinutes(30), 30))
                     .isInstanceOf(MediBookException.class)
                     .hasMessageContaining("not available");
@@ -115,7 +110,6 @@ class AppointmentHoldServiceTest {
     @Nested @DisplayName("holdSlot — race on identical slot key")
     class IdenticalKeyRace {
         @Test void rejectsSecondHolderOnSameStart() {
-            // Two patients pick the exact same slot — Redis setIfAbsent returns false on the second.
             doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
             when(redisTemplate.keys(anyString())).thenReturn(Set.of());
             when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);

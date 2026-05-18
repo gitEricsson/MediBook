@@ -84,8 +84,6 @@ public class AiSupportService {
         return response;
     }
 
-    // ── Private helpers ───────────────────────────────────────────────────────
-
     private SupportChatResponse generateAiResponse(
             String message,
             SupportMessageClassification cls,
@@ -124,11 +122,8 @@ public class AiSupportService {
             return SupportChatResponse.serviceUnavailable(sessionId);
         }
     }
-
-    // ── Redis-backed conversation history ────────────────────────────────
     // Stored as a JSON-encoded list under ai_support_history:{sessionId} with a 30-min
     // sliding TTL. Survives multi-replica deployment and removes the 1000-session
-    // in-memory cap. Redis failures are non-fatal — we degrade to a fresh history
     // for that turn rather than 500.
 
     private List<Map<String, String>> loadHistory(String sessionId) {
@@ -152,7 +147,6 @@ public class AiSupportService {
                     objectMapper.writeValueAsString(history),
                     HISTORY_TTL);
         } catch (Exception ex) {
-            // Persisting history is best-effort — losing one turn won't break the chat.
             log.warn("AiSupportService history store failed for session={}: {}", sessionId, ex.getMessage());
         }
     }

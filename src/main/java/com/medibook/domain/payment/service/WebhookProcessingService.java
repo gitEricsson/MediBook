@@ -46,8 +46,6 @@ public class WebhookProcessingService {
         }
 
         PaymentProviderPort port = providerFactory.get(provider);
-
-        // Signature MUST be valid — unsigned webhooks are rejected
         if (!port.verifyWebhookSignature(payload, signature)) {
             log.warn("Webhook signature verification FAILED for provider={}", providerName);
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid webhook signature");
@@ -96,7 +94,6 @@ public class WebhookProcessingService {
 
     private void reconcilePayment(Payment payment, JsonNode node,
                                   com.medibook.domain.payment.entity.PaymentProvider provider) {
-        // Amount guard — reject if the provider says less was paid than expected
         BigDecimal amountPaid = extractAmountPaid(node, provider);
         if (amountPaid != null && amountPaid.compareTo(BigDecimal.ZERO) > 0
                 && amountPaid.compareTo(payment.getAmount()) < 0) {
@@ -121,8 +118,6 @@ public class WebhookProcessingService {
             paymentService.handleSuccessfulWebhookPayment(payment);
         }
     }
-
-    // ─── Provider-specific extraction helpers ────────────────────────────────
 
     private String extractReference(JsonNode node,
                                     com.medibook.domain.payment.entity.PaymentProvider provider) {

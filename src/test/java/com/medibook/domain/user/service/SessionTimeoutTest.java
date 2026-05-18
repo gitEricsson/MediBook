@@ -57,14 +57,11 @@ class SessionTimeoutTest {
     @Test
     @DisplayName("Should return true for active session within timeout window")
     void testIsSessionValid_WithinTimeout() {
-        // Arrange
         testUser.setLastActivityAt(LocalDateTime.now().minusMinutes(10));
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
-        // Act
         boolean isValid = sessionTimeoutService.isSessionValid(1L);
 
-        // Assert
         assertTrue(isValid);
         verify(userRepository, times(1)).findById(1L);
         verify(refreshTokenService, never()).revokeAllForUser(anyLong());
@@ -73,15 +70,12 @@ class SessionTimeoutTest {
     @Test
     @DisplayName("Should return false and revoke tokens for session exceeding timeout")
     void testIsSessionValid_ExceededTimeout() {
-        // Arrange
-        testUser.setLastActivityAt(LocalDateTime.now().minusMinutes(35)); // 35 minutes ago
+        testUser.setLastActivityAt(LocalDateTime.now().minusMinutes(35));
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
         when(refreshTokenService.revokeAllForUser(1L, "session_timeout")).thenReturn(1);
 
-        // Act
         boolean isValid = sessionTimeoutService.isSessionValid(1L);
 
-        // Assert
         assertFalse(isValid);
         verify(refreshTokenService, times(1)).revokeAllForUser(1L, "session_timeout");
         verify(tokenMetrics, times(1)).recordSessionTimeout(eq(1L), anyLong());
@@ -90,26 +84,20 @@ class SessionTimeoutTest {
     @Test
     @DisplayName("Should return false for non-existent user")
     void testIsSessionValid_UserNotFound() {
-        // Arrange
         when(userRepository.findById(999L)).thenReturn(Optional.empty());
 
-        // Act
         boolean isValid = sessionTimeoutService.isSessionValid(999L);
 
-        // Assert
         assertFalse(isValid);
     }
 
     @Test
     @DisplayName("Should update lastActivityAt to current time")
     void testUpdateActivity() {
-        // Arrange
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
-        // Act
         sessionTimeoutService.updateActivity(1L);
 
-        // Assert
         verify(userRepository, times(1)).findById(1L);
         verify(userRepository, times(1)).save(argThat(user ->
                 user.getLastActivityAt() != null &&
@@ -121,35 +109,28 @@ class SessionTimeoutTest {
     @Test
     @DisplayName("Should return session timeout minutes configuration")
     void testGetSessionTimeoutMinutes() {
-        // Act & Assert
         assertEquals(30, sessionTimeoutService.getSessionTimeoutMinutes());
     }
 
     @Test
     @DisplayName("Should calculate remaining session time correctly")
     void testGetRemainingSessionMinutes() {
-        // Arrange
         testUser.setLastActivityAt(LocalDateTime.now().minusMinutes(15));
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
-        // Act
         long remaining = sessionTimeoutService.getRemainingSessionMinutes(1L);
 
-        // Assert
         assertTrue(remaining > 0 && remaining <= 15);
     }
 
     @Test
     @DisplayName("Should return -1 for remaining time if session exceeded")
     void testGetRemainingSessionMinutes_Exceeded() {
-        // Arrange
         testUser.setLastActivityAt(LocalDateTime.now().minusMinutes(35));
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
-        // Act
         long remaining = sessionTimeoutService.getRemainingSessionMinutes(1L);
 
-        // Assert
         assertEquals(-1, remaining);
     }
 }

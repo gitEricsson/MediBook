@@ -159,8 +159,6 @@ public class VisitCopilotService {
         return toDto(copilotRepository.save(session));
     }
 
-    // ─── helpers ──────────────────────────────────────────────────────────
-
     private TelemedicineSession loadSessionAndAuthorize(Long id, UserPrincipal principal) {
         TelemedicineSession ts = telemedicineRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("TelemedicineSession", "id", id));

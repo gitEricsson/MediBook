@@ -113,8 +113,6 @@ public class AccessGrantService {
         );
     }
 
-    // ── Doctor-initiated request flow ────────────────────────────────────────
-
     @Transactional
     public AccessGrantResponse requestAccess(Long doctorId, Long patientId, String reason) {
         Doctor doctor = doctorRepository.findById(doctorId)

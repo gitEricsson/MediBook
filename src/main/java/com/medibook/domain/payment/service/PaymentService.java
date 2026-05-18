@@ -80,8 +80,6 @@ public class PaymentService {
         if (appointment.getStatus() == AppointmentStatus.CANCELLED) {
             throw new MediBookException("Cannot pay for a cancelled appointment", HttpStatus.BAD_REQUEST, "APPOINTMENT_CANCELLED");
         }
-
-        // If a successful payment already exists, hard-reject — appointment is paid.
         if (paymentRepository.existsByAppointmentIdAndStatusIn(req.getAppointmentId(),
                 List.of(PaymentStatus.SUCCESSFUL))) {
             throw new MediBookException("Appointment is already paid",
@@ -90,7 +88,6 @@ public class PaymentService {
 
         // If a PENDING payment exists, recycle it. The user retried (e.g. picked a different
         // gateway, or the first init failed mid-redirect). Cancel the stale pending row and
-        // start a fresh attempt with the chosen provider — this keeps initiate idempotent
         // from the caller's perspective without rejecting legitimate retries.
         paymentRepository.findFirstByAppointmentIdAndStatusInOrderByCreatedAtDesc(
                 req.getAppointmentId(), List.of(PaymentStatus.PENDING, PaymentStatus.INITIATED))

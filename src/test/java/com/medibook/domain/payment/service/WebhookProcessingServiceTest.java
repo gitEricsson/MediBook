@@ -110,8 +110,6 @@ class WebhookProcessingServiceTest {
         mockMonnifyPort = mock(PaymentProviderPort.class);
     }
 
-    // ─── Duplicate webhook ────────────────────────────────────────────────
-
     @Test
     @DisplayName("duplicate webhook is silently ignored — idempotency key check")
     void processWebhook_duplicate_skipsProcessing() {
@@ -122,8 +120,6 @@ class WebhookProcessingServiceTest {
         verify(providerFactory, never()).get(any());
         verify(paymentRepository, never()).save(any());
     }
-
-    // ─── Signature validation ─────────────────────────────────────────────
 
     @Test
     @DisplayName("invalid Monnify webhook signature is rejected with 401")
@@ -150,8 +146,6 @@ class WebhookProcessingServiceTest {
                 .isInstanceOf(ResponseStatusException.class)
                 .hasMessageContaining("Unknown provider");
     }
-
-    // ─── Successful Monnify webhook ───────────────────────────────────────
 
     @Test
     @DisplayName("valid PAID Monnify webhook updates payment status to SUCCESSFUL")
@@ -199,8 +193,6 @@ class WebhookProcessingServiceTest {
         verify(paymentRepository, never()).save(any());
     }
 
-    // ─── Amount mismatch ──────────────────────────────────────────────────
-
     @Test
     @DisplayName("amount mismatch (underpaid) — payment status is NOT updated")
     void processWebhook_amountMismatch_doesNotConfirm() {
@@ -226,8 +218,6 @@ class WebhookProcessingServiceTest {
         verify(paymentRepository, never()).save(any());
         verify(paymentService, never()).handleSuccessfulWebhookPayment(any());
     }
-
-    // ─── FAILED webhook ───────────────────────────────────────────────────
 
     @Test
     @DisplayName("FAILED Monnify webhook updates payment status to FAILED")
@@ -255,8 +245,6 @@ class WebhookProcessingServiceTest {
         assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.FAILED);
         verify(paymentService, never()).handleSuccessfulWebhookPayment(any());
     }
-
-    // ─── Webhook event persistence ────────────────────────────────────────
 
     @Test
     @DisplayName("webhook event is persisted with processed=true on success")

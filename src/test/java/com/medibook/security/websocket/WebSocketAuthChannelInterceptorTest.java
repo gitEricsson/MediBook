@@ -33,8 +33,6 @@ class WebSocketAuthChannelInterceptorTest {
         return MessageBuilder.createMessage(new byte[0], accessor.getMessageHeaders());
     }
 
-    // ─── CONNECT ────────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("CONNECT — passes through when principal is present")
     void connect_withPrincipal_passes() {
@@ -49,8 +47,6 @@ class WebSocketAuthChannelInterceptorTest {
         assertThatThrownBy(() -> interceptor.preSend(msg, channel))
                 .isInstanceOf(AccessDeniedException.class);
     }
-
-    // ─── SUBSCRIBE ──────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("SUBSCRIBE — /user/queue/notifications is allowed for authenticated user")
@@ -95,8 +91,6 @@ class WebSocketAuthChannelInterceptorTest {
                 .isInstanceOf(AccessDeniedException.class);
     }
 
-    // ─── Defense-in-depth: private topics are always blocked ─────────────────
-
     @Test
     @DisplayName("SUBSCRIBE — /topic/conversations/{id} is rejected (private fan-out lives on /user/queue)")
     void subscribe_privateConversationsTopic_blocked() {
@@ -131,8 +125,6 @@ class WebSocketAuthChannelInterceptorTest {
                 "/topic/announcements", new StompPrincipal("42"));
         assertThatNoException().isThrownBy(() -> interceptor.preSend(msg, channel));
     }
-
-    // ─── Other frames ────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("SEND frames pass through without restriction")

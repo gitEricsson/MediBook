@@ -83,7 +83,6 @@ class NotificationRetryTest {
 
     @Test
     void testRetryOnTransientFailure() {
-        // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock CassandraOperations to fail once, then succeed
@@ -92,11 +91,7 @@ class NotificationRetryTest {
             .when(cassandraOperations).insert(any(Notification.class), any());
 
         doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
-
-        // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentBooked(event));
-
-        // Attempt 1: patient insert fails (1 call) → retry
         // Attempt 2: patient insert succeeds + doctor insert succeeds (2 calls)
         verify(cassandraOperations, times(3)).insert(any(Notification.class), any());
         verify(notificationMetrics, atLeastOnce()).recordSuccess();
@@ -104,14 +99,11 @@ class NotificationRetryTest {
 
     @Test
     void testNoRetryOnPermanentFailure() {
-        // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock CassandraOperations to throw permanent error
         doThrow(new IllegalArgumentException("Invalid appointment ID"))
             .when(cassandraOperations).insert(any(Notification.class), any());
-
-        // Act & Assert
         assertThrows(IllegalArgumentException.class,
             () -> notificationService.sendAppointmentBooked(event));
 
@@ -122,14 +114,11 @@ class NotificationRetryTest {
 
     @Test
     void testExhaustedRetries() {
-        // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock CassandraOperations to always fail with transient error
         doThrow(new RuntimeException("Always times out"))
             .when(cassandraOperations).insert(any(Notification.class), any());
-
-        // Act & Assert
         assertThrows(TemporaryFailureException.class,
             () -> notificationService.sendAppointmentBooked(event));
 
@@ -140,7 +129,6 @@ class NotificationRetryTest {
 
     @Test
     void testAppointmentConfirmedRetry() {
-        // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock to fail once, then succeed
@@ -149,8 +137,6 @@ class NotificationRetryTest {
             .when(cassandraOperations).insert(any(Notification.class), any());
 
         doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
-
-        // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentConfirmed(event));
 
         // Verify success was recorded after retry
@@ -159,7 +145,6 @@ class NotificationRetryTest {
 
     @Test
     void testAppointmentCancelledRetry() {
-        // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock to fail once, then succeed
@@ -168,11 +153,7 @@ class NotificationRetryTest {
             .when(cassandraOperations).insert(any(Notification.class), any());
 
         doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
-
-        // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentCancelled(event));
-
-        // Attempt 1: patient insert fails (1 call) → retry
         // Attempt 2: patient insert succeeds + doctor insert succeeds (2 calls)
         verify(cassandraOperations, times(3)).insert(any(Notification.class), any());
         verify(notificationMetrics, atLeastOnce()).recordSuccess();
@@ -180,7 +161,6 @@ class NotificationRetryTest {
 
     @Test
     void testAppointmentReminderRetry() {
-        // Arrange
         AppointmentEvent event = createMockAppointmentEvent();
 
         // Mock to fail once, then succeed
@@ -189,8 +169,6 @@ class NotificationRetryTest {
             .when(cassandraOperations).insert(any(Notification.class), any());
 
         doReturn(0L).when(stringRedisTemplate).convertAndSend(anyString(), anyString());
-
-        // Act & Assert
         assertDoesNotThrow(() -> notificationService.sendAppointmentReminder(event));
 
         // Verify success was recorded

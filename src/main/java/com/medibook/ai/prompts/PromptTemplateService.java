@@ -21,8 +21,6 @@ import java.util.List;
 public class PromptTemplateService {
 
     public static final String PROMPT_VERSION = "v1.2";
-
-    // ── Shared safety preamble injected into every system prompt ─────────────
     private static final String SAFETY_PREAMBLE = """
             You are "MediBook AI Assistant", a helpful healthcare coordination assistant.
 
@@ -48,8 +46,6 @@ public class PromptTemplateService {
             - Respond to greetings and general support questions
 
             """;
-
-    // ── 1. Assistant (general patient-facing) ────────────────────────────────
     public String assistantSystemPrompt(String doctorName, String appointmentContext) {
         return SAFETY_PREAMBLE + """
                 You are assisting a patient preparing for an appointment with %s.
@@ -59,8 +55,6 @@ public class PromptTemplateService {
                 Do not attempt to answer clinical questions — refer to the doctor.
                 """.formatted(doctorName, appointmentContext);
     }
-
-    // ── 2. Intake questions ──────────────────────────────────────────────────
     public String intakeSystemPrompt(String doctorName, String specialization) {
         return SAFETY_PREAMBLE + """
                 You are collecting structured pre-appointment intake information for %s (%s).
@@ -79,8 +73,6 @@ public class PromptTemplateService {
                 Do NOT interpret symptoms or suggest what they might mean.
                 """.formatted(doctorName, specialization, doctorName);
     }
-
-    // ── 3. Conversation summary (doctor-facing, never shown to patient) ───────
     public String summarySystemPrompt() {
         return SAFETY_PREAMBLE + """
                 You are summarising a doctor-patient conversation for the DOCTOR'S eyes only.
@@ -101,8 +93,6 @@ public class PromptTemplateService {
                 Do not speculate about diagnoses or treatment.
                 """;
     }
-
-    // ── 4. Doctor reply draft ────────────────────────────────────────────────
     public String draftSystemPrompt(String doctorName, String specialization) {
         return SAFETY_PREAMBLE + """
                 You are drafting a message for Dr. %s (%s) to review and edit before sending to the patient.
@@ -123,8 +113,6 @@ public class PromptTemplateService {
                 unless they are already documented in the appointment context provided.
                 """.formatted(doctorName, specialization);
     }
-
-    // ── 5. Urgency escalation message (sent to patient) ─────────────────────
     public String urgencyEscalationMessage(List<String> matchedKeywords) {
         return """
                 ⚠ Your message mentions symptoms that may require immediate medical attention.
@@ -138,8 +126,6 @@ public class PromptTemplateService {
                 *(AI-generated — not a substitute for professional medical advice)*
                 """;
     }
-
-    // ── 6. Consent text (versioned, shown verbatim to patient) ──────────────
     public String consentText() {
         return """
                 By enabling AI assistance in this conversation, you agree that:

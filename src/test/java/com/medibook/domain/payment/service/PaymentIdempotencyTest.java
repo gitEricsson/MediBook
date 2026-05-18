@@ -89,8 +89,6 @@ class PaymentIdempotencyTest {
                 .status(PaymentStatus.SUCCESSFUL)
                 .build();
         principal = UserPrincipal.fromUser(patient);
-
-        // ObjectMapper is called inside publishPaymentEvent — return empty json so the
         // outbox save path doesn't NPE in tests that exercise it.
         when(objectMapper.writeValueAsString(any())).thenReturn("{}");
     }
@@ -143,7 +141,6 @@ class PaymentIdempotencyTest {
     @Nested @DisplayName("Outbox event ids are deterministic per (paymentId, eventType)")
     class DeterministicEventIds {
         @Test void sameEventTypeProducesSameEventId() throws Exception {
-            // publishPaymentEvent is private — exercise it via handleSuccessfulWebhookPayment
             // which calls it for SUCCEEDED. The deterministic id is "payment-{id}-{type-lower}".
             when(invoiceRepository.findByPaymentId(100L)).thenReturn(Optional.of(
                     Invoice.builder().id(7L).status("UNPAID").build()));
@@ -171,8 +168,6 @@ class PaymentIdempotencyTest {
             when(invoiceRepository.findByPaymentId(100L)).thenReturn(Optional.of(paid));
 
             paymentService.handleSuccessfulWebhookPayment(existingPayment);
-
-            // Invoice already paid — we should NOT save it again (would update paidAt to now).
             verify(invoiceRepository, never()).save(any());
         }
 

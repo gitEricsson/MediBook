@@ -44,8 +44,6 @@ class MonnifyPaymentProviderTest {
         assertThat(provider.getProvider()).isEqualTo(PaymentProvider.MONNIFY);
     }
 
-    // ─── Webhook signature ───────────────────────────────────────────────────
-
     @Test
     @DisplayName("verifyWebhookSignature — valid SHA-512(secretKey + body) returns true")
     void verifyWebhookSignature_valid_returnsTrue() throws Exception {
@@ -78,8 +76,6 @@ class MonnifyPaymentProviderTest {
         assertThat(provider.verifyWebhookSignature("{}", "any-sig")).isTrue();
     }
 
-    // ─── InitiatePayment (dev stub path) ────────────────────────────────────
-
     @Test
     @DisplayName("initiatePayment — returns dev stub when not configured")
     void initiatePayment_notConfigured_returnsDevStub() {
@@ -97,8 +93,6 @@ class MonnifyPaymentProviderTest {
         assertThat(result.status()).isEqualTo("PENDING");
     }
 
-    // ─── VerifyPayment (dev stub path) ──────────────────────────────────────
-
     @Test
     @DisplayName("verifyPayment — returns dev stub when not configured")
     void verifyPayment_notConfigured_returnsDevStub() {
@@ -110,8 +104,6 @@ class MonnifyPaymentProviderTest {
         assertThat(result.providerRef()).isEqualTo("MN-TXN-001");
         assertThat(result.status()).isEqualTo("PAID");
     }
-
-    // ─── RefundPayment (dev stub path) ──────────────────────────────────────
 
     @Test
     @DisplayName("refundPayment — returns dev stub when not configured")
@@ -125,8 +117,6 @@ class MonnifyPaymentProviderTest {
         assertThat(result.success()).isTrue();
         assertThat(result.message()).contains("dev stub");
     }
-
-    // ─── Circuit-breaker fallbacks ───────────────────────────────────────────
 
     @Test
     @DisplayName("initiatePaymentFallback — returns CB placeholder with PENDING status")

@@ -28,8 +28,6 @@ class AiSupportControllerIntegrationTest extends IntegrationTestSupport {
     @Autowired MockMvc       mockMvc;
     @Autowired ObjectMapper  objectMapper;
 
-    // ── 200 OK — public endpoint ──────────────────────────────────────────────
-
     @Test
     @DisplayName("returns 200 for valid support message without auth")
     void returnsTwoHundredWithoutAuth() throws Exception {
@@ -44,8 +42,6 @@ class AiSupportControllerIntegrationTest extends IntegrationTestSupport {
                 .andExpect(jsonPath("$.data.classification").value("BOOKING_HELP"))
                 .andExpect(jsonPath("$.data.sessionId").isNotEmpty());
     }
-
-    // ── Safety routing — no AI should be called ───────────────────────────────
 
     @Nested
     @DisplayName("Safety routing (no AI call)")
@@ -103,8 +99,6 @@ class AiSupportControllerIntegrationTest extends IntegrationTestSupport {
         }
     }
 
-    // ── Validation ────────────────────────────────────────────────────────────
-
     @Nested
     @DisplayName("Request validation")
     class Validation {
@@ -137,8 +131,6 @@ class AiSupportControllerIntegrationTest extends IntegrationTestSupport {
                     .andExpect(status().isUnprocessableEntity());
         }
     }
-
-    // ── Session ID ─────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("provided session ID is echoed back in response")

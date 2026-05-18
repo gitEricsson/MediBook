@@ -64,8 +64,6 @@ class PrescriptionServiceTest {
         assertThatThrownBy(() -> service.create(req, patientPrincipal))
                 .isInstanceOf(MediBookException.class)
                 .hasMessageContaining("Only the doctor");
-
-        // Now as the doctor — should succeed.
         when(repository.save(any(Prescription.class))).thenAnswer(inv -> {
             Prescription p = inv.getArgument(0); p.setId(1L); return p;
         });
@@ -110,8 +108,6 @@ class PrescriptionServiceTest {
                 org.springframework.data.domain.Pageable.unpaged(), otherPatientPrincipal))
                 .isInstanceOf(MediBookException.class)
                 .hasMessageContaining("Not authorized");
-
-        // Admin path — must not throw on auth.
         when(repository.findByPatientId(50L, org.springframework.data.domain.Pageable.unpaged()))
                 .thenReturn(org.springframework.data.domain.Page.empty());
         var page = service.listForPatient(50L, null,

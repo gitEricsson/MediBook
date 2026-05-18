@@ -76,7 +76,6 @@ public class HospitalProperties {
         String norm = specialization.trim().toLowerCase(Locale.ROOT);
         // Map keys are bound case-as-written by Spring (its @ConfigurationProperties
         // binder accesses the map field directly and bypasses our setter), so we
-        // normalize on every lookup instead. Cost is negligible — handful of entries.
         return specializationFees.entrySet().stream()
                 .filter(e -> e.getKey() != null)
                 .filter(e -> {

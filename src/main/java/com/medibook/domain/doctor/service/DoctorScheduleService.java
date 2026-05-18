@@ -54,7 +54,7 @@ public class DoctorScheduleService {
         int dayOfWeek = date.getDayOfWeek().getValue();
         List<DoctorWorkingHours> hoursList = workingHoursRepository.findByDoctorIdAndDayOfWeek(doctorId, dayOfWeek);
         
-        LocalTime workStart = LocalTime.of(9, 0); // Default fallback
+        LocalTime workStart = LocalTime.of(9, 0);
         LocalTime workEnd = LocalTime.of(17, 0);
         
         if (!hoursList.isEmpty()) {

@@ -21,8 +21,6 @@ import java.util.regex.Pattern;
 @Slf4j
 @Service
 public class SafetyClassifier {
-
-    // ── Emergency / Urgent Symptoms ──────────────────────────────────────────
     private static final List<Pattern> URGENT_PATTERNS = compile(
             "chest pain", "chest tightness", "chest pressure",
             "can't breathe", "cannot breathe", "shortness of breath", "difficulty breathing",
@@ -36,8 +34,6 @@ public class SafetyClassifier {
             "seizure", "convulsions", "won't stop shaking",
             "call 911", "call 999", "call ambulance", "emergency"
     );
-
-    // ── Clinical Questions requiring doctor involvement ───────────────────────
     private static final List<Pattern> CLINICAL_PATTERNS = compile(
             "diagnos", "prescri", "medication", "drug", "dosage", "dose",
             "treatment", "cure", "surgery", "operation", "biopsy",
@@ -47,8 +43,6 @@ public class SafetyClassifier {
             "test result", "lab result", "blood test", "scan result", "mri", "ct scan",
             "prognosis", "recovery time", "will i be okay"
     );
-
-    // ── Prompt injection / jailbreak attempts ────────────────────────────────
     private static final List<Pattern> BLOCKED_PATTERNS = compile(
             "ignore previous instructions", "ignore all instructions",
             "system prompt", "act as", "pretend you are", "you are now",
@@ -70,7 +64,6 @@ public class SafetyClassifier {
         String lower = messageBody.toLowerCase();
 
         try {
-            // 1. Check BLOCKED first — stops all AI processing
             List<String> blockedMatches = matchAll(BLOCKED_PATTERNS, lower);
             if (!blockedMatches.isEmpty()) {
                 log.warn("SafetyClassifier BLOCKED — patterns matched: {}", blockedMatches);
@@ -81,8 +74,6 @@ public class SafetyClassifier {
                         .requiresEscalation(false)
                         .build();
             }
-
-            // 2. Check URGENT — triggers immediate escalation
             List<String> urgentMatches = matchAll(URGENT_PATTERNS, lower);
             if (!urgentMatches.isEmpty()) {
                 log.warn("SafetyClassifier URGENT — patterns matched: {}", urgentMatches);
@@ -93,8 +84,6 @@ public class SafetyClassifier {
                         .requiresEscalation(true)
                         .build();
             }
-
-            // 3. Check CLINICAL — route to doctor draft, not direct AI reply
             List<String> clinicalMatches = matchAll(CLINICAL_PATTERNS, lower);
             if (!clinicalMatches.isEmpty()) {
                 log.debug("SafetyClassifier CLINICAL_QUERY — patterns: {}", clinicalMatches);

@@ -208,7 +208,6 @@ public class TelemedicineCallService {
                     HttpStatus.BAD_REQUEST, "TELEMEDICINE_NOT_ALLOWED");
         }
         // Block calls on unpaid / unconfirmed appointments. The slot is reserved (PENDING)
-        // until payment lands and flips status to CONFIRMED — we only let confirmed pairs
         // dial each other.
         if (status != AppointmentStatus.CONFIRMED) {
             throw new MediBookException(

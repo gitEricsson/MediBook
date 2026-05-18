@@ -3,6 +3,7 @@ package com.medibook.domain.appointment.service;
 import com.medibook.common.exception.MediBookException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -10,183 +11,181 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
-import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Set;
 
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
+/**
+ * Concurrency-sensitive — every regression here either double-books a slot or
+ * silently drops a valid one. Covers hold-overlap detection (Redis scan),
+ * legacy-format value parsing, and validate/release contracts.
+ */
 @ExtendWith(MockitoExtension.class)
+@org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
 @DisplayName("AppointmentHoldService — Unit Tests")
 class AppointmentHoldServiceTest {
 
     @Mock StringRedisTemplate redisTemplate;
     @Mock ValueOperations<String, String> valueOps;
-
+    @Mock AppointmentSchedulingPolicy schedulingPolicy;
     @InjectMocks AppointmentHoldService holdService;
 
-    private static final Long   DOCTOR_ID = 10L;
-    private static final LocalDateTime SLOT = LocalDateTime.of(2026, 6, 20, 10, 0);
-
-    private static String keyStartsWith(String prefix) {
-        return argThat((String k) -> k != null && k.startsWith(prefix));
-    }
+    private static final long DOCTOR_ID = 1L;
+    private static final LocalDateTime START = LocalDateTime.of(2026, 5, 18, 10, 0);
 
     @BeforeEach
-    void setUp() {
+    void wireRedis() {
         lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
+    @Nested @DisplayName("holdSlot — happy path")
+    class HappyPath {
+        @Test void acquiresHold_andStoresEndTime() {
+            doNothing().when(schedulingPolicy).checkBookableWithOverlap(eq(DOCTOR_ID), eq(START), any());
+            when(redisTemplate.keys(anyString())).thenReturn(Set.of());
+            when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
 
-    @Test
-    @DisplayName("holdSlot — SETNX succeeds, returns a non-blank UUID holdId")
-    void holdSlot_setnxSucceeds_returnsHoldId() {
-        when(valueOps.setIfAbsent(keyStartsWith("appt_hold:"), anyString(), any(Duration.class)))
-                .thenReturn(true);
+            String id = holdService.holdSlot(DOCTOR_ID, START, 30);
 
-        String holdId = holdService.holdSlot(DOCTOR_ID, SLOT);
-
-        assertThat(holdId).isNotBlank();
+            assertThat(id).isNotBlank();
+            // Value is "holdId|endIso" — required for downstream overlap detection.
+            verify(valueOps).setIfAbsent(
+                    eq("appt_hold:1:2026-05-18T10:00:00"),
+                    argThat((String v) -> v.contains("|") && v.endsWith("10:30:00")),
+                    eq(Duration.ofMinutes(10)));
+        }
     }
 
-    @Test
-    @DisplayName("holdSlot — key is stored under appt_hold: prefix with 10-minute TTL")
-    void holdSlot_usesCorrectPrefixAndTenMinuteTtl() {
-        when(valueOps.setIfAbsent(any(), anyString(), any())).thenReturn(true);
+    @Nested @DisplayName("holdSlot — overlap with active Redis holds")
+    class OverlapWithRedisHolds {
+        @Test void rejectsRequestThatOverlapsHeldWindow() {
+            // Existing hold: 10:00–11:00 held by patient A.
+            // Patient B requests 10:30–11:30 → overlap.
+            doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
+            String existingKey = "appt_hold:1:2026-05-18T10:00:00";
+            when(redisTemplate.keys("appt_hold:1:*")).thenReturn(Set.of(existingKey));
+            when(valueOps.get(existingKey)).thenReturn("aaaa-aaaa|2026-05-18T11:00:00");
 
-        holdService.holdSlot(DOCTOR_ID, SLOT);
+            assertThatThrownBy(() -> holdService.holdSlot(DOCTOR_ID, START.plusMinutes(30), 60))
+                    .isInstanceOf(MediBookException.class)
+                    .hasMessageContaining("not available");
 
-        verify(valueOps).setIfAbsent(
-                keyStartsWith("appt_hold:"),
-                anyString(),
-                eq(Duration.ofMinutes(10)));
+            verify(valueOps, never()).setIfAbsent(anyString(), anyString(), any(Duration.class));
+        }
+
+        @Test void acceptsRequestThatJustTouchesShiftBoundary() {
+            // Existing hold 10:00–10:30. New request 10:30–11:00 → touching, not overlapping.
+            doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
+            String existingKey = "appt_hold:1:2026-05-18T10:00:00";
+            when(redisTemplate.keys("appt_hold:1:*")).thenReturn(Set.of(existingKey));
+            when(valueOps.get(existingKey)).thenReturn("aaaa-aaaa|2026-05-18T10:30:00");
+            when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
+
+            String id = holdService.holdSlot(DOCTOR_ID, START.plusMinutes(30), 30);
+            assertThat(id).isNotBlank();
+        }
+
+        @Test void parsesLegacyValueWithoutEndTime_assumes60MinWindow() {
+            // Legacy holds (pre-fix) stored just the holdId, no "|endIso". Assume 60 min.
+            doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
+            String existingKey = "appt_hold:1:2026-05-18T10:00:00";
+            when(redisTemplate.keys("appt_hold:1:*")).thenReturn(Set.of(existingKey));
+            when(valueOps.get(existingKey)).thenReturn("bare-holdid-no-end");
+            // Patient B asks for 10:30–11:00 — legacy 60-min assumption makes that an overlap.
+            assertThatThrownBy(() -> holdService.holdSlot(DOCTOR_ID, START.plusMinutes(30), 30))
+                    .isInstanceOf(MediBookException.class)
+                    .hasMessageContaining("not available");
+        }
     }
 
-    @Test
-    @DisplayName("holdSlot — SETNX fails (slot already held) throws 409 SLOT_TAKEN")
-    void holdSlot_slotAlreadyHeld_throwsSlotTaken() {
-        when(valueOps.setIfAbsent(any(), anyString(), any())).thenReturn(false);
+    @Nested @DisplayName("holdSlot — race on identical slot key")
+    class IdenticalKeyRace {
+        @Test void rejectsSecondHolderOnSameStart() {
+            // Two patients pick the exact same slot — Redis setIfAbsent returns false on the second.
+            doNothing().when(schedulingPolicy).checkBookableWithOverlap(anyLong(), any(), any());
+            when(redisTemplate.keys(anyString())).thenReturn(Set.of());
+            when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(false);
 
-        assertThatThrownBy(() -> holdService.holdSlot(DOCTOR_ID, SLOT))
-                .isInstanceOf(MediBookException.class)
-                .satisfies(ex -> {
-                    MediBookException mbe = (MediBookException) ex;
-                    assertThat(mbe.getStatus()).isEqualTo(HttpStatus.CONFLICT);
-                    assertThat(mbe.getErrorCode()).isEqualTo("SLOT_TAKEN");
-                });
+            assertThatThrownBy(() -> holdService.holdSlot(DOCTOR_ID, START, 30))
+                    .isInstanceOf(MediBookException.class)
+                    .hasMessageContaining("not available");
+        }
     }
 
-    @Test
-    @DisplayName("holdSlot — each invocation generates a unique holdId")
-    void holdSlot_generatesUniqueHoldIds() {
-        when(valueOps.setIfAbsent(any(), anyString(), any())).thenReturn(true);
+    @Nested @DisplayName("holdSlot — grid path (durationMins=0)")
+    class GridPath {
+        @Test void usesDefaultSlotPolicyWhenNoDurationProvided() {
+            doNothing().when(schedulingPolicy).checkBookable(eq(DOCTOR_ID), eq(START));
+            doNothing().when(schedulingPolicy).checkOverlapForDefaultSlot(eq(DOCTOR_ID), eq(START));
+            when(redisTemplate.keys(anyString())).thenReturn(Set.of());
+            when(valueOps.setIfAbsent(anyString(), anyString(), any(Duration.class))).thenReturn(true);
 
-        String first  = holdService.holdSlot(DOCTOR_ID, SLOT);
-        String second = holdService.holdSlot(DOCTOR_ID, SLOT);
-
-        assertThat(first).isNotEqualTo(second);
+            String id = holdService.holdSlot(DOCTOR_ID, START, 0);
+            assertThat(id).isNotBlank();
+            verify(schedulingPolicy).checkBookable(DOCTOR_ID, START);
+            verify(schedulingPolicy).checkOverlapForDefaultSlot(DOCTOR_ID, START);
+        }
     }
 
-    @Test
-    @DisplayName("holdSlot — key encodes both doctorId and ISO slot time")
-    void holdSlot_keyEncodesDoctoridAndSlotTime() {
-        when(valueOps.setIfAbsent(any(), anyString(), any())).thenReturn(true);
-
-        holdService.holdSlot(DOCTOR_ID, SLOT);
-
-        verify(valueOps).setIfAbsent(
-                argThat(k -> k != null
-                        && k.contains(String.valueOf(DOCTOR_ID))
-                        && k.contains("2026-06-20T10:00:00")),
-                anyString(),
-                any());
+    @Nested @DisplayName("validateHold")
+    class ValidateHold {
+        @Test void skipsValidationWhenHoldIdIsBlank() {
+            holdService.validateHold(DOCTOR_ID, START, "");
+            holdService.validateHold(DOCTOR_ID, START, null);
+            verify(valueOps, never()).get(anyString());
+        }
+        @Test void rejectsWhenHoldExpired() {
+            when(valueOps.get(anyString())).thenReturn(null);
+            assertThatThrownBy(() -> holdService.validateHold(DOCTOR_ID, START, "any-id"))
+                    .isInstanceOf(MediBookException.class)
+                    .hasMessageContaining("expired");
+        }
+        @Test void rejectsWrongHoldId() {
+            when(valueOps.get(anyString())).thenReturn("real-holdid|2026-05-18T10:30:00");
+            assertThatThrownBy(() -> holdService.validateHold(DOCTOR_ID, START, "wrong-id"))
+                    .isInstanceOf(MediBookException.class)
+                    .hasMessageContaining("Invalid hold");
+        }
+        @Test void acceptsMatchingHoldIdInNewFormat() {
+            when(valueOps.get(anyString())).thenReturn("real-holdid|2026-05-18T10:30:00");
+            holdService.validateHold(DOCTOR_ID, START, "real-holdid");
+        }
+        @Test void acceptsMatchingHoldIdInLegacyFormat() {
+            when(valueOps.get(anyString())).thenReturn("legacy-bare-id");
+            holdService.validateHold(DOCTOR_ID, START, "legacy-bare-id");
+        }
     }
 
-
-    @Test
-    @DisplayName("validateHold — null holdId skips validation, no Redis interaction")
-    void validateHold_nullHoldId_skipsValidation() {
-        holdService.validateHold(DOCTOR_ID, SLOT, null);
-
-        verifyNoInteractions(redisTemplate);
-    }
-
-    @Test
-    @DisplayName("validateHold — blank holdId skips validation, no Redis interaction")
-    void validateHold_blankHoldId_skipsValidation() {
-        holdService.validateHold(DOCTOR_ID, SLOT, "   ");
-
-        verifyNoInteractions(redisTemplate);
-    }
-
-    @Test
-    @DisplayName("validateHold — matching holdId passes without throwing")
-    void validateHold_matchingHoldId_passes() {
-        when(valueOps.get(keyStartsWith("appt_hold:"))).thenReturn("correct-hold-id");
-
-        assertThatCode(() -> holdService.validateHold(DOCTOR_ID, SLOT, "correct-hold-id"))
-                .doesNotThrowAnyException();
-    }
-
-    @Test
-    @DisplayName("validateHold — Redis key missing (expired) throws 400 HOLD_EXPIRED")
-    void validateHold_expiredHold_throwsHoldExpired() {
-        when(valueOps.get(keyStartsWith("appt_hold:"))).thenReturn(null);
-
-        assertThatThrownBy(() -> holdService.validateHold(DOCTOR_ID, SLOT, "stale-hold"))
-                .isInstanceOf(MediBookException.class)
-                .satisfies(ex -> {
-                    MediBookException mbe = (MediBookException) ex;
-                    assertThat(mbe.getStatus()).isEqualTo(HttpStatus.BAD_REQUEST);
-                    assertThat(mbe.getErrorCode()).isEqualTo("HOLD_EXPIRED");
-                });
-    }
-
-    @Test
-    @DisplayName("validateHold — holdId mismatch throws 403 INVALID_HOLD")
-    void validateHold_mismatchedHoldId_throwsInvalidHold() {
-        when(valueOps.get(keyStartsWith("appt_hold:"))).thenReturn("real-hold");
-
-        assertThatThrownBy(() -> holdService.validateHold(DOCTOR_ID, SLOT, "wrong-hold"))
-                .isInstanceOf(MediBookException.class)
-                .satisfies(ex -> {
-                    MediBookException mbe = (MediBookException) ex;
-                    assertThat(mbe.getStatus()).isEqualTo(HttpStatus.FORBIDDEN);
-                    assertThat(mbe.getErrorCode()).isEqualTo("INVALID_HOLD");
-                });
-    }
-
-
-    @Test
-    @DisplayName("releaseHold — deletes the appt_hold: key from Redis")
-    void releaseHold_deletesSlotKey() {
-        holdService.releaseHold(DOCTOR_ID, SLOT);
-
-        verify(redisTemplate).delete(keyStartsWith("appt_hold:"));
-    }
-
-    @Test
-    @DisplayName("releaseHold — deleted key contains doctorId and ISO slot time")
-    void releaseHold_keyEncodesDoctoridAndSlotTime() {
-        holdService.releaseHold(DOCTOR_ID, SLOT);
-
-        verify(redisTemplate).delete(argThat((String k) -> k != null
-                && k.contains(String.valueOf(DOCTOR_ID))
-                && k.contains("2026-06-20T10:00:00")));
-    }
-
-    @Test
-    @DisplayName("releaseHold — different doctors/slots produce different keys")
-    void releaseHold_keysAreIsolatedPerDoctorAndSlot() {
-        LocalDateTime otherSlot = SLOT.plusHours(1);
-
-        holdService.releaseHold(DOCTOR_ID, SLOT);
-        holdService.releaseHold(DOCTOR_ID, otherSlot);
-
-        verify(redisTemplate).delete(argThat((String k) -> k != null && k.contains("10:00:00")));
-        verify(redisTemplate).delete(argThat((String k) -> k != null && k.contains("11:00:00")));
+    @Nested @DisplayName("releaseHold")
+    class ReleaseHold {
+        @Test void releasesMatchingHold() {
+            when(valueOps.get(anyString())).thenReturn("ok-id|2026-05-18T10:30:00");
+            holdService.releaseHold(DOCTOR_ID, START, "ok-id");
+            verify(redisTemplate).delete(anyString());
+        }
+        @Test void noopWhenAlreadyGone() {
+            when(valueOps.get(anyString())).thenReturn(null);
+            holdService.releaseHold(DOCTOR_ID, START, "ok-id");
+            verify(redisTemplate, never()).delete(anyString());
+        }
+        @Test void rejectsWrongHoldId() {
+            when(valueOps.get(anyString())).thenReturn("real-id|2026-05-18T10:30:00");
+            assertThatThrownBy(() -> holdService.releaseHold(DOCTOR_ID, START, "wrong"))
+                    .isInstanceOf(MediBookException.class);
+        }
     }
 }

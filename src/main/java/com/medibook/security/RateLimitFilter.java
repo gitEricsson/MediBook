@@ -92,6 +92,12 @@ public class RateLimitFilter extends OncePerRequestFilter {
         if ("POST".equals(method) && "/api/v1/auth/refresh".equals(path)) {
             return new RateLimitRule("auth-refresh", 20, SubjectType.IP);
         }
+        // AI support chatbot is public and forwards every message to Claude — a bot
+        // could otherwise burn through credits. 20 messages/min per user (or per IP
+        // for anonymous widget users) is plenty for legitimate conversation.
+        if ("POST".equals(method) && "/api/v1/ai/chat".equals(path)) {
+            return new RateLimitRule("ai-support-chat", 20, SubjectType.USER_OR_IP);
+        }
         if ("POST".equals(method) && "/api/v1/appointments".equals(path)) {
             return new RateLimitRule("appointments-write", 20, SubjectType.USER_OR_IP);
         }

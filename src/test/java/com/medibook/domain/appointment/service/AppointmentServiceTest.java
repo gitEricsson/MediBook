@@ -50,6 +50,7 @@ class AppointmentServiceTest {
     @Mock private AppointmentHoldService holdService;
     @Mock private SystemConfigRepository configRepository;
     @Mock private com.medibook.domain.schedule.service.DoctorLeaveService doctorLeaveService;
+    @Mock private AppointmentSchedulingPolicy schedulingPolicy;
 
     @InjectMocks
     private AppointmentService appointmentService;
@@ -92,7 +93,6 @@ class AppointmentServiceTest {
 
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
         when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
 
         AppointmentResponse res = appointmentService.book(patient.getId(), req);
@@ -109,9 +109,8 @@ class AppointmentServiceTest {
         req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
 
-        when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(true);
+        doThrow(new MediBookException("Doctor is not available", org.springframework.http.HttpStatus.CONFLICT, "SLOT_TAKEN"))
+                .when(schedulingPolicy).checkBookableWithOverlap(any(), any(), any());
 
         MediBookException ex = assertThrows(MediBookException.class, () -> appointmentService.book(patient.getId(), req));
         assertEquals("SLOT_TAKEN", ex.getErrorCode());
@@ -223,13 +222,13 @@ class AppointmentServiceTest {
 
     @Test
     void book_inactiveDoctor_throwsDoctorInactive() {
-        Doctor inactive = Doctor.builder().id(10L).user(doctor.getUser())
-                .department(doctor.getDepartment()).isActive(false).licenseNumber("LIC-X").build();
         AppointmentRequest req = new AppointmentRequest();
-        req.setDoctorId(inactive.getId());
+        req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
-        when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
-        when(doctorRepository.findByIdWithDetailsForUpdate(inactive.getId())).thenReturn(Optional.of(inactive));
+
+        doThrow(new MediBookException("Doctor is not currently accepting appointments",
+                org.springframework.http.HttpStatus.CONFLICT, "DOCTOR_INACTIVE"))
+                .when(schedulingPolicy).checkBookableWithOverlap(any(), any(), any());
 
         MediBookException ex = assertThrows(MediBookException.class,
                 () -> appointmentService.book(patient.getId(), req));
@@ -244,7 +243,6 @@ class AppointmentServiceTest {
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
         req.setType(AppointmentType.TELEHEALTH);
         req.setDurationMins(45);
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
         when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any(Appointment.class))).thenReturn(appointment);
@@ -269,7 +267,6 @@ class AppointmentServiceTest {
         req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
         req.setHoldId("hold-abc");
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
         when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenReturn(appointment);
@@ -284,7 +281,6 @@ class AppointmentServiceTest {
         AppointmentRequest req = new AppointmentRequest();
         req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
         when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenReturn(appointment);
@@ -299,7 +295,6 @@ class AppointmentServiceTest {
         AppointmentRequest req = new AppointmentRequest();
         req.setDoctorId(doctor.getId());
         req.setScheduledAt(LocalDateTime.now().plusDays(1));
-        when(appointmentRepository.existsConflict(any(), any(), any())).thenReturn(false);
         when(userRepository.findById(patient.getId())).thenReturn(Optional.of(patient));
         when(doctorRepository.findByIdWithDetailsForUpdate(doctor.getId())).thenReturn(Optional.of(doctor));
         when(appointmentRepository.save(any())).thenReturn(appointment);

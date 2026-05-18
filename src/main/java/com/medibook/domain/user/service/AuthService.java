@@ -60,9 +60,11 @@ public class AuthService {
                 .phone(request.getPhone())
                 .dateOfBirth(request.getDob())
                 .role(Role.ROLE_PATIENT)
+                .enabled(true)
+                .isActive(true)   // auto-activate self-registered patients; email verification stays as an optional follow-up
                 .build());
 
-        log.info("New patient registered: id={} email={}", saved.getId(), saved.getEmail());
+        log.info("New patient registered (auto-activated): id={} email={}", saved.getId(), saved.getEmail());
 
         // Emit audit event
         AuditEvent auditEvent = AuditEvent.builder()
@@ -77,9 +79,15 @@ public class AuthService {
                 .build();
         eventProducer.publishAuditEvent(auditEvent);
 
-        String verifyToken = emailVerificationService.createToken(saved.getId());
-        emailVerificationService.sendVerificationEmail(saved.getEmail(), verifyToken);
+        // Fire-and-forget verification email — non-blocking. Failure must not break registration.
+        try {
+            String verifyToken = emailVerificationService.createToken(saved.getId());
+            emailVerificationService.sendVerificationEmail(saved.getEmail(), verifyToken);
+        } catch (Exception ex) {
+            log.warn("Verification email send failed for {}: {}", saved.getEmail(), ex.getMessage());
+        }
 
+        // Return a profile-only response; the client must call /login explicitly to obtain tokens.
         return TokenResponse.builder()
                 .user(UserResponse.fromUser(saved))
                 .build();

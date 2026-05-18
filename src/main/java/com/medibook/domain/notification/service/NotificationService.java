@@ -2,6 +2,7 @@ package com.medibook.domain.notification.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.common.exception.TemporaryFailureException;
+import com.medibook.common.mail.TransactionalEmailService;
 import com.medibook.domain.notification.dto.NotificationResponse;
 import com.medibook.domain.notification.entity.Notification;
 import com.medibook.domain.notification.repository.NotificationRepository;
@@ -66,6 +67,7 @@ public class NotificationService implements MessageListener {
     private final CacheManager                  cacheManager;
     private final RetryTemplate                 notificationRetryTemplate;
     private final NotificationMetrics           notificationMetrics;
+    private final TransactionalEmailService     transactionalEmailService;
 
     @PostConstruct
     public void registerPubSubListener() {
@@ -84,6 +86,14 @@ public class NotificationService implements MessageListener {
                 save(event.getDoctorId(), "New Appointment",
                         "Patient " + event.getPatientName() + " booked an appointment on " + event.getScheduledAt(),
                         "APPOINTMENT_BOOKED", event.getAppointmentId());
+                // Best-effort transactional emails. Email failures must not retry the
+                // whole notification — in-app and STOMP delivery have already succeeded.
+                sendEmailSafely(event.getPatientEmail(),
+                        "Your MediBook appointment is booked",
+                        bookedEmailBody(event));
+                sendEmailSafely(event.getDoctorEmail(),
+                        "New patient appointment booked",
+                        doctorBookedEmailBody(event));
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
@@ -108,6 +118,9 @@ public class NotificationService implements MessageListener {
                 save(event.getPatientId(), "Appointment Confirmed",
                         "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is confirmed.",
                         "APPOINTMENT_CONFIRMED", event.getAppointmentId());
+                sendEmailSafely(event.getPatientEmail(),
+                        "Your MediBook appointment is confirmed",
+                        confirmedEmailBody(event));
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
@@ -135,6 +148,12 @@ public class NotificationService implements MessageListener {
                 save(event.getDoctorId(), "Appointment Cancelled",
                         "Appointment with " + event.getPatientName() + " on " + event.getScheduledAt() + " has been cancelled.",
                         "APPOINTMENT_CANCELLED", event.getAppointmentId());
+                sendEmailSafely(event.getPatientEmail(),
+                        "Your MediBook appointment was cancelled",
+                        cancelledEmailBody(event, /*toPatient*/ true));
+                sendEmailSafely(event.getDoctorEmail(),
+                        "Patient appointment cancelled",
+                        cancelledEmailBody(event, /*toPatient*/ false));
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
@@ -613,5 +632,84 @@ public class NotificationService implements MessageListener {
         if (cache != null) {
             cache.evict(userId);
         }
+    }
+
+    // ─── Appointment lifecycle email helpers ───────────────────────────────
+
+    /**
+     * Send a transactional email without letting a delivery failure bubble up.
+     * In-app + STOMP notifications have already succeeded by the time we reach here,
+     * and the user can always read the notification in-app. Email is a courtesy layer.
+     */
+    private void sendEmailSafely(String toEmail, String subject, String htmlBody) {
+        if (toEmail == null || toEmail.isBlank()) return;
+        try {
+            transactionalEmailService.sendHtml(toEmail, subject, htmlBody);
+        } catch (Exception ex) {
+            log.warn("Appointment email to {} failed: {}", toEmail, ex.getMessage());
+        }
+    }
+
+    private String bookedEmailBody(AppointmentEvent event) {
+        return wrap(
+                "Your appointment is booked",
+                "<p>Hi " + safe(event.getPatientName()) + ",</p>"
+                + "<p>Your appointment with <strong>Dr. " + safe(event.getDoctorName()) + "</strong>"
+                + (event.getDepartmentName() != null ? " (" + safe(event.getDepartmentName()) + ")" : "")
+                + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been booked."
+                + "</p>"
+                + "<p>The booking is held but only fully confirmed once payment lands. "
+                + "You can complete payment from <em>My Visits</em> in the app.</p>"
+                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+        );
+    }
+
+    private String doctorBookedEmailBody(AppointmentEvent event) {
+        return wrap(
+                "New appointment booked",
+                "<p>Hi Dr. " + safe(event.getDoctorName()) + ",</p>"
+                + "<p>Patient <strong>" + safe(event.getPatientName()) + "</strong> has booked an appointment "
+                + "on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong>.</p>"
+                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+        );
+    }
+
+    private String confirmedEmailBody(AppointmentEvent event) {
+        return wrap(
+                "Your appointment is confirmed",
+                "<p>Hi " + safe(event.getPatientName()) + ",</p>"
+                + "<p>Payment received. Your appointment with <strong>Dr. " + safe(event.getDoctorName()) + "</strong>"
+                + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> is now confirmed.</p>"
+                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+        );
+    }
+
+    private String cancelledEmailBody(AppointmentEvent event, boolean toPatient) {
+        String greet = toPatient
+                ? "Hi " + safe(event.getPatientName()) + ","
+                : "Hi Dr. " + safe(event.getDoctorName()) + ",";
+        String body = toPatient
+                ? "<p>Your appointment with Dr. " + safe(event.getDoctorName())
+                  + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been cancelled.</p>"
+                : "<p>Appointment with patient <strong>" + safe(event.getPatientName()) + "</strong>"
+                  + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been cancelled.</p>";
+        return wrap("Appointment cancelled", "<p>" + greet + "</p>" + body
+                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>");
+    }
+
+    /** Minimal HTML shell — keep it simple and mail-client-friendly. */
+    private String wrap(String title, String inner) {
+        return "<html><body style=\"font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;line-height:1.5;\">"
+                + "<div style=\"max-width:560px;margin:0 auto;padding:24px;\">"
+                + "<h2 style=\"color:#0a6;\">" + safe(title) + "</h2>"
+                + inner
+                + "<hr style=\"border:none;border-top:1px solid #eee;margin-top:24px;\"/>"
+                + "<p style=\"font-size:11px;color:#999;\">Sent by MediBook · do not reply.</p>"
+                + "</div></body></html>";
+    }
+
+    private String safe(String s) {
+        if (s == null) return "";
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
     }
 }

@@ -24,6 +24,7 @@ import java.util.UUID;
 public class AppointmentHoldService {
 
     private final StringRedisTemplate redisTemplate;
+    private final AppointmentSchedulingPolicy schedulingPolicy;
     private static final String HOLD_PREFIX = "appt_hold:";
     private static final Duration HOLD_DURATION = Duration.ofMinutes(10);
     private static final DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
@@ -34,23 +35,93 @@ public class AppointmentHoldService {
      * @throws MediBookException if the slot is already held.
      */
     public String holdSlot(Long doctorId, LocalDateTime scheduledAt) {
-        if (scheduledAt.isBefore(LocalDateTime.now())) {
-            throw new MediBookException("Cannot book a time slot in the past.",
-                    HttpStatus.BAD_REQUEST, "SLOT_IN_PAST");
+        return holdSlot(doctorId, scheduledAt, 0);
+    }
+
+    /**
+     * Overload that takes the patient's chosen consultation length (manual start/end picker).
+     * Pass 0 to fall back to the doctor's configured slot duration.
+     */
+    public String holdSlot(Long doctorId, LocalDateTime scheduledAt, int durationMins) {
+        // Fail-fast: past time, outside hours, doctor on leave, doctor inactive AND
+        // overlapping confirmed appointment — all surface here so the patient sees the
+        // error *before* the "slot held" UI.
+        LocalDateTime end = durationMins > 0
+                ? scheduledAt.plusMinutes(durationMins)
+                : scheduledAt.plusMinutes(resolveDefaultDurationMins(doctorId));
+        if (durationMins > 0) {
+            schedulingPolicy.checkBookableWithOverlap(doctorId, scheduledAt, end);
+        } else {
+            schedulingPolicy.checkBookable(doctorId, scheduledAt);
+            schedulingPolicy.checkOverlapForDefaultSlot(doctorId, scheduledAt);
         }
+
+        // Detect overlapping *active Redis holds* by another patient that haven't yet
+        // been confirmed into the DB. existsConflict() only sees the DB, so without
+        // this check a manual window of 08:30–09:30 could slip past a held 08:00–09:00.
+        if (overlapsActiveHold(doctorId, scheduledAt, end, /*excludeKey*/ null)) {
+            log.warn("Hold rejected — overlapping active hold for doctor {} at {}", doctorId, scheduledAt);
+            throw new MediBookException(
+                    "Doctor is not available for booking at this time. Please pick a different window.",
+                    HttpStatus.CONFLICT, "SLOT_TAKEN");
+        }
+
         String slotKey = buildSlotKey(doctorId, scheduledAt);
-        String holdId = UUID.randomUUID().toString();
-        
-        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(slotKey, holdId, HOLD_DURATION);
-        
+        String holdId  = UUID.randomUUID().toString();
+        // Value encodes endTime so future holds can detect overlap: "holdId|endIso".
+        String holdValue = holdId + "|" + end.format(formatter);
+
+        Boolean acquired = redisTemplate.opsForValue().setIfAbsent(slotKey, holdValue, HOLD_DURATION);
+
         if (Boolean.TRUE.equals(acquired)) {
-            log.info("Acquired hold [{}] for doctor {} at {}", holdId, doctorId, scheduledAt);
+            log.info("Acquired hold [{}] for doctor {} at {} (end {})", holdId, doctorId, scheduledAt, end);
             return holdId;
         } else {
             log.warn("Failed to acquire hold. Slot {} already held.", slotKey);
-            throw new MediBookException("This time slot is currently reserved by another user. Please select a different time.", 
+            throw new MediBookException("Doctor is not available for booking at this time. Please select a different time.",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
+    }
+
+    private int resolveDefaultDurationMins(Long doctorId) {
+        // Best-effort fallback for overlap math when the patient didn't supply a length.
+        // Mirrors AppointmentSchedulingPolicy's resolution: doctor.slotDurationMins or 60.
+        return 60;
+    }
+
+    private boolean overlapsActiveHold(Long doctorId, LocalDateTime start, LocalDateTime end, String excludeKey) {
+        String prefix  = HOLD_PREFIX + doctorId + ":";
+        String pattern = prefix + "*";
+        Set<String> keys = redisTemplate.keys(pattern);
+        if (keys == null) return false;
+        for (String key : keys) {
+            if (key.equals(excludeKey)) continue;
+            // Key format: appt_hold:{doctorId}:{startIso}. The ISO string itself contains
+            // colons (HH:mm:ss), so we strip the known prefix instead of using
+            // lastIndexOf(':') — that would mistakenly grab the seconds segment.
+            if (!key.startsWith(prefix)) continue;
+            LocalDateTime holdStart;
+            try {
+                holdStart = LocalDateTime.parse(key.substring(prefix.length()), formatter);
+            } catch (Exception ex) { continue; }
+
+            String value = redisTemplate.opsForValue().get(key);
+            LocalDateTime holdEnd;
+            if (value != null && value.contains("|")) {
+                try {
+                    holdEnd = LocalDateTime.parse(value.split("\\|", 2)[1], formatter);
+                } catch (Exception ex) {
+                    holdEnd = holdStart.plusMinutes(60);
+                }
+            } else {
+                // Legacy value with no end time encoded — assume 60-min window.
+                holdEnd = holdStart.plusMinutes(60);
+            }
+            if (start.isBefore(holdEnd) && end.isAfter(holdStart)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -60,14 +131,16 @@ public class AppointmentHoldService {
         if (providedHoldId == null || providedHoldId.isBlank()) {
             return; // If no holdId provided, we skip validation (rely on DB unique constraint)
         }
-        
+
         String slotKey = buildSlotKey(doctorId, scheduledAt);
-        String currentHoldId = redisTemplate.opsForValue().get(slotKey);
-        
-        if (currentHoldId == null) {
+        String currentValue = redisTemplate.opsForValue().get(slotKey);
+
+        if (currentValue == null) {
             throw new MediBookException("Hold has expired. Please try booking again.", HttpStatus.BAD_REQUEST, "HOLD_EXPIRED");
         }
-        
+
+        // Value is "holdId|endIso" (or legacy bare holdId). Extract holdId for comparison.
+        String currentHoldId = currentValue.contains("|") ? currentValue.split("\\|", 2)[0] : currentValue;
         if (!currentHoldId.equals(providedHoldId)) {
             throw new MediBookException("Invalid hold ID.", HttpStatus.FORBIDDEN, "INVALID_HOLD");
         }
@@ -84,10 +157,11 @@ public class AppointmentHoldService {
 
     public void releaseHold(Long doctorId, LocalDateTime scheduledAt, String holdId) {
         String slotKey = buildSlotKey(doctorId, scheduledAt);
-        String currentHoldId = redisTemplate.opsForValue().get(slotKey);
-        if (currentHoldId == null) {
+        String currentValue = redisTemplate.opsForValue().get(slotKey);
+        if (currentValue == null) {
             return;
         }
+        String currentHoldId = currentValue.contains("|") ? currentValue.split("\\|", 2)[0] : currentValue;
         if (!currentHoldId.equals(holdId)) {
             throw new MediBookException("Invalid hold ID.", HttpStatus.FORBIDDEN, "INVALID_HOLD");
         }

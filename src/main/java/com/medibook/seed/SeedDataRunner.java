@@ -18,10 +18,6 @@ import com.medibook.domain.patient.repository.PatientProfileRepository;
 import com.medibook.domain.payment.entity.Invoice;
 import com.medibook.domain.payment.entity.InvoiceLineItem;
 import com.medibook.domain.payment.entity.Payment;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import com.medibook.domain.payment.entity.PaymentProvider;
 import com.medibook.domain.payment.entity.PaymentStatus;
 import com.medibook.domain.payment.repository.InvoiceRepository;
@@ -52,12 +48,11 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.util.Random;
-import java.util.Collections;
-import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.IntStream;
 
 @Slf4j
 @Component
@@ -68,7 +63,6 @@ public class SeedDataRunner implements ApplicationRunner {
 
     private static final String  DEMO_PASSWORD = "Password123!";
     private static final LocalDate TODAY        = LocalDate.now();
-    private static final Random RANDOM         = new Random();
 
     // ── Repositories ────────────────────────────────────────────────────────
     private final SeedDataProperties          seedProps;
@@ -87,7 +81,6 @@ public class SeedDataRunner implements ApplicationRunner {
     private final WaitlistRepository          waitlistRepo;
     private final NotificationService         notificationService;
     private final PasswordEncoder             passwordEncoder;
-    private final com.medibook.config.HospitalProperties hospitalProperties;
 
     // ══════════════════════════════════════════════════════════════════════════
     // Static seed data specs
@@ -108,7 +101,7 @@ public class SeedDataRunner implements ApplicationRunner {
     private record DoctorSpec(
         String email, String firstName, String lastName, String phone,
         String deptName, String specialization, String license,
-        String bio, int years, int slotMins, String gender, boolean telemedicine
+        String bio, int years, BigDecimal fee, String gender, boolean telemedicine
     ) {}
 
     private static final List<DoctorSpec> DOCTOR_SPECS = List.of(
@@ -116,84 +109,224 @@ public class SeedDataRunner implements ApplicationRunner {
             "dr.chukwuemeka@medibook.local", "Chukwuemeka", "Obiora", "+2348012345001",
             "Cardiology", "Interventional Cardiology", "LIC-CARD-001",
             "Senior cardiologist with 15 years of experience in interventional procedures and heart failure management. Fellow of the Nigerian Cardiac Society.",
-            15, 45, "Male", true
+            15, new BigDecimal("18000.00"), "Male", true
         ),
         new DoctorSpec(
             "dr.aisha@medibook.local", "Aisha", "Mohammed", "+2348012345002",
             "Dermatology", "Clinical Dermatology", "LIC-DERM-002",
             "Specialist in inflammatory skin disorders, cosmetic dermatology, and paediatric skin conditions. MSc Dermatology, University of Lagos.",
-            8, 20, "Female", false
+            8, new BigDecimal("10000.00"), "Female", false
         ),
         new DoctorSpec(
             "dr.adaeze@medibook.local", "Adaeze", "Nwosu", "+2348012345003",
             "Pediatrics", "General Pediatrics", "LIC-PEDS-003",
             "Compassionate paediatrician dedicated to children's health from newborns through adolescence. Special interest in developmental and nutritional disorders.",
-            12, 30, "Female", true
+            12, new BigDecimal("8500.00"), "Female", true
         ),
         new DoctorSpec(
             "dr.ibrahim@medibook.local", "Ibrahim", "Aliyu", "+2348012345004",
             "Neurology", "Neurology", "LIC-NEUR-004",
             "Consultant neurologist specialising in epilepsy, stroke, and neurodegenerative disorders. 20 years of academic and clinical neurology practice.",
-            20, 60, "Male", false
+            20, new BigDecimal("15000.00"), "Male", false
         ),
         new DoctorSpec(
             "dr.taiwo@medibook.local", "Taiwo", "Ogunleye", "+2348012345005",
             "General Medicine", "Family Medicine", "LIC-GMED-005",
             "Family physician providing holistic primary care and chronic disease management. Certified in preventive medicine and lifestyle medicine.",
-            6, 15, "Female", true
+            6, new BigDecimal("6000.00"), "Female", true
         )
     );
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // Data Pools for random generation
-    // ══════════════════════════════════════════════════════════════════════════
+    private record PatientSpec(
+        String email, String firstName, String lastName, String phone,
+        LocalDate dob, String bloodGroup
+    ) {}
 
-    private static final List<String> FIRST_NAMES = List.of(
-        "James", "Fatima", "Chidi", "Amara", "Tunde", "Ngozi", "Emeka", "Sade", "Kola", "Chidinma",
-        "Olumide", "Ifeanyi", "Zainab", "Abubakar", "Ebele", "Femi", "Yinka", "Blessing", "Joy", "Grace",
-        "Samuel", "David", "Elizabeth", "Mary", "Joseph", "Daniel", "Ruth", "Sarah", "Isaac", "Joshua"
+    private static final List<PatientSpec> PATIENT_SPECS = List.of(
+        new PatientSpec("patient.james@medibook.local",    "James",    "Okafor",    "+2347001111001", LocalDate.of(1985,  3, 15), "A+"),
+        new PatientSpec("patient.fatima@medibook.local",   "Fatima",   "Bello",     "+2347001111002", LocalDate.of(1992,  7, 22), "O+"),
+        new PatientSpec("patient.chidi@medibook.local",    "Chidi",    "Obi",       "+2347001111003", LocalDate.of(1978, 11,  8), "B-"),
+        new PatientSpec("patient.amara@medibook.local",    "Amara",    "Eze",       "+2347001111004", LocalDate.of(1995,  1, 30), "AB+"),
+        new PatientSpec("patient.tunde@medibook.local",    "Tunde",    "Adeyemi",   "+2347001111005", LocalDate.of(1988,  5, 17), "O-"),
+        new PatientSpec("patient.ngozi@medibook.local",    "Ngozi",    "Nwachukwu", "+2347001111006", LocalDate.of(2000,  9, 12), "A-"),
+        new PatientSpec("patient.emeka@medibook.local",    "Emeka",    "Ogbonna",   "+2347001111007", LocalDate.of(1975, 12,  3), "B+"),
+        new PatientSpec("patient.sade@medibook.local",     "Sade",     "Adesanya",  "+2347001111008", LocalDate.of(1990,  6, 25), "O+"),
+        new PatientSpec("patient.kola@medibook.local",     "Kola",     "Fashola",   "+2347001111009", LocalDate.of(1983,  4, 11), "A+"),
+        new PatientSpec("patient.chidinma@medibook.local", "Chidinma", "Uche",      "+2347001111010", LocalDate.of(1998,  2, 18), "B+")
     );
 
-    private static final List<String> LAST_NAMES = List.of(
-        "Okafor", "Bello", "Obi", "Eze", "Adeyemi", "Nwachukwu", "Ogbonna", "Adesanya", "Fashola", "Uche",
-        "Abiola", "Okonkwo", "Danjuma", "Suleiman", "Nwosu", "Ogunleye", "Balogun", "Oni", "Alabi", "Popoola"
+    // dIdx=doctor index, pIdx=patient index, dayOffset, hour, status, type, reason
+    private record ApptSpec(
+        int dIdx, int pIdx, int dayOffset, int hour,
+        AppointmentStatus status, AppointmentType type, String reason
+    ) {}
+
+    private static final List<ApptSpec> APPT_SPECS = List.of(
+        // ── Doctor 0: Cardiology (Chukwuemeka) ──────────────────────────────
+        new ApptSpec(0, 0, -14,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Chest pain evaluation and stress test"),
+        new ApptSpec(0, 1, -10,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Hypertension management and medication review"),
+        new ApptSpec(0, 2,  -7,  9, AppointmentStatus.COMPLETED,  AppointmentType.TELEHEALTH, "Post-PTCA cardiac follow-up"),
+        new ApptSpec(0, 3,  -6, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Cardiac stress test"),
+        new ApptSpec(0, 4,  -4,  9, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Echocardiogram review"),
+        new ApptSpec(0, 5,  -2, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Arrhythmia consultation"),
+        new ApptSpec(0, 6,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: palpitations and shortness of breath"),
+        new ApptSpec(0, 7,   2,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Post-surgery follow-up"),
+        new ApptSpec(0, 8,   4, 14, AppointmentStatus.CONFIRMED,  AppointmentType.TELEHEALTH, "Medication review"),
+        new ApptSpec(0, 9,   8,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Pre-surgery cardiac clearance"),
+        new ApptSpec(0, 0,  12, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Annual cardiac screening"),
+
+        // ── Doctor 1: Dermatology (Aisha) ────────────────────────────────────
+        new ApptSpec(1, 1, -13, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Eczema flare-up evaluation"),
+        new ApptSpec(1, 2,  -9, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Acne vulgaris treatment review"),
+        new ApptSpec(1, 3,  -6, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Psoriasis plaque management"),
+        new ApptSpec(1, 4,  -5, 15, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Skin biopsy consultation"),
+        new ApptSpec(1, 5,  -3, 10, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Generalised rash evaluation"),
+        new ApptSpec(1, 6,  -1, 15, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Seborrheic dermatitis follow-up"),
+        new ApptSpec(1, 7,   0, 10, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: chronic pruritus"),
+        new ApptSpec(1, 8,   3, 10, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Post-laser treatment check"),
+        new ApptSpec(1, 9,   5, 15, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Mole mapping and dermoscopy"),
+        new ApptSpec(1, 0,   9, 10, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Keloid scar treatment consultation"),
+        new ApptSpec(1, 1,  13, 15, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Vitiligo management plan"),
+
+        // ── Doctor 2: Pediatrics (Adaeze) ────────────────────────────────────
+        new ApptSpec(2, 2, -12,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Child wellness check-up, age 5"),
+        new ApptSpec(2, 3,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Fever, cough, and sore throat"),
+        new ApptSpec(2, 4,  -5,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Asthma management and inhaler technique"),
+        new ApptSpec(2, 5,  -4, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Routine vaccination — 18-month schedule"),
+        new ApptSpec(2, 6,  -2,  9, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Growth and developmental assessment"),
+        new ApptSpec(2, 7,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Ear infection follow-up"),
+        new ApptSpec(2, 8,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: developmental delay evaluation"),
+        new ApptSpec(2, 9,   2,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Post-infection recovery check"),
+        new ApptSpec(2, 0,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Food allergy testing referral"),
+        new ApptSpec(2, 1,   9,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Child nutrition and growth consultation"),
+        new ApptSpec(2, 2,  14, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "School readiness and vision screening"),
+
+        // ── Doctor 3: Neurology (Ibrahim) ─────────────────────────────────────
+        new ApptSpec(3, 3, -11,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Chronic migraine management"),
+        new ApptSpec(3, 4,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Epilepsy medication and seizure diary review"),
+        new ApptSpec(3, 5,  -4,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Ischaemic stroke rehabilitation follow-up"),
+        new ApptSpec(3, 6,  -3, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Brain MRI results review"),
+        new ApptSpec(3, 7,  -2,  9, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Memory impairment assessment"),
+        new ApptSpec(3, 8,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Parkinson's disease progression review"),
+        new ApptSpec(3, 9,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: persistent headaches and visual disturbance"),
+        new ApptSpec(3, 0,   3,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "EEG results interpretation"),
+        new ApptSpec(3, 1,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Multiple sclerosis disease monitoring"),
+        new ApptSpec(3, 2,  10,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Peripheral neuropathy evaluation"),
+        new ApptSpec(3, 3,  14, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Sleep disorder and narcolepsy consultation"),
+
+        // ── Doctor 4: General Medicine (Taiwo) ───────────────────────────────
+        new ApptSpec(4, 4, -13,  8, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Annual physical examination and wellness screen"),
+        new ApptSpec(4, 5,  -9,  8, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Type 2 diabetes — HbA1c and medication review"),
+        new ApptSpec(4, 6,  -5,  8, AppointmentStatus.COMPLETED,  AppointmentType.TELEHEALTH, "Blood pressure monitoring review"),
+        new ApptSpec(4, 7,  -4, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Lab results and lipid panel discussion"),
+        new ApptSpec(4, 8,  -2,  8, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Tetanus booster and flu vaccine"),
+        new ApptSpec(4, 9,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Chest X-ray interpretation"),
+        new ApptSpec(4, 0,   0,  8, AppointmentStatus.CONFIRMED,  AppointmentType.TELEHEALTH, "New patient: chronic fatigue and sleep issues"),
+        new ApptSpec(4, 1,   2,  8, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Hypertension monitoring and medication titration"),
+        new ApptSpec(4, 2,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Thyroid function test results and management"),
+        new ApptSpec(4, 3,   9,  8, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Pre-employment medical examination"),
+        new ApptSpec(4, 4,  13, 14, AppointmentStatus.PENDING,    AppointmentType.TELEHEALTH, "General wellness and lifestyle consultation")
     );
 
-    private static final List<String> REASONS = List.of(
-        "Annual check-up", "Follow-up visit", "Chest pain", "Fever and cough", "Headache",
-        "Skin rash", "Routine vaccination", "Medication review", "Wellness screening", "Abdominal pain",
-        "Joint pain", "Vision problems", "Back pain", "Fatigue", "Sleep issues", "Allergy evaluation"
-    );
+    // Consultation notes for COMPLETED appointments (same order as APPT_SPECS — first 3 per doctor)
+    private record NoteSpec(String diagnosis, String treatmentPlan, String prescriptions, int followUpDays) {}
 
-    private static final List<String> DIAGNOSES = List.of(
-        "Essential hypertension", "Type 2 diabetes mellitus", "Acute upper respiratory infection",
-        "Acute pharyngitis", "Gastro-oesophageal reflux disease", "Hyperlipidaemia", "Osteoarthritis",
-        "Atopic dermatitis", "Iron deficiency anaemia", "Vitamin D deficiency", "Asthma",
-        "Migraine", "Lower back pain", "Urinary tract infection", "Generalized anxiety disorder"
-    );
-
-    private static final List<String> TREATMENTS = List.of(
-        "Prescribed medication and advised lifestyle changes.",
-        "Recommended daily exercise and a balanced diet.",
-        "Ordered blood tests for further evaluation.",
-        "Advised rest and increased fluid intake.",
-        "Scheduled a follow-up appointment in two weeks.",
-        "Referred to a specialist for further investigation.",
-        "Adjusted current medication dosage.",
-        "Educated patient on self-management techniques."
-    );
-
-    private static final List<String> PRESCRIPTIONS = List.of(
-        "Paracetamol 500mg BD x 5 days", "Metformin 500mg OD", "Amlodipine 5mg OD",
-        "Amoxicillin 500mg TDS x 7 days", "Atorvastatin 10mg ON", "Lisinopril 10mg OD",
-        "Omeprazole 20mg OD", "Salbutamol Inhaler PRN", "Cetirizine 10mg OD"
-    );
-
-    private static final List<String> REVIEW_COMMENTS = List.of(
-        "Very professional and attentive doctor.", "The consultation was thorough and helpful.",
-        "Wait time was short, doctor was excellent.", "Highly recommend this doctor and clinic.",
-        "Excellent bedside manner and clear communication.", "Took the time to answer all my questions.",
-        "Professional staff and knowledgeable doctor.", "Great experience, very satisfied with the care."
+    private static final List<NoteSpec> NOTE_SPECS = List.of(
+        // Doctor 0 COMPLETED appointments (indices 0-2 in doctor block)
+        new NoteSpec(
+            "Unstable angina pectoris with hypertensive urgency",
+            "Initiated dual antiplatelet therapy. Cardiac catheterisation recommended within 72h. Strict BP monitoring twice daily. Low-sodium DASH diet; restrict strenuous activity.",
+            "Aspirin 81mg OD; Clopidogrel 75mg OD; Amlodipine 10mg OD; Nitroglycerin 0.4mg SL PRN",
+            30
+        ),
+        new NoteSpec(
+            "Stage 2 essential hypertension — adequately controlled on dual therapy",
+            "Continue current antihypertensive regimen. Ambulatory 24h BP monitoring ordered. DASH diet reinforcement. Aerobic exercise 150 min/week.",
+            "Perindopril 8mg OD; Amlodipine 5mg OD; Aspirin 81mg OD",
+            60
+        ),
+        new NoteSpec(
+            "Stable coronary artery disease, 12 months post-PTCA — good functional recovery",
+            "Dual antiplatelet therapy to continue for full 12-month course. Enrol in cardiac rehabilitation programme. Annual echocardiogram scheduled. Lipids within target.",
+            "Clopidogrel 75mg OD; Aspirin 100mg OD; Bisoprolol 5mg OD; Rosuvastatin 20mg ON",
+            90
+        ),
+        // Doctor 1 COMPLETED appointments (indices 0-2 in doctor block)
+        new NoteSpec(
+            "Moderate-to-severe atopic eczema with secondary Staphylococcal superinfection",
+            "Topical steroid with wet wrapping technique. Emollient regimen (minimum 500g/week). Short oral antibiotic course for superinfection. Trigger avoidance: synthetic fabrics, harsh soaps.",
+            "Betamethasone valerate 0.1% cream BD × 2 weeks; Cetirizine 10mg ON; Flucloxacillin 500mg QDS × 7 days",
+            14
+        ),
+        new NoteSpec(
+            "Moderate acne vulgaris (grade III) — responding to oral isotretinoin",
+            "Continue isotretinoin at current dose. Monthly LFT and fasting lipid panel mandatory. Strict contraception. SPF 50+ sunscreen daily. Avoid waxing while on retinoid.",
+            "Isotretinoin 40mg OD; Clindamycin 1% gel OD (topical wash)",
+            30
+        ),
+        new NoteSpec(
+            "Chronic plaque psoriasis — moderate severity (PASI 12), suboptimal response to topical agents",
+            "Escalating to biologic therapy (Adalimumab). Pre-screening complete: TB (Mantoux negative), HBsAg negative, FBC normal. Review PASI response at 12 weeks.",
+            "Adalimumab 80mg SC week 0, then 40mg SC every 2 weeks; Betamethasone valerate 0.1% cream PRN for breakthrough lesions",
+            84
+        ),
+        // Doctor 2 COMPLETED appointments (indices 0-2 in doctor block)
+        new NoteSpec(
+            "Healthy child — 5-year routine wellness check; all developmental milestones achieved",
+            "Nutrition and activity counselling provided to parents. Booster vaccinations confirmed up to date per national schedule. School readiness assessment: pass.",
+            "Vitamin D3 400 IU daily; No other medications required",
+            365
+        ),
+        new NoteSpec(
+            "Group A streptococcal pharyngitis (rapid antigen test positive)",
+            "Ten-day amoxicillin course. Adequate oral hydration. Saline gargle 3× daily. School exclusion for 24h after antibiotic commencement. Throat swab MC&S sent.",
+            "Amoxicillin 500mg TDS × 10 days; Paracetamol suspension 250mg/5ml PRN for fever and pain",
+            14
+        ),
+        new NoteSpec(
+            "Mild-moderate persistent asthma — well-controlled (ACQ score 0.8)",
+            "Excellent inhaler technique demonstrated today. Continue ICS/LABA controller therapy. SABA for breakthrough symptoms — usage < 2× per week. Peak flow diary maintained. Environmental triggers identified and addressed.",
+            "Budesonide/Formoterol 100/6 mcg inhaler 1 puff BD; Salbutamol 100 mcg MDI 2 puffs PRN",
+            90
+        ),
+        // Doctor 3 COMPLETED appointments (indices 0-2 in doctor block)
+        new NoteSpec(
+            "Chronic migraine with aura — inadequately controlled on beta-blocker alone",
+            "Adding topiramate as additional preventive therapy. Migraine diary to document frequency, triggers, and severity. Sleep hygiene, regular mealtimes, and adequate hydration strongly advised.",
+            "Topiramate 25mg ON × 4 weeks then 50mg ON; Sumatriptan 50mg oral PRN (max 2 per attack, max 4 days/month); Metoclopramide 10mg oral PRN for nausea",
+            42
+        ),
+        new NoteSpec(
+            "Juvenile myoclonic epilepsy — seizure-free on sodium valproate for 18 consecutive months",
+            "Continue valproate at current dose — good therapeutic level. Annual LFT and FBC. Lifestyle counselling: avoid sleep deprivation, alcohol, and photic triggers. No driving for additional 6 months per DVLA guidelines.",
+            "Sodium valproate 500mg BD (modified release); Folic acid 5mg OD (precautionary)",
+            180
+        ),
+        new NoteSpec(
+            "Right MCA territory ischaemic stroke (6 months post-event) — improving neurological deficits",
+            "Neurological examination shows improving arm power (4+/5) and mild dysarthria. Continue antiplatelet therapy and statin. Ongoing physiotherapy (3× per week) and speech therapy referral maintained. BP target < 130/80.",
+            "Aspirin 75mg OD; Dipyridamole MR 200mg BD; Atorvastatin 40mg ON; Ramipril 5mg OD",
+            90
+        ),
+        // Doctor 4 COMPLETED appointments (indices 0-2 in doctor block)
+        new NoteSpec(
+            "Healthy adult — no significant pathology identified on annual wellness screen",
+            "BMI 24.1 — within normal range. Total cholesterol 5.4 mmol/L — borderline high; dietary intervention preferred over medication. Colonoscopy screening recommended from age 50. All vaccinations current.",
+            "Multivitamin supplement OD; Vitamin D3 1000 IU OD (seasonal supplementation)",
+            365
+        ),
+        new NoteSpec(
+            "Type 2 diabetes mellitus — HbA1c 7.2% (suboptimally controlled on metformin monotherapy)",
+            "Adding empagliflozin for cardiorenal protection and additional glycaemic control. Diabetes education programme referral. Self-monitoring blood glucose daily (fasting + 2h postprandial). Low-carbohydrate diet advice.",
+            "Metformin 1000mg BD; Empagliflozin 10mg OD; Linagliptin 5mg OD; Aspirin 75mg OD",
+            90
+        ),
+        new NoteSpec(
+            "Essential hypertension — well controlled; BP 128/82 on current dual therapy",
+            "Continue current regimen. Home BP monitoring log reviewed — consistent readings. Salt restriction reinforced (< 5g NaCl/day). DASH diet and 150 min/week moderate aerobic exercise.",
+            "Amlodipine 5mg OD; Losartan 50mg OD",
+            60
+        )
     );
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -233,7 +366,7 @@ public class SeedDataRunner implements ApplicationRunner {
         log.info("[Seed]   Super admin : superadmin@medibook.local");
         log.info("[Seed]   Admin ops   : admin.ops@medibook.local");
         log.info("[Seed]   Doctor      : dr.chukwuemeka@medibook.local");
-        log.info("[Seed]   Patient     : patient.<firstName>.<index>@medibook.local (e.g. patient.james.0@medibook.local)");
+        log.info("[Seed]   Patient     : patient.james@medibook.local");
         log.info("[Seed] ══════════════════════════════════════════════════");
     }
 
@@ -279,24 +412,15 @@ public class SeedDataRunner implements ApplicationRunner {
 
     private List<User> seedPatients() {
         List<User> patients = new ArrayList<>();
-        // Create 50 patients
-        for (int i = 0; i < 50; i++) {
-            String firstName = getRandomElement(FIRST_NAMES);
-            String lastName  = getRandomElement(LAST_NAMES);
-            String email     = "patient." + firstName.toLowerCase() + "." + i + "@medibook.local";
-            String phone     = "+234700" + String.format("%07d", i);
-            LocalDate dob    = LocalDate.now().minusYears(20 + RANDOM.nextInt(40)).minusDays(RANDOM.nextInt(365));
-            String bloodGroup = getRandomElement(List.of("A+", "B+", "O+", "AB+", "A-", "B-", "O-", "AB-"));
-
-            User u = findOrCreateUser(email, firstName, lastName, phone, dob, Role.ROLE_PATIENT);
+        for (PatientSpec s : PATIENT_SPECS) {
+            User u = findOrCreateUser(s.email(), s.firstName(), s.lastName(), s.phone(), s.dob(), Role.ROLE_PATIENT);
             patients.add(u);
-
             if (profileRepo.findByUserId(u.getId()).isEmpty()) {
                 PatientProfile p = PatientProfile.builder()
                     .user(u)
-                    .bloodGroup(bloodGroup)
-                    .dateOfBirthEnc(dob.toString())
-                    .emergencyContact("Family Contact: " + firstName + " Next-of-Kin")
+                    .bloodGroup(s.bloodGroup())
+                    .dateOfBirthEnc(s.dob().toString())  // PHI converter encrypts at persist
+                    .emergencyContact("Family Contact: " + s.firstName() + " Next-of-Kin")
                     .medicalHistoryEnc("No significant past medical history")
                     .allergiesEnc("NKDA")
                     .build();
@@ -308,10 +432,23 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private List<Doctor> seedDoctors(Map<String, Department> depts) {
+        // Every doctor defaults to a 60-min slot. Patients who need a shorter window
+        // (e.g. 30 min) use the manual start/end picker on the booking page.
+        int[] slotDurations = { 60, 60, 60, 60, 60, 60, 60, 60 };
         List<Doctor> doctors = new ArrayList<>();
-        for (DoctorSpec s : DOCTOR_SPECS) {
+        for (int idx = 0; idx < DOCTOR_SPECS.size(); idx++) {
+            DoctorSpec s = DOCTOR_SPECS.get(idx);
+            int slotDuration = slotDurations[idx % slotDurations.length];
             if (doctorRepo.existsByLicenseNumber(s.license())) {
-                doctorRepo.findByLicenseNumber(s.license()).ifPresent(doctors::add);
+                doctorRepo.findByLicenseNumber(s.license()).ifPresent(existing -> {
+                    // Refresh slot duration on existing seeded doctors so the booking
+                    // grid step varies (the original seed pinned everyone to 30 min).
+                    if (existing.getSlotDurationMins() != slotDuration) {
+                        existing.setSlotDurationMins(slotDuration);
+                        doctorRepo.save(existing);
+                    }
+                    doctors.add(existing);
+                });
                 continue;
             }
             User u = findOrCreateUser(s.email(), s.firstName(), s.lastName(), s.phone(), null, Role.ROLE_DOCTOR);
@@ -326,9 +463,9 @@ public class SeedDataRunner implements ApplicationRunner {
                 .isActive(true)
                 .languages("English, Hausa, Yoruba, Igbo")
                 .acceptingNew(true)
-                .slotDurationMins(s.slotMins())
+                .slotDurationMins(slotDuration)
                 .yearsOfExperience(s.years())
-                .consultationFee(BigDecimal.ZERO)
+                .consultationFee(s.fee())
                 .gender(s.gender())
                 .telemedicineEnabled(s.telemedicine())
                 .averageRating(0.0)
@@ -342,34 +479,31 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private void seedWorkingHours(List<Doctor> doctors) {
-        // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+        // Unified shift: every doctor is on duty 08:00–22:00, Mon–Sat. With the 60-min
+        // default slot duration this gives the patient a clean hourly grid from 8 AM
+        // through 9 PM (the last slot starts at 21:00 and ends at 22:00). Patients who
+        // want a shorter consultation (e.g. 30 min) use the manual start/end picker.
+        // Always wipe + reseed in dev so any old fixed-09:00–17:00 rows are replaced.
+        LocalTime shiftStart = LocalTime.of(8, 0);
+        LocalTime shiftEnd   = LocalTime.of(22, 0);
+        int[] daysOfWeek     = { 1, 2, 3, 4, 5, 6 };   // Mon … Sat (Sun closed)
+
         int created = 0;
-        for (int i = 0; i < doctors.size(); i++) {
-            Doctor d = doctors.get(i);
-            if (!hoursRepo.findByDoctorId(d.getId()).isEmpty()) continue;
-
-            LocalTime start = switch (i) {
-                case 1  -> LocalTime.of(10, 0);  // Dermatology: 10:00–18:00
-                case 4  -> LocalTime.of(8,  0);  // Gen Med: 08:00–16:00
-                default -> LocalTime.of(9,  0);  // All others: 09:00–17:00
-            };
-            LocalTime end = switch (i) {
-                case 1  -> LocalTime.of(18, 0);
-                case 4  -> LocalTime.of(16, 0);
-                default -> LocalTime.of(17, 0);
-            };
-
-            for (int day = 1; day <= 5; day++) {
+        for (Doctor d : doctors) {
+            List<DoctorWorkingHours> existing = hoursRepo.findByDoctorId(d.getId());
+            if (!existing.isEmpty()) hoursRepo.deleteAll(existing);
+            for (int dow : daysOfWeek) {
                 hoursRepo.save(DoctorWorkingHours.builder()
-                    .doctor(d)
-                    .dayOfWeek(day)
-                    .startTime(start)
-                    .endTime(end)
-                    .build());
+                        .doctor(d)
+                        .dayOfWeek(dow)
+                        .startTime(shiftStart)
+                        .endTime(shiftEnd)
+                        .build());
                 created++;
             }
         }
-        log.info("[Seed] Working hours ready ({} rows)", created);
+        log.info("[Seed] Working hours ready ({} rows across {} doctors, 08:00–22:00 Mon–Sat)",
+                created, doctors.size());
     }
 
     private void seedNoteTemplates(List<Doctor> doctors) {
@@ -422,98 +556,111 @@ public class SeedDataRunner implements ApplicationRunner {
     private List<Appointment> seedAppointments(List<User> patients, List<Doctor> doctors,
                                                 Map<String, Department> depts) {
         List<Appointment> saved = new ArrayList<>();
-        int created = 0;
+        // Track (doctorIdx → localSeqNum) for generating stable confirmation codes
+        Map<Integer, Integer> seq = new HashMap<>();
 
-        // Generate appointments for the last 24 weeks and next 4 weeks
-        for (Doctor doctor : doctors) {
-            for (int week = -24; week <= 4; week++) {
-                // 3-5 appointments per week
-                int apptsThisWeek = 3 + RANDOM.nextInt(3);
-                for (int i = 0; i < apptsThisWeek; i++) {
-                    User patient = getRandomElement(patients);
-                    int dayOffset = week * 7 + RANDOM.nextInt(5); // Mon-Fri
-                    int hour = 9 + RANDOM.nextInt(7); // 9am - 4pm
+        for (ApptSpec s : APPT_SPECS) {
+            int localSeq = seq.merge(s.dIdx(), 1, Integer::sum);
+            String code  = "SEED-D%d-%03d".formatted(s.dIdx(), localSeq);
 
-                    LocalDateTime scheduledAt = TODAY.plusDays(dayOffset).atTime(hour, 0);
-                    String code = "SEED-" + doctor.getId() + "-" + scheduledAt.hashCode();
-
-                    if (apptRepo.existsByConfirmationCode(code)) continue;
-
-                    AppointmentStatus status;
-                    if (scheduledAt.isBefore(LocalDateTime.now())) {
-                        // Historical status distribution: 80% Completed, 10% Cancelled, 10% No-show
-                        int r = RANDOM.nextInt(100);
-                        if (r < 80) status = AppointmentStatus.COMPLETED;
-                        else if (r < 90) status = AppointmentStatus.CANCELLED;
-                        else status = AppointmentStatus.NO_SHOW;
-                    } else {
-                        // Future status distribution: 80% Confirmed, 20% Pending
-                        status = RANDOM.nextInt(100) < 80 ? AppointmentStatus.CONFIRMED : AppointmentStatus.PENDING;
-                    }
-
-                    Appointment appt = Appointment.builder()
-                        .patient(patient)
-                        .doctor(doctor)
-                        .department(doctor.getDepartment())
-                        .scheduledAt(scheduledAt)
-                        .endTime(scheduledAt.plusMinutes(30))
-                        .durationMins(30)
-                        .status(status)
-                        .type(RANDOM.nextBoolean() ? AppointmentType.IN_PERSON : AppointmentType.TELEHEALTH)
-                        .reason(getRandomElement(REASONS))
-                        .confirmationCode(code)
-                        .build();
-
-                    if (status == AppointmentStatus.CANCELLED) {
-                        appt.setCancelledAt(scheduledAt.minusDays(1));
-                        appt.setCancelledBy(patient);
-                        appt.setCancellationReason("Scheduling conflict");
-                    }
-
-                    saved.add(apptRepo.save(appt));
-                    created++;
-                }
+            if (apptRepo.existsByConfirmationCode(code)) {
+                apptRepo.findByConfirmationCode(code).ifPresent(saved::add);
+                continue;
             }
+
+            User    patient = patients.get(s.pIdx());
+            Doctor  doctor  = doctors.get(s.dIdx());
+            Department dept = doctor.getDepartment();
+
+            LocalDateTime scheduledAt = TODAY.plusDays(s.dayOffset()).atTime(s.hour(), 0);
+            LocalDateTime endTime     = scheduledAt.plusMinutes(30);
+
+            Appointment.AppointmentBuilder builder = Appointment.builder()
+                .patient(patient)
+                .doctor(doctor)
+                .department(dept)
+                .scheduledAt(scheduledAt)
+                .endTime(endTime)
+                .durationMins(30)
+                .status(s.status())
+                .type(s.type())
+                .reason(s.reason())
+                .confirmationCode(code);
+
+            if (s.status() == AppointmentStatus.CANCELLED) {
+                builder
+                    .cancelledAt(scheduledAt.minusDays(1))
+                    .cancelledBy(patient)
+                    .cancellationReason("Patient cancelled due to scheduling conflict");
+            }
+
+            saved.add(apptRepo.save(builder.build()));
         }
 
-        log.info("[Seed] Appointments ready ({} created)", created);
+        log.info("[Seed] Appointments ready ({} created)", saved.size());
         return saved;
     }
 
     private void seedConsultationNotes(List<Appointment> appointments, List<Doctor> doctors) {
+        // NOTE_SPECS[dIdx * 3 + localPos] aligns with the first 3 COMPLETED appointments per doctor
+        int doctorBlockSize = 11;
         int created = 0;
-        for (Appointment appt : appointments) {
-            if (appt.getStatus() != AppointmentStatus.COMPLETED) continue;
-            if (noteRepo.findByAppointmentId(appt.getId()).isPresent()) continue;
 
-            ConsultationNote note = ConsultationNote.builder()
-                .appointment(appt)
-                .doctor(appt.getDoctor())
-                .diagnosis(getRandomElement(DIAGNOSES))
-                .treatmentPlan(getRandomElement(TREATMENTS))
-                .prescriptions(getRandomElement(PRESCRIPTIONS))
-                .followUpDate(appt.getScheduledAt().plusDays(RANDOM.nextInt(90)).toLocalDate())
-                .phiVersion("v1")
-                .build();
-            noteRepo.save(note);
-            created++;
+        for (int dIdx = 0; dIdx < doctors.size(); dIdx++) {
+            for (int localPos = 0; localPos < 3; localPos++) {
+                int globalApptIdx = dIdx * doctorBlockSize + localPos;
+                if (globalApptIdx >= APPT_SPECS.size()) break;
+                if (APPT_SPECS.get(globalApptIdx).status() != AppointmentStatus.COMPLETED) continue;
+
+                String code = "SEED-D%d-%03d".formatted(dIdx, localPos + 1);
+                Appointment appt = findApptByCode(appointments, code);
+                if (appt == null) continue;
+                if (noteRepo.findByAppointmentId(appt.getId()).isPresent()) continue;
+
+                NoteSpec n = NOTE_SPECS.get(dIdx * 3 + localPos);
+                ConsultationNote note = ConsultationNote.builder()
+                    .appointment(appt)
+                    .doctor(doctors.get(dIdx))
+                    .diagnosis(n.diagnosis())
+                    .treatmentPlan(n.treatmentPlan())
+                    .prescriptions(n.prescriptions())
+                    .followUpDate(TODAY.plusDays(n.followUpDays()))
+                    .phiVersion("v1")
+                    .build();
+                noteRepo.save(note);
+                created++;
+            }
         }
         log.info("[Seed] Consultation notes ready ({} created)", created);
     }
 
     private void seedReviews(List<Appointment> appointments) {
+        record ReviewData(int dIdx, int localSeq, int rating, String comment) {}
+        List<ReviewData> reviews = List.of(
+            new ReviewData(0, 1, 5, "Exceptional cardiologist. Dr Obiora was thorough, explained everything clearly, and made me feel at ease throughout the consultation."),
+            new ReviewData(0, 2, 4, "Very professional and knowledgeable. The waiting time was a little long but the consultation itself was excellent."),
+            new ReviewData(1, 1, 5, "Dr Mohammed is brilliant with skin conditions. My eczema has improved dramatically following her treatment plan."),
+            new ReviewData(1, 2, 4, "Very thorough examination and a clear explanation of all treatment options. Highly recommend her practice."),
+            new ReviewData(2, 1, 5, "Dr Nwosu is wonderful with children. My son felt completely comfortable and the wellness check was very comprehensive."),
+            new ReviewData(2, 2, 5, "Excellent bedside manner and swift, accurate diagnosis. Recovery was swift after her prescribed course of treatment."),
+            new ReviewData(3, 1, 4, "Highly knowledgeable neurologist. The migraine prevention plan Dr Aliyu recommended has already made a significant difference."),
+            new ReviewData(3, 2, 5, "Outstanding care and expertise. Dr Aliyu's management of my epilepsy has been genuinely life-changing."),
+            new ReviewData(4, 1, 5, "Wonderful family doctor. The annual check-up was thorough and she gave great lifestyle health advice."),
+            new ReviewData(4, 2, 4, "Good ongoing management of my diabetes. The lifestyle modification advice is actually working well for me.")
+        );
+
         int created = 0;
-        for (Appointment appt : appointments) {
-            if (appt.getStatus() != AppointmentStatus.COMPLETED) continue;
-            if (RANDOM.nextInt(100) > 40) continue; // 40% review rate
-            if (reviewRepo.existsByAppointmentId(appt.getId())) continue;
+        for (ReviewData r : reviews) {
+            String code = "SEED-D%d-%03d".formatted(r.dIdx(), r.localSeq());
+            Appointment appt = findApptByCode(appointments, code);
+            if (appt == null || reviewRepo.existsByAppointmentId(appt.getId())) continue;
 
             DoctorReview review = DoctorReview.builder()
                 .appointment(appt)
                 .patient(appt.getPatient())
                 .doctor(appt.getDoctor())
-                .rating((byte) (3 + RANDOM.nextInt(3))) // 3-5 rating
-                .comment(getRandomElement(REVIEW_COMMENTS))
+                .rating((byte) r.rating())
+                .comment(r.comment())
                 .status("APPROVED")
                 .moderatedAt(appt.getScheduledAt().plusDays(1))
                 .build();
@@ -542,7 +689,7 @@ public class SeedDataRunner implements ApplicationRunner {
             String idemKey = "SEED-PAY-" + appt.getConfirmationCode();
             if (paymentRepo.findByIdempotencyKey(idemKey).isPresent()) continue;
 
-            BigDecimal amount = hospitalProperties.getFeeForDoctor(appt.getDoctor().getYearsOfExperience());
+            BigDecimal amount = appt.getDoctor().getEffectiveConsultationFee();
 
             Payment payment = Payment.builder()
                 .appointment(appt)
@@ -676,10 +823,9 @@ public class SeedDataRunner implements ApplicationRunner {
         log.info("[Seed] Notifications dispatched ({} appointments processed)", sent);
     }
 
-    private <T> T getRandomElement(List<T> list) {
-        if (list == null || list.isEmpty()) return null;
-        return list.get(RANDOM.nextInt(list.size()));
-    }
+    // ══════════════════════════════════════════════════════════════════════════
+    // Helper methods
+    // ══════════════════════════════════════════════════════════════════════════
 
     private User findOrCreateUser(String email, String firstName, String lastName,
                                    String phone, LocalDate dob, Role role) {
@@ -700,6 +846,13 @@ public class SeedDataRunner implements ApplicationRunner {
                 .build();
             return userRepo.save(u);
         });
+    }
+
+    private Appointment findApptByCode(List<Appointment> appointments, String code) {
+        return appointments.stream()
+            .filter(a -> code.equals(a.getConfirmationCode()))
+            .findFirst()
+            .orElse(null);
     }
 
     private AppointmentEvent buildEvent(Appointment a) {

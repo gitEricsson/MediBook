@@ -38,7 +38,10 @@ public class AppointmentHoldController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="403", description = "Forbidden - patient role required")
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="409", description = "Conflict - slot not available")
     public ResponseEntity<ApiResponse<HoldResponse>> holdSlot(@Valid @RequestBody AppointmentRequest request) {
-        String holdId = holdService.holdSlot(request.getDoctorId(), request.getScheduledAt());
+        // Honour the patient's chosen duration when they used the manual start/end picker.
+        // The hold service falls back to the doctor's slotDurationMins when 0/unset.
+        String holdId = holdService.holdSlot(
+                request.getDoctorId(), request.getScheduledAt(), request.getDurationMins());
         return ResponseEntity.ok(ApiResponse.ok(HoldResponse.builder()
                 .holdId(holdId)
                 .expiresAt(Instant.now().plusSeconds(600))

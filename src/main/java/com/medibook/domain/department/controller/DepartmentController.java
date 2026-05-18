@@ -8,6 +8,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,13 +23,13 @@ public class DepartmentController {
     private final DepartmentService departmentService;
 
     @GetMapping
-    @Operation(summary = "List all active departments")
+    @Operation(summary = "List all active departments (any authenticated user)")
     public ResponseEntity<ApiResponse<List<DepartmentResponse>>> getAllActive() {
         return ResponseEntity.ok(ApiResponse.ok(departmentService.getAllActive()));
     }
 
     @GetMapping("/{id}")
-    @Operation(summary = "Get department by ID")
+    @Operation(summary = "Get department by ID (any authenticated user)")
     public ResponseEntity<ApiResponse<DepartmentResponse>> getById(@PathVariable Long id) {
         return ResponseEntity.ok(ApiResponse.ok(departmentService.getById(id)));
     }

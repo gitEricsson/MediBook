@@ -147,6 +147,26 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     boolean existsByConfirmationCode(String confirmationCode);
 
+    /** PENDING appointments older than the cutoff — fed to StalePendingCancelJob. */
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.status = com.medibook.domain.appointment.entity.AppointmentStatus.PENDING
+             AND a.createdAt < :cutoff
+           """)
+    List<Appointment> findStalePending(LocalDateTime cutoff);
+
+    /** PENDING appointments due to auto-cancel in the soon-window — for the reminder job. */
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.status = com.medibook.domain.appointment.entity.AppointmentStatus.PENDING
+             AND a.createdAt BETWEEN :reminderFrom AND :reminderTo
+           """)
+    List<Appointment> findPendingDueForReminder(LocalDateTime reminderFrom, LocalDateTime reminderTo);
+
+    boolean existsByDoctorIdAndScheduledAt(Long doctorId, java.time.LocalDateTime scheduledAt);
+
     Optional<Appointment> findByConfirmationCode(String confirmationCode);
 
     @Query("""

@@ -61,8 +61,25 @@ public class WebSocketAuthChannelInterceptor implements ChannelInterceptor {
         if (user == null) {
             throw new AccessDeniedException("STOMP SUBSCRIBE requires authentication");
         }
-        if (destination == null || !destination.startsWith("/user/")) {
-            return; // non-user destinations are unrestricted at this layer
+        if (destination == null) {
+            return;
+        }
+
+        // We deliberately never push chat/notification frames to /topic/conversations/* —
+        // all per-user fan-out goes through convertAndSendToUser → /user/{id}/queue/*.
+        // Reject any /topic/conversations/... subscribe attempts so a curious client
+        // can't fish for messages by guessing conversation IDs (defense in depth).
+        if (destination.startsWith("/topic/conversations/")
+                || destination.startsWith("/topic/chat/")
+                || destination.startsWith("/topic/copilot/")) {
+            log.warn("STOMP SUBSCRIBE blocked; user={} tried to subscribe to private topic {}",
+                    user.getName(), destination);
+            throw new AccessDeniedException(
+                    "Subscribing to that topic is not permitted");
+        }
+
+        if (!destination.startsWith("/user/")) {
+            return; // public topics (/topic/admin broadcasts, etc.) are unrestricted here
         }
 
         // /user/queue/...  — Spring rewrites to /user/{principalName}/queue/... automatically

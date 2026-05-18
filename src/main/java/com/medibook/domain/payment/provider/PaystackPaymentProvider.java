@@ -58,14 +58,20 @@ public class PaystackPaymentProvider implements PaymentProviderPort {
             // Paystack amount is in kobo (smallest unit) — multiply by 100
             long amountInKobo = request.amount().multiply(BigDecimal.valueOf(100)).longValue();
 
+            // Paystack rejects emails with non-public TLDs like .local, .test, .invalid, .localhost.
+            // For dev/test users we substitute with a synthetic public-TLD address derived from
+            // the original local part so the gateway accepts the request.
+            String email = sanitizeEmailForGateway(request.customerEmail());
+
             String body = objectMapper.writeValueAsString(Map.of(
-                    "email",      request.customerEmail(),
+                    "email",      email,
                     "amount",     amountInKobo,
                     "currency",   request.currency(),
                     "reference",  request.idempotencyKey(),
                     "metadata",   Map.of(
                             "description", request.description(),
-                            "customer",    request.customerName()),
+                            "customer",    request.customerName(),
+                            "originalEmail", request.customerEmail() == null ? "" : request.customerEmail()),
                     "callback_url", request.callbackUrl() != null ? request.callbackUrl() : ""
             ));
 
@@ -195,6 +201,42 @@ public class PaystackPaymentProvider implements PaymentProviderPort {
 
     private boolean isConfigured() {
         return secretKey != null && !secretKey.isBlank();
+    }
+
+    /**
+     * Paystack's email validator rejects non-public TLDs (.local, .test, .invalid, .localhost,
+     * .example, .lan, .home, .corp). For dev/staging users with such emails, substitute a
+     * synthetic public-TLD address that's deterministic per source email so refund/lookup
+     * keyed by email still works. The original email is preserved in the request metadata.
+     */
+    static String sanitizeEmailForGateway(String email) {
+        if (email == null || email.isBlank()) {
+            return "noreply+anonymous@medibook.test.com";
+        }
+        String lower = email.trim().toLowerCase();
+        int at = lower.lastIndexOf('@');
+        if (at < 0) {
+            return "noreply+invalid@medibook.test.com";
+        }
+        String localPart = lower.substring(0, at);
+        String domain = lower.substring(at + 1);
+        int lastDot = domain.lastIndexOf('.');
+        String tld = lastDot >= 0 ? domain.substring(lastDot + 1) : domain;
+        // Whitelist of TLDs Paystack rejects; substitute with a real public TLD.
+        switch (tld) {
+            case "local":
+            case "localhost":
+            case "test":
+            case "invalid":
+            case "example":
+            case "lan":
+            case "home":
+            case "corp":
+            case "internal":
+                return localPart + "@medibook-test.com";
+            default:
+                return email;
+        }
     }
 
     private InitiateResult devStub(String idempotencyKey) {

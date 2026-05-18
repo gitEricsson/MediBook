@@ -1,29 +1,24 @@
 server:
-  # 8081 = local IDE default; docker-compose overrides via SERVER_PORT=8080
-  port: ${SERVER_PORT:8081}
+  port: ${SERVER_PORT:8080}
 
 spring:
-  aop:
-    proxy-target-class: true
   datasource:
-    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:127.0.0.1}}:${MEDIBOOK_DB_PORT:${DB_PORT:3307}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:localhost}}:${MEDIBOOK_DB_PORT:${DB_PORT:3307}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
     username: ${MEDIBOOK_DB_USER:${DB_USER:medibook}}
     password: ${MEDIBOOK_DB_PASSWORD:${DB_PASSWORD:medibook}}
   jpa:
     show-sql: true
-    hibernate:
-      ddl-auto: validate
   data:
     cassandra:
-      contact-points: ${CASSANDRA_HOST:127.0.0.1}
+      contact-points: ${CASSANDRA_HOST:localhost}
       port: ${CASSANDRA_PORT:9042}
     redis:
-      host: ${REDIS_HOST:127.0.0.1}
+      host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
   kafka:
-    bootstrap-servers: ${MEDIBOOK_KAFKA_BROKERS:${KAFKA_BROKERS:127.0.0.1:29092}}
+    bootstrap-servers: ${MEDIBOOK_KAFKA_BROKERS:${KAFKA_BROKERS:localhost:29092}}
   mail:
-    host: ${MAIL_HOST:127.0.0.1}
+    host: ${MAIL_HOST:localhost}
     port: ${MAIL_PORT:1025}  # MailHog for local dev
     username: ${MAIL_USERNAME:}
     password: ${MAIL_PASSWORD:}
@@ -40,8 +35,6 @@ app:
     secret: ${JWT_SECRET:dev-jwt-secret-replace-in-prod-must-be-256-bits-long-for-hs256!!}
   phi:
     encryption-key: ${PHI_ENCRYPTION_KEY:dev-phi-key-replace-in-prod-min32chars!!}
-  cors:
-    allowed-origins: ${CORS_ORIGINS:http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173}
 
   # ─── Super Admin bootstrap defaults for local dev ───────────────────────────
   bootstrap:

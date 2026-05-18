@@ -1,7 +1,10 @@
 package com.medibook.domain.schedule.controller;
 
+import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.common.response.ApiResponse;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.schedule.dto.DoctorLeaveRequest;
+import com.medibook.domain.schedule.dto.DoctorLeaveResponse;
 import com.medibook.domain.schedule.entity.DoctorLeave;
 import com.medibook.domain.schedule.service.DoctorLeaveService;
 import com.medibook.security.CurrentUser;
@@ -22,6 +25,35 @@ import java.util.List;
 public class DoctorLeaveController {
 
     private final DoctorLeaveService leaveService;
+    private final DoctorRepository doctorRepository;
+
+    /** Resolve the Doctor entity PK from the currently-authenticated user. */
+    private Long resolveOwnDoctorId(UserPrincipal principal) {
+        return doctorRepository.findByUserId(principal.getId())
+                .map(d -> d.getId())
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "userId", principal.getId()));
+    }
+
+    @GetMapping("/api/v1/me/leaves")
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(summary = "Get the logged-in doctor's leave records (resolves doctorId from JWT)")
+    public ApiResponse<List<DoctorLeaveResponse>> getMyLeaves(@CurrentUser UserPrincipal principal) {
+        List<DoctorLeaveResponse> body = leaveService.getLeaveForDoctor(resolveOwnDoctorId(principal))
+                .stream().map(DoctorLeaveResponse::from).toList();
+        return ApiResponse.ok(body);
+    }
+
+    @PostMapping("/api/v1/me/leaves")
+    @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasRole('DOCTOR')")
+    @Operation(summary = "Create a leave request for the logged-in doctor")
+    public ApiResponse<DoctorLeaveResponse> createMyLeave(
+            @Valid @RequestBody DoctorLeaveRequest request,
+            @CurrentUser UserPrincipal principal) {
+        return ApiResponse.ok(
+                DoctorLeaveResponse.from(
+                        leaveService.createLeave(resolveOwnDoctorId(principal), request, principal)));
+    }
 
     @PostMapping("/api/v1/doctors/{doctorId}/leaves")
     @ResponseStatus(HttpStatus.CREATED)

@@ -42,6 +42,7 @@ class NotificationServiceTest {
     @Mock CacheManager                    cacheManager;
     @Mock Cache                           unreadCountCache;
     @Mock com.medibook.infrastructure.metrics.NotificationMetrics notificationMetrics;
+    @Mock com.medibook.common.mail.TransactionalEmailService transactionalEmailService;
 
     private org.springframework.retry.support.RetryTemplate notificationRetryTemplate;
     private NotificationService notificationService;
@@ -58,7 +59,8 @@ class NotificationServiceTest {
         notificationService = new NotificationService(
                 notificationRepository, cassandraOperations, stringRedisTemplate,
                 listenerContainer, objectMapper, messagingTemplate,
-                cacheManager, notificationRetryTemplate, notificationMetrics);
+                cacheManager, notificationRetryTemplate, notificationMetrics,
+                transactionalEmailService);
         event = AppointmentEvent.builder()
                 .appointmentId(100L)
                 .patientId(1L).patientName("Alice Patient").patientEmail("alice@test.com")

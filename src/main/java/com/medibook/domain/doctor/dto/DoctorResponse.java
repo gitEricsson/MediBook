@@ -11,6 +11,8 @@ import java.time.LocalDateTime;
 
 @Data
 @Builder
+@lombok.NoArgsConstructor   // Jackson needs a default constructor to deserialize cached entries from Redis.
+@lombok.AllArgsConstructor  // Keep builder + canonical constructor in sync.
 public class DoctorResponse {
 
     private Long id;
@@ -36,7 +38,9 @@ public class DoctorResponse {
 
     /**
      * Build response using hospital-wide pricing.
-     * All doctors share the same base fee; senior consultants (&gt;threshold years) get a premium.
+     * Booking fees are classified strictly by specialization — every doctor in the same
+     * specialization charges the same amount. The {@code seniorConsultant} flag is exposed
+     * for UI badging only and no longer affects the fee.
      */
     public static DoctorResponse fromEntity(Doctor d, HospitalProperties hospitalProps) {
         if (d.getUser() == null) {
@@ -60,7 +64,7 @@ public class DoctorResponse {
                 .acceptingNew(d.isAcceptingNew())
                 .slotDurationMins(d.getSlotDurationMins())
                 .yearsOfExperience(d.getYearsOfExperience())
-                .consultationFee(hospitalProps.getFeeForDoctor(d.getYearsOfExperience()))
+                .consultationFee(hospitalProps.getFeeForDoctor(d.getSpecialization(), d.getYearsOfExperience()))
                 .seniorConsultant(senior)
                 .gender(d.getGender())
                 .telemedicineEnabled(d.isTelemedicineEnabled())

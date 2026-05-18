@@ -200,11 +200,20 @@ public class TelemedicineCallService {
     }
 
     private void ensureCallAllowed(Appointment appointment) {
-        if (appointment.getStatus() == AppointmentStatus.CANCELLED
-                || appointment.getStatus() == AppointmentStatus.COMPLETED
-                || appointment.getStatus() == AppointmentStatus.NO_SHOW) {
+        AppointmentStatus status = appointment.getStatus();
+        if (status == AppointmentStatus.CANCELLED
+                || status == AppointmentStatus.COMPLETED
+                || status == AppointmentStatus.NO_SHOW) {
             throw new MediBookException("Telemedicine call is not allowed for this appointment",
                     HttpStatus.BAD_REQUEST, "TELEMEDICINE_NOT_ALLOWED");
+        }
+        // Block calls on unpaid / unconfirmed appointments. The slot is reserved (PENDING)
+        // until payment lands and flips status to CONFIRMED — we only let confirmed pairs
+        // dial each other.
+        if (status != AppointmentStatus.CONFIRMED) {
+            throw new MediBookException(
+                    "This appointment is not confirmed yet. Complete payment to start the call.",
+                    HttpStatus.CONFLICT, "APPOINTMENT_NOT_CONFIRMED");
         }
     }
 

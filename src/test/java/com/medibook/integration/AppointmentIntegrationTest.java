@@ -11,7 +11,9 @@ import com.medibook.domain.appointment.service.AppointmentHoldService;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
+import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import com.medibook.domain.patient.service.PatientHistoryService;
 import com.medibook.domain.user.dto.LoginRequest;
 import com.medibook.domain.user.entity.Role;
@@ -27,6 +29,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.when;
@@ -46,14 +49,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AppointmentIntegrationTest extends IntegrationTestSupport {
     @MockBean AppointmentEventProducer eventProducer;
     @MockBean PatientHistoryService patientHistoryService;
-    @Autowired MockMvc               mockMvc;
-    @Autowired ObjectMapper          objectMapper;
-    @Autowired DepartmentRepository  departmentRepository;
-    @Autowired UserRepository        userRepository;
-    @Autowired DoctorRepository      doctorRepository;
-    @Autowired AppointmentRepository appointmentRepository;
-    @Autowired AppointmentHoldService holdService;
-    @Autowired PasswordEncoder       passwordEncoder;
+    @Autowired MockMvc                        mockMvc;
+    @Autowired ObjectMapper                   objectMapper;
+    @Autowired DepartmentRepository           departmentRepository;
+    @Autowired UserRepository                 userRepository;
+    @Autowired DoctorRepository               doctorRepository;
+    @Autowired AppointmentRepository          appointmentRepository;
+    @Autowired AppointmentHoldService         holdService;
+    @Autowired PasswordEncoder                passwordEncoder;
+    @Autowired DoctorWorkingHoursRepository   workingHoursRepository;
     Long   doctorEntityId;
     Long   doctorUserId;
     Long   patientUserId;
@@ -98,6 +102,16 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
                 .licenseNumber("LIC-IT-777")
                 .specialization("General").build());
         doctorEntityId = doctor.getId();
+
+        // Add working hours Mon-Sun 00:00-23:59 so the scheduling policy never rejects a test slot.
+        for (int day = 1; day <= 7; day++) {
+            workingHoursRepository.save(DoctorWorkingHours.builder()
+                    .doctor(doctor).dayOfWeek(day)
+                    .startTime(LocalTime.of(0, 0))
+                    .endTime(LocalTime.of(23, 59))
+                    .build());
+        }
+
         patientToken = loginAndGetToken("it-patient@test.com", "Password1!");
         doctorToken  = loginAndGetToken("it-doctor@test.com",  "Password1!");
         adminToken   = loginAndGetToken("it-admin@test.com",   "Password1!");

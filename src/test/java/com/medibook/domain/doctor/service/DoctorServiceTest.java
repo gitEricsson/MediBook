@@ -2,6 +2,7 @@ package com.medibook.domain.doctor.service;
 
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.config.HospitalProperties;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
 import com.medibook.domain.doctor.dto.DoctorRequest;
@@ -38,6 +39,7 @@ class DoctorServiceTest {
     @Mock DoctorRepository     doctorRepository;
     @Mock UserRepository       userRepository;
     @Mock DepartmentRepository departmentRepository;
+    @Mock HospitalProperties   hospitalProperties;
 
     @InjectMocks DoctorService doctorService;
 

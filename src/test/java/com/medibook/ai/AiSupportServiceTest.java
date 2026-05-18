@@ -26,7 +26,13 @@ class AiSupportServiceTest {
         SupportMessageClassifier classifier = new SupportMessageClassifier(new SafetyClassifier());
         SupportAiProvider provider          = new StubSupportProvider();
         SupportPromptBuilder promptBuilder  = new SupportPromptBuilder();
-        service = new AiSupportService(classifier, provider, promptBuilder);
+        // Session history moved to Redis; for unit tests, supply nulls — the support
+        // service tolerates a missing Redis client by falling back to fresh history.
+        org.springframework.data.redis.core.StringRedisTemplate redis =
+                org.mockito.Mockito.mock(org.springframework.data.redis.core.StringRedisTemplate.class);
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper =
+                new com.fasterxml.jackson.databind.ObjectMapper();
+        service = new AiSupportService(classifier, provider, promptBuilder, redis, objectMapper);
     }
 
     @Nested

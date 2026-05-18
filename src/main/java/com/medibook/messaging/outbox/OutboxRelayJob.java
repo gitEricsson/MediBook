@@ -8,9 +8,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 /**
@@ -26,7 +24,6 @@ public class OutboxRelayJob {
 
     private static final int BATCH_SIZE = 50;
 
-    private final OutboxEventRepository          outboxRepository;
     private final OutboxRelayService             outboxService;
     private final KafkaTemplate<String, Object>  kafkaTemplate;
     private final MeterRegistry meterRegistry;
@@ -55,14 +52,13 @@ public class OutboxRelayJob {
     }
 
     private void relayImpl() {
-        List<OutboxEvent> pending = outboxRepository.findPendingEvents(LocalDateTime.now(), BATCH_SIZE);
+        // Find-pending + mark-processing must run inside a JPA transaction (the underlying
+        // @Modifying update needs one). Delegating to OutboxRelayService keeps the @Scheduled
+        // entry point lean and the persistence work transactional.
+        List<OutboxEvent> pending = outboxService.claimPending(BATCH_SIZE);
         if (pending.isEmpty()) return;
 
         log.debug("Outbox relay: processing {} events", pending.size());
-
-        // Mark all events as PROCESSING atomically to prevent duplicate publishing in multi-replica setups
-        List<Long> eventIds = pending.stream().map(OutboxEvent::getId).toList();
-        outboxRepository.markProcessing(eventIds);
 
         for (OutboxEvent event : pending) {
             try {

@@ -81,17 +81,36 @@ public class PaymentService {
             throw new MediBookException("Cannot pay for a cancelled appointment", HttpStatus.BAD_REQUEST, "APPOINTMENT_CANCELLED");
         }
 
+        // If a successful payment already exists, hard-reject — appointment is paid.
         if (paymentRepository.existsByAppointmentIdAndStatusIn(req.getAppointmentId(),
-                List.of(PaymentStatus.SUCCESSFUL, PaymentStatus.PENDING))) {
-            throw new MediBookException("Payment already exists for this appointment",
-                    HttpStatus.CONFLICT, "PAYMENT_EXISTS");
+                List.of(PaymentStatus.SUCCESSFUL))) {
+            throw new MediBookException("Appointment is already paid",
+                    HttpStatus.CONFLICT, "ALREADY_PAID");
         }
+
+        // If a PENDING payment exists, recycle it. The user retried (e.g. picked a different
+        // gateway, or the first init failed mid-redirect). Cancel the stale pending row and
+        // start a fresh attempt with the chosen provider — this keeps initiate idempotent
+        // from the caller's perspective without rejecting legitimate retries.
+        paymentRepository.findFirstByAppointmentIdAndStatusInOrderByCreatedAtDesc(
+                req.getAppointmentId(), List.of(PaymentStatus.PENDING, PaymentStatus.INITIATED))
+                .ifPresent(stale -> {
+                    log.info("Recycling stale payment [{}] (status={}) for appointment [{}]",
+                            stale.getId(), stale.getStatus(), req.getAppointmentId());
+                    stale.setStatus(PaymentStatus.CANCELLED);
+                    paymentRepository.save(stale);
+                });
 
         User patient = appointment.getPatient();
         Doctor doctor = appointment.getDoctor();
-        BigDecimal amount = req.getAmount() != null
+        // Server-side fee resolution wins: never trust a client-supplied amount lower than
+        // the canonical specialization-aware fee. If the client supplies a higher amount
+        // (e.g. add-ons), we honor it; otherwise we fall back to the canonical fee.
+        BigDecimal canonicalFee = hospitalProperties.getFeeForDoctor(
+                doctor.getSpecialization(), doctor.getYearsOfExperience());
+        BigDecimal amount = (req.getAmount() != null && req.getAmount().compareTo(canonicalFee) >= 0)
                 ? req.getAmount()
-                : hospitalProperties.getFeeForDoctor(doctor.getYearsOfExperience());
+                : canonicalFee;
 
         PaymentProviderPort providerPort = providerFactory.get(req.getProvider());
         PaymentProviderPort.InitiateResult result = providerPort.initiatePayment(
@@ -105,6 +124,17 @@ public class PaymentService {
                         req.getCallbackUrl()
                 )
         );
+
+        // Fail loudly when the gateway returned no checkout URL. Otherwise we'd persist
+        // an orphan PENDING row that blocks every subsequent retry with a 409.
+        if (result.authorizationUrl() == null || result.authorizationUrl().isBlank()) {
+            log.warn("Provider [{}] returned no authorization URL for appointment [{}] — likely circuit-open or upstream rejection. providerRef={}",
+                    req.getProvider(), appointment.getId(), result.providerRef());
+            throw new MediBookException(
+                    "The payment gateway did not return a checkout link. Please try again in a moment.",
+                    HttpStatus.BAD_GATEWAY,
+                    "GATEWAY_UNAVAILABLE");
+        }
 
         Payment payment = Payment.builder()
                 .appointment(appointment)
@@ -253,17 +283,47 @@ public class PaymentService {
         invoiceRepository.save(invoice);
     }
 
+    /**
+     * Idempotent post-payment side effects:
+     *   1. Flip the linked invoice to PAID (no-op if already PAID).
+     *   2. Flip the linked appointment PENDING → CONFIRMED (no-op for any other status).
+     *
+     * Called from both {@link #verifyPayment} (client returns from gateway) and
+     * {@link #handleSuccessfulWebhookPayment} (gateway webhook). Whichever arrives
+     * first wins; the second is a guarded no-op so racing those two paths is safe.
+     * We never auto-confirm an appointment that's been cancelled, completed, or
+     * no-show'd — those statuses are terminal from a billing perspective.
+     */
     private void markInvoicePaid(Payment payment) {
         invoiceRepository.findByPaymentId(payment.getId()).ifPresent(inv -> {
+            if ("PAID".equalsIgnoreCase(inv.getStatus())) return;
             inv.setStatus("PAID");
             inv.setPaidAt(LocalDateTime.now());
             invoiceRepository.save(inv);
         });
+
+        Appointment appointment = payment.getAppointment();
+        if (appointment == null) return;
+        if (appointment.getStatus() != AppointmentStatus.PENDING) {
+            log.debug("Skipping appointment auto-confirm — appointment [{}] is in status [{}]",
+                    appointment.getId(), appointment.getStatus());
+            return;
+        }
+        appointment.setStatus(AppointmentStatus.CONFIRMED);
+        appointmentRepository.save(appointment);
+        log.info("Appointment [{}] auto-confirmed after successful payment [{}]",
+                appointment.getId(), payment.getId());
     }
 
     private void publishPaymentEvent(Payment payment, String eventType) {
+        // Deterministic eventId per (paymentId, eventType) so a retried verify or a
+        // duplicate webhook delivery doesn't double-fire downstream emails/STOMP.
+        // Consumer dedup (ProcessedEventRepository.existsById) will skip the second
+        // occurrence. UUID-based generation would have given each retry a fresh id
+        // and bypassed that dedup.
+        String deterministicEventId = "payment-" + payment.getId() + "-" + eventType.toLowerCase();
         PaymentEvent event = PaymentEvent.builder()
-                .eventId(UUID.randomUUID().toString())
+                .eventId(deterministicEventId)
                 .eventType(eventType)
                 .schemaVersion(1)
                 .paymentId(payment.getId())

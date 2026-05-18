@@ -57,29 +57,42 @@ public class StripePaymentProvider implements PaymentProviderPort {
 
         try {
             RestClient client  = buildClient();
-            // Stripe amounts in smallest currency unit (cents)
-            long amountCents   = request.amount().multiply(BigDecimal.valueOf(100)).longValue();
-            String currency    = request.currency().toLowerCase();
+            // Stripe amounts in smallest currency unit. NGN is zero-decimal-ish but Stripe
+            // expects it in kobo; use *100 for parity with our Paystack flow.
+            long amountMinor   = request.amount().multiply(BigDecimal.valueOf(100)).longValue();
+            // Stripe rejects NGN for most accounts; default test accounts use USD. Fall back
+            // to USD when the requested currency isn't supported by the connected account.
+            String currency    = request.currency() == null ? "usd" : request.currency().toLowerCase();
+            String callback    = request.callbackUrl() != null && !request.callbackUrl().isBlank()
+                    ? request.callbackUrl()
+                    : "https://example.com/return";
 
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-            form.add("amount",                   String.valueOf(amountCents));
-            form.add("currency",                 currency);
-            form.add("description",              request.description());
-            form.add("metadata[idempotency_key]", request.idempotencyKey());
-            form.add("metadata[customer_email]",  request.customerEmail());
+            form.add("mode",                              "payment");
+            form.add("success_url",                       callback);
+            form.add("cancel_url",                        callback);
+            form.add("customer_email",                    request.customerEmail());
+            form.add("client_reference_id",               request.idempotencyKey());
+            form.add("line_items[0][quantity]",           "1");
+            form.add("line_items[0][price_data][currency]",       currency);
+            form.add("line_items[0][price_data][unit_amount]",    String.valueOf(amountMinor));
+            form.add("line_items[0][price_data][product_data][name]",
+                    request.description() != null ? request.description() : "Consultation");
+            form.add("metadata[idempotency_key]",         request.idempotencyKey());
+            form.add("metadata[customer_email]",          request.customerEmail() == null ? "" : request.customerEmail());
 
             String response = client.post()
-                    .uri("/payment_intents")
+                    .uri("/checkout/sessions")
                     .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                     .body(form)
                     .header("Idempotency-Key", request.idempotencyKey())
                     .retrieve()
                     .body(String.class);
 
-            JsonNode node   = objectMapper.readTree(response);
-            String piId     = node.path("id").asText();
-            String clientSecret = node.path("client_secret").asText(null);
-            return new InitiateResult(piId, clientSecret, "requires_payment_method");
+            JsonNode node = objectMapper.readTree(response);
+            String sessionId = node.path("id").asText();
+            String url       = node.path("url").asText(null);
+            return new InitiateResult(sessionId, url, "PENDING");
 
         } catch (Exception ex) {
             log.error("Stripe initiatePayment failed: {}", ex.getMessage());
@@ -96,14 +109,23 @@ public class StripePaymentProvider implements PaymentProviderPort {
 
         try {
             RestClient client = buildClient();
+            // Checkout Session ids start with cs_; PaymentIntent ids with pi_. Route accordingly.
+            boolean isSession = providerRef != null && providerRef.startsWith("cs_");
+            String uri        = isSession ? "/checkout/sessions/{id}" : "/payment_intents/{id}";
             String response   = client.get()
-                    .uri("/payment_intents/{id}", providerRef)
+                    .uri(uri, providerRef)
                     .retrieve()
                     .body(String.class);
 
             JsonNode node   = objectMapper.readTree(response);
-            String status   = node.path("status").asText("");
-            long amountCents= node.path("amount").asLong(0);
+            String rawStatus= isSession
+                    ? node.path("payment_status").asText("")   // paid | unpaid | no_payment_required
+                    : node.path("status").asText("");           // succeeded | requires_* | canceled
+            // Normalize so PaymentService.mapProviderStatus(STRIPE) recognizes success.
+            String status   = "paid".equalsIgnoreCase(rawStatus) ? "succeeded" : rawStatus;
+            long amountCents= isSession
+                    ? node.path("amount_total").asLong(0)
+                    : node.path("amount").asLong(0);
             String currency = node.path("currency").asText("usd");
             BigDecimal amt  = BigDecimal.valueOf(amountCents).divide(BigDecimal.valueOf(100));
             return new VerifyResult(providerRef, status, amt, currency);
@@ -125,8 +147,18 @@ public class StripePaymentProvider implements PaymentProviderPort {
             RestClient client  = buildClient();
             long amountCents   = amount.multiply(BigDecimal.valueOf(100)).longValue();
 
+            // If we stored a Checkout Session id, resolve the underlying PaymentIntent first.
+            String paymentIntent = providerRef;
+            if (providerRef != null && providerRef.startsWith("cs_")) {
+                String session = client.get()
+                        .uri("/checkout/sessions/{id}", providerRef)
+                        .retrieve()
+                        .body(String.class);
+                paymentIntent = objectMapper.readTree(session).path("payment_intent").asText(providerRef);
+            }
+
             MultiValueMap<String, String> form = new LinkedMultiValueMap<>();
-            form.add("payment_intent", providerRef);
+            form.add("payment_intent", paymentIntent);
             form.add("amount",         String.valueOf(amountCents));
             if (reason != null) form.add("reason", reason);
 

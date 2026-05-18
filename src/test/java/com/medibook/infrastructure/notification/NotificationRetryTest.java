@@ -56,6 +56,9 @@ class NotificationRetryTest {
     @Mock
     private NotificationMetrics notificationMetrics;
 
+    @Mock
+    private com.medibook.common.mail.TransactionalEmailService transactionalEmailService;
+
     private RetryTemplate retryTemplate;
 
     @InjectMocks
@@ -73,7 +76,8 @@ class NotificationRetryTest {
             messagingTemplate,
             cacheManager,
             retryTemplate,
-            notificationMetrics
+            notificationMetrics,
+            transactionalEmailService
         );
     }
 

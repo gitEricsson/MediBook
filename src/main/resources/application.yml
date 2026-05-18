@@ -8,6 +8,10 @@ spring:
   application:
     name: medibook
 
+  jackson:
+    serialization:
+      write-dates-as-timestamps: false
+
   lifecycle:
     timeout-per-shutdown-phase: 30s
 
@@ -185,9 +189,37 @@ app:
       base-url: ${MONNIFY_BASE_URL:https://sandbox.monnify.com}
       redirect-url: ${MONNIFY_REDIRECT_URL:http://localhost:3000/payment/callback}
   hospital:
+    # Fallback / default base fee when a doctor's specialization is not listed below.
     consultation-fee: ${HOSPITAL_CONSULTATION_FEE:5000.00}
     experience-premium-percent: ${HOSPITAL_EXPERIENCE_PREMIUM_PERCENT:20}
     experience-threshold-years: ${HOSPITAL_EXPERIENCE_THRESHOLD_YEARS:10}
+    # Specialization base fees (NGN). Senior premium is layered on top automatically.
+    # Override individual entries via env e.g. HOSPITAL_FEE_CARDIOLOGY, or change config and redeploy.
+    specialization-fees:
+      Cardiology:           ${HOSPITAL_FEE_CARDIOLOGY:15000}
+      Neurology:            ${HOSPITAL_FEE_NEUROLOGY:18000}
+      Orthopedics:          ${HOSPITAL_FEE_ORTHOPEDICS:12000}
+      Oncology:             ${HOSPITAL_FEE_ONCOLOGY:20000}
+      Dermatology:          ${HOSPITAL_FEE_DERMATOLOGY:8000}
+      Pediatrics:           ${HOSPITAL_FEE_PEDIATRICS:7000}
+      Psychiatry:           ${HOSPITAL_FEE_PSYCHIATRY:10000}
+      # Spring binds Map keys exactly as written, so multi-word keys are written without
+      # spaces (we match case-insensitively and on substrings so this is enough).
+      Obgyn:                ${HOSPITAL_FEE_OBGYN:12000}
+      Gynecology:           ${HOSPITAL_FEE_GYNECOLOGY:12000}
+      Obstetrics:           ${HOSPITAL_FEE_OBSTETRICS:12000}
+      Emergency:            ${HOSPITAL_FEE_EMERGENCY:9000}
+      Internal:             ${HOSPITAL_FEE_INTERNAL_MED:7000}
+      Family:               ${HOSPITAL_FEE_FAMILY_MED:6000}
+      Practice:             ${HOSPITAL_FEE_GP:5000}
+      General:              ${HOSPITAL_FEE_GENERAL:6000}
+      Ophthalmology:        ${HOSPITAL_FEE_OPHTHALMOLOGY:10000}
+      ENT:                  ${HOSPITAL_FEE_ENT:9000}
+      Urology:              ${HOSPITAL_FEE_UROLOGY:11000}
+      Endocrinology:        ${HOSPITAL_FEE_ENDOCRINOLOGY:11000}
+      Gastroenterology:     ${HOSPITAL_FEE_GASTRO:12000}
+      Radiology:            ${HOSPITAL_FEE_RADIOLOGY:9000}
+      Pathology:            ${HOSPITAL_FEE_PATHOLOGY:7000}
   chat:
     baa-active: ${AI_CHAT_BAA_ACTIVE:false}   # Set true ONLY after BAA is executed with Twilio and AI provider
 

@@ -25,7 +25,12 @@ public class TwilioTokenService {
         Instant expiresAt = now.plusSeconds(properties.getVideoTokenTtlSeconds());
 
         if (!properties.isVideoConfigured()) {
-            return new TokenResult("stub-video-token-" + identity + "-" + now.getEpochSecond(), expiresAt);
+            // Refuse to hand the FE a stub token — the Twilio SDK would fail opaquely at
+            // connect() time. Surface a clear 503 so the UI can show "telemedicine not
+            // configured" instead of a broken room.
+            throw new MediBookException(
+                    "Telemedicine is not configured on this environment. Please contact support.",
+                    HttpStatus.SERVICE_UNAVAILABLE, "TELEMEDICINE_NOT_CONFIGURED");
         }
 
         try {

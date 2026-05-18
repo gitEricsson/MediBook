@@ -51,39 +51,25 @@ public class AppointmentService {
     private final AppointmentHoldService holdService;
     private final SystemConfigRepository configRepository;
     private final DoctorLeaveService doctorLeaveService;
+    private final AppointmentSchedulingPolicy schedulingPolicy;
 
     @Bulkhead(name = "appointmentService")
     @Transactional
     public AppointmentResponse book(Long patientId, AppointmentRequest request) {
-        if (request.getScheduledAt().isBefore(LocalDateTime.now())) {
-            throw new MediBookException("Cannot book an appointment in the past.",
-                    HttpStatus.BAD_REQUEST, "SLOT_IN_PAST");
-        }
-
         LocalDateTime endTime = request.getScheduledAt().plusMinutes(request.getDurationMins());
 
         holdService.validateHold(request.getDoctorId(), request.getScheduledAt(), request.getHoldId());
+
+        // Single gate covering: past, doctor existence/active, leave, working-hours fit,
+        // and overlap. Same policy as the hold check, run again here in case anything
+        // changed during the hold window.
+        schedulingPolicy.checkBookableWithOverlap(request.getDoctorId(), request.getScheduledAt(), endTime);
 
         User patient = userRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", patientId));
 
         Doctor doctor = doctorRepository.findByIdWithDetailsForUpdate(request.getDoctorId())
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", request.getDoctorId()));
-
-        if (!doctor.isActive()) {
-            throw new MediBookException("Doctor is not currently accepting appointments",
-                    HttpStatus.CONFLICT, "DOCTOR_INACTIVE");
-        }
-
-        if (doctorLeaveService.isDoctorOnLeave(request.getDoctorId(), request.getScheduledAt().toLocalDate())) {
-            throw new MediBookException("Doctor is on leave on the requested date",
-                    HttpStatus.CONFLICT, "DOCTOR_ON_LEAVE");
-        }
-
-        if (appointmentRepository.existsConflict(request.getDoctorId(), request.getScheduledAt(), endTime)) {
-            throw new MediBookException("Doctor is not available at the requested time",
-                    HttpStatus.CONFLICT, "SLOT_TAKEN");
-        }
 
         String confirmationCode = "MB-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
@@ -104,7 +90,7 @@ public class AppointmentService {
         try {
             saved = appointmentRepository.save(appointment);
         } catch (DataIntegrityViolationException ex) {
-            throw new MediBookException("Doctor is not available at the requested time",
+            throw new MediBookException("Doctor is not available for booking at this time",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
 
@@ -190,10 +176,6 @@ public class AppointmentService {
             throw new MediBookException("Cannot reschedule a completed or cancelled appointment", HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
 
-        if (request.getNewStart().isBefore(LocalDateTime.now())) {
-            throw new MediBookException("Cannot reschedule to a time in the past.",
-                    HttpStatus.BAD_REQUEST, "SLOT_IN_PAST");
-        }
         if (!request.getNewStart().isBefore(request.getNewEnd())) {
             throw new MediBookException("New end time must be after new start time",
                     HttpStatus.BAD_REQUEST, "INVALID_TIME_RANGE");
@@ -205,13 +187,14 @@ public class AppointmentService {
 
         holdService.validateHold(doctorId, request.getNewStart(), request.getHoldId());
 
-        if (doctorLeaveService.isDoctorOnLeave(doctorId, request.getNewStart().toLocalDate())) {
-            throw new MediBookException("Doctor is on leave on the requested date",
-                    HttpStatus.CONFLICT, "DOCTOR_ON_LEAVE");
-        }
+        // Same booking policy as initial book — past time, leave, working hours.
+        // Overlap is checked with an "excluding self" variant below so the current
+        // appointment's own row doesn't trip the conflict guard.
+        schedulingPolicy.checkBookable(doctorId, request.getNewStart());
 
         if (appointmentRepository.existsConflictExcluding(appt.getId(), doctorId, request.getNewStart(), request.getNewEnd())) {
-            throw new MediBookException("New slot is taken", HttpStatus.CONFLICT, "SLOT_TAKEN");
+            throw new MediBookException("Doctor is not available for booking at this time",
+                    HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
 
         appt.setScheduledAt(request.getNewStart());
@@ -374,6 +357,8 @@ public class AppointmentService {
         return appointmentRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
     }
+
+    // Working-hours validation now lives in AppointmentSchedulingPolicy.checkBookable — see there.
 
     private void ensureDoctorOwnsAppointment(Appointment appointment, UserPrincipal principal) {
         if (!appointment.getDoctor().getUser().getId().equals(principal.getId())) {

@@ -26,6 +26,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
 
     boolean existsByAppointmentIdAndStatusIn(Long appointmentId, java.util.List<PaymentStatus> statuses);
 
+    Optional<Payment> findFirstByAppointmentIdAndStatusInOrderByCreatedAtDesc(
+            Long appointmentId, java.util.List<PaymentStatus> statuses);
+
     @Query("SELECT p FROM Payment p JOIN FETCH p.appointment JOIN FETCH p.patient WHERE p.id = :id")
     Optional<Payment> findByIdWithDetails(Long id);
 

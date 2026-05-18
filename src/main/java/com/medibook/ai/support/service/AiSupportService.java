@@ -1,5 +1,7 @@
 package com.medibook.ai.support.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.medibook.ai.support.classifier.SupportMessageClassifier;
 import com.medibook.ai.support.dto.SupportChatRequest;
 import com.medibook.ai.support.dto.SupportChatResponse;
@@ -8,12 +10,13 @@ import com.medibook.ai.support.prompt.SupportPromptBuilder;
 import com.medibook.ai.support.provider.SupportAiProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -32,13 +35,14 @@ import java.util.stream.Collectors;
 public class AiSupportService {
 
     private static final int MAX_HISTORY_PER_SESSION = 20;
+    private static final String HISTORY_KEY_PREFIX   = "ai_support_history:";
+    private static final Duration HISTORY_TTL        = Duration.ofMinutes(30);
 
     private final SupportMessageClassifier classifier;
     private final SupportAiProvider        provider;
     private final SupportPromptBuilder     promptBuilder;
-
-    /** In-memory conversation history keyed by sessionId. Entries evicted when session count exceeds threshold. */
-    private final Map<String, List<Map<String, String>>> conversationHistory = new ConcurrentHashMap<>();
+    private final StringRedisTemplate      redisTemplate;
+    private final ObjectMapper             objectMapper;
 
     public SupportChatResponse chat(SupportChatRequest request, Authentication authentication) {
         long start = System.currentTimeMillis();
@@ -93,7 +97,7 @@ public class AiSupportService {
                     ? promptBuilder.buildHealthEducationPrompt()
                     : promptBuilder.buildSystemPrompt();
 
-            List<Map<String, String>> history = conversationHistory.getOrDefault(sessionId, List.of());
+            List<Map<String, String>> history = loadHistory(sessionId);
             String reply = provider.generate(systemPrompt, history, message);
 
             boolean requiresHumanSupport = cls == SupportMessageClassification.UNKNOWN
@@ -121,17 +125,35 @@ public class AiSupportService {
         }
     }
 
-    private void addToHistory(String sessionId, String role, String content) {
-        conversationHistory.computeIfAbsent(sessionId, k -> Collections.synchronizedList(new ArrayList<>()));
-        List<Map<String, String>> history = conversationHistory.get(sessionId);
-        history.add(Map.of("role", role, "content", content));
-        // Trim oldest entries if too long
-        while (history.size() > MAX_HISTORY_PER_SESSION * 2) {
-            history.remove(0);
+    // ── Redis-backed conversation history ────────────────────────────────
+    // Stored as a JSON-encoded list under ai_support_history:{sessionId} with a 30-min
+    // sliding TTL. Survives multi-replica deployment and removes the 1000-session
+    // in-memory cap. Redis failures are non-fatal — we degrade to a fresh history
+    // for that turn rather than 500.
+
+    private List<Map<String, String>> loadHistory(String sessionId) {
+        try {
+            String raw = redisTemplate.opsForValue().get(HISTORY_KEY_PREFIX + sessionId);
+            if (raw == null || raw.isBlank()) return List.of();
+            return objectMapper.readValue(raw, new TypeReference<>() {});
+        } catch (Exception ex) {
+            log.warn("AiSupportService history load failed for session={}: {}", sessionId, ex.getMessage());
+            return List.of();
         }
-        // Evict oldest sessions if too many (simple memory guard)
-        if (conversationHistory.size() > 1000) {
-            conversationHistory.keySet().stream().findFirst().ifPresent(conversationHistory::remove);
+    }
+
+    private void addToHistory(String sessionId, String role, String content) {
+        try {
+            List<Map<String, String>> history = new ArrayList<>(loadHistory(sessionId));
+            history.add(Map.of("role", role, "content", content));
+            while (history.size() > MAX_HISTORY_PER_SESSION * 2) history.remove(0);
+            redisTemplate.opsForValue().set(
+                    HISTORY_KEY_PREFIX + sessionId,
+                    objectMapper.writeValueAsString(history),
+                    HISTORY_TTL);
+        } catch (Exception ex) {
+            // Persisting history is best-effort — losing one turn won't break the chat.
+            log.warn("AiSupportService history store failed for session={}: {}", sessionId, ex.getMessage());
         }
     }
 

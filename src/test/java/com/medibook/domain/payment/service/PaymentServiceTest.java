@@ -50,6 +50,7 @@ class PaymentServiceTest {
     @Mock OutboxEventRepository      outboxRepository;
     @Mock ObjectMapper               objectMapper;
     @Mock SequenceService            sequenceService;
+    @Mock com.medibook.config.HospitalProperties hospitalProperties;
 
     @InjectMocks
     PaymentService paymentService;
@@ -95,6 +96,9 @@ class PaymentServiceTest {
                 .build();
 
         principal = UserPrincipal.fromUser(patient);
+
+        lenient().when(hospitalProperties.getFeeForDoctor(any(), anyInt()))
+                .thenReturn(BigDecimal.valueOf(5000));
     }
 
     @Test

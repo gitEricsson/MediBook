@@ -95,6 +95,43 @@ class WebSocketAuthChannelInterceptorTest {
                 .isInstanceOf(AccessDeniedException.class);
     }
 
+    // ─── Defense-in-depth: private topics are always blocked ─────────────────
+
+    @Test
+    @DisplayName("SUBSCRIBE — /topic/conversations/{id} is rejected (private fan-out lives on /user/queue)")
+    void subscribe_privateConversationsTopic_blocked() {
+        Message<?> msg = buildMessage(StompCommand.SUBSCRIBE,
+                "/topic/conversations/42", new StompPrincipal("42"));
+        assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("SUBSCRIBE — /topic/chat/* is rejected")
+    void subscribe_chatTopic_blocked() {
+        Message<?> msg = buildMessage(StompCommand.SUBSCRIBE,
+                "/topic/chat/anything", new StompPrincipal("42"));
+        assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("SUBSCRIBE — /topic/copilot/* is rejected")
+    void subscribe_copilotTopic_blocked() {
+        Message<?> msg = buildMessage(StompCommand.SUBSCRIBE,
+                "/topic/copilot/123", new StompPrincipal("42"));
+        assertThatThrownBy(() -> interceptor.preSend(msg, channel))
+                .isInstanceOf(AccessDeniedException.class);
+    }
+
+    @Test
+    @DisplayName("SUBSCRIBE — public /topic/announcements stays allowed")
+    void subscribe_publicTopic_allowed() {
+        Message<?> msg = buildMessage(StompCommand.SUBSCRIBE,
+                "/topic/announcements", new StompPrincipal("42"));
+        assertThatNoException().isThrownBy(() -> interceptor.preSend(msg, channel));
+    }
+
     // ─── Other frames ────────────────────────────────────────────────────────
 
     @Test

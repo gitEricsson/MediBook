@@ -74,6 +74,22 @@ public class ChatService {
                     HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
 
+        // TODO[REMOVE-BEFORE-PROD]: PENDING (unpaid) appointments are temporarily allowed
+        // to open chat so the feature is discoverable in local testing without going
+        // through the full payment flow. Before shipping, re-enable the PENDING block
+        // below and revert the matching FE change in MobMyAppts.tsx ("Chat + video row").
+        com.medibook.domain.appointment.entity.AppointmentStatus status = appt.getStatus();
+        // if (status == com.medibook.domain.appointment.entity.AppointmentStatus.PENDING) {
+        //     throw new MediBookException(
+        //             "This appointment is not confirmed yet. Complete payment to open chat.",
+        //             HttpStatus.CONFLICT, "APPOINTMENT_NOT_CONFIRMED");
+        // }
+        if (status == com.medibook.domain.appointment.entity.AppointmentStatus.CANCELLED
+                || status == com.medibook.domain.appointment.entity.AppointmentStatus.NO_SHOW) {
+            throw new MediBookException("Chat is not available for this appointment",
+                    HttpStatus.BAD_REQUEST, "CHAT_NOT_ALLOWED");
+        }
+
         // Idempotent — return existing if already created
         return conversationRepo.findByAppointmentId(appointmentId)
                 .map(this::toConversationResponse)
@@ -129,6 +145,16 @@ public class ChatService {
         // Ignore AI's own messages to avoid infinite loops
         if (TwilioConversationsService.AI_IDENTITY.equals(author)) {
             log.debug("Ignoring AI's own message from {}", author);
+            return;
+        }
+
+        // Twilio retries webhooks aggressively on any non-2xx response, so we must be
+        // idempotent on MessageSid. Without this check a retried delivery would either
+        // insert a duplicate row (no unique constraint had been added historically) or
+        // crash on the unique constraint and trigger yet another retry storm.
+        if (messageSid != null && !messageSid.isBlank()
+                && messageRepo.findByTwilioMessageSid(messageSid).isPresent()) {
+            log.debug("Twilio webhook replay for MessageSid={} — skipping", messageSid);
             return;
         }
 

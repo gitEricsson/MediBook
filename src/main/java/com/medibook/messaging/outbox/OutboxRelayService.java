@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -16,6 +17,19 @@ public class OutboxRelayService {
 
     private static final int MAX_RETRY_COUNT  = 5;
     private static final long RETRY_BACKOFF_S = 30;
+
+    /**
+     * Atomically claim a batch of PENDING events by flipping them to PROCESSING.
+     * Wrapped in a transaction here (rather than in the scheduled job) because the
+     * underlying {@code @Modifying} query requires an active JPA transaction.
+     */
+    @Transactional
+    public List<OutboxEvent> claimPending(int batchSize) {
+        List<OutboxEvent> pending = outboxRepository.findPendingEvents(LocalDateTime.now(), batchSize);
+        if (pending.isEmpty()) return pending;
+        outboxRepository.markProcessing(pending.stream().map(OutboxEvent::getId).toList());
+        return pending;
+    }
 
     @Transactional
     public void markProcessed(OutboxEvent event) {

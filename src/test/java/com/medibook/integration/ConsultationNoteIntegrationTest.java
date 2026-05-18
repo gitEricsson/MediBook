@@ -6,7 +6,9 @@ import com.medibook.domain.consultation.dto.ConsultationNoteRequest;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
+import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import com.medibook.domain.user.dto.LoginRequest;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
@@ -22,6 +24,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -37,13 +40,14 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @DisplayName("ConsultationNote Integration Tests")
 class ConsultationNoteIntegrationTest extends IntegrationTestSupport {
     @MockBean AppointmentEventProducer eventProducer;
-    @Autowired MockMvc                   mockMvc;
-    @Autowired ObjectMapper              objectMapper;
-    @Autowired UserRepository            userRepository;
-    @Autowired DepartmentRepository      departmentRepository;
-    @Autowired DoctorRepository          doctorRepository;
-    @Autowired JdbcTemplate              jdbcTemplate;
-    @Autowired PasswordEncoder           passwordEncoder;
+    @Autowired MockMvc                        mockMvc;
+    @Autowired ObjectMapper                   objectMapper;
+    @Autowired UserRepository                 userRepository;
+    @Autowired DepartmentRepository           departmentRepository;
+    @Autowired DoctorRepository               doctorRepository;
+    @Autowired DoctorWorkingHoursRepository   workingHoursRepository;
+    @Autowired JdbcTemplate                   jdbcTemplate;
+    @Autowired PasswordEncoder                passwordEncoder;
     String patientToken;
     String doctorToken;
     Long   appointmentId;
@@ -65,6 +69,16 @@ class ConsultationNoteIntegrationTest extends IntegrationTestSupport {
                 .user(docUser).department(dept).licenseNumber("LIC-NOTES-001")
                 .specialization("Cardiology").build());
         doctorEntityId = doctor.getId();
+
+        // Add working hours Mon-Sun 00:00-23:59 so the scheduling policy never rejects a test slot.
+        for (int day = 1; day <= 7; day++) {
+            workingHoursRepository.save(DoctorWorkingHours.builder()
+                    .doctor(doctor).dayOfWeek(day)
+                    .startTime(LocalTime.of(0, 0))
+                    .endTime(LocalTime.of(23, 59))
+                    .build());
+        }
+
         patientToken = loginAndGetToken("notes-patient@test.com", "Password1!");
         doctorToken  = loginAndGetToken("notes-doctor@test.com",  "Password1!");
         AppointmentRequest apptReq = new AppointmentRequest();

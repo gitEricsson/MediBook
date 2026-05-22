@@ -505,9 +505,14 @@ public class NotificationService implements MessageListener {
     public long getUnreadCount(Long userId) {
         Cache cache = cacheManager.getCache(UNREAD_COUNT_CACHE);
         if (cache != null) {
-            Long cached = cache.get(userId, Long.class);
-            if (cached != null) {
-                return cached;
+            // NOTE: read as Number, not Long. RedisCache uses
+            // GenericJackson2JsonRedisSerializer with DefaultTyping.NON_FINAL,
+            // so final scalars (Long, Integer) don't get @class tags and JSON
+            // "0" round-trips as Integer. Reading via Long.class would throw
+            // "Cached value is not of required type".
+            Cache.ValueWrapper wrapper = cache.get(userId);
+            if (wrapper != null && wrapper.get() instanceof Number n) {
+                return n.longValue();
             }
         }
 

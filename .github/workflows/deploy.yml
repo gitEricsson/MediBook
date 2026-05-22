@@ -102,9 +102,12 @@ jobs:
 
       - name: Wait for rollout
         run: |
+          # 600s — the app's startup is slow (Kafka attach, Cassandra session,
+          # Hikari pool warmup, Redis listener). A 4-pod rolling restart with
+          # maxSurge=1 / maxUnavailable=25% takes ~6 min total in practice.
           kubectl rollout status deployment/medibook-app \
             -n medibook \
-            --timeout=300s
+            --timeout=600s
 
       - name: Verify no pod restarts on new ReplicaSet
         run: |

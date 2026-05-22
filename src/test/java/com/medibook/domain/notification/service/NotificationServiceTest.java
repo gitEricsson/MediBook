@@ -270,7 +270,11 @@ class NotificationServiceTest {
     @Test
     @DisplayName("getUnreadCount - returns cached value when available")
     void getUnreadCount_returnsCachedValue() {
-        when(unreadCountCache.get(1L, Long.class)).thenReturn(7L);
+        // Production code reads via cache.get(key) and casts to Number to tolerate
+        // Integer↔Long round-trips through Jackson (DefaultTyping.NON_FINAL strips
+        // type info from final scalars). Stub the untyped overload accordingly.
+        org.springframework.cache.Cache.ValueWrapper wrapper = () -> 7L;
+        when(unreadCountCache.get(1L)).thenReturn(wrapper);
 
         long count = notificationService.getUnreadCount(1L);
 

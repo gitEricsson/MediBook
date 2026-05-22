@@ -1,9 +1,10 @@
 name: Backend Deploy
 
 on:
-  push:
-    branches:
-      - master
+  workflow_run:
+    workflows: ["Backend CI"]
+    branches: [master]
+    types: [completed]
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -17,6 +18,7 @@ jobs:
   build-and-push:
     name: Build & Push Docker Image
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     permissions:
       contents: read
@@ -103,3 +105,21 @@ jobs:
           kubectl rollout status deployment/medibook-app \
             -n medibook \
             --timeout=300s
+
+      - name: Verify no pod restarts on new ReplicaSet
+        run: |
+          set -e
+          RS=$(kubectl get rs -n medibook -l app=medibook \
+            --sort-by=.metadata.creationTimestamp \
+            -o jsonpath='{.items[-1:].metadata.name}')
+          echo "Newest ReplicaSet: $RS"
+          BAD=$(kubectl get pods -n medibook -l pod-template-hash=$(echo $RS | awk -F- '{print $NF}') \
+            -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[0].restartCount}{"\n"}{end}' \
+            | awk '$2 > 0 {print}')
+          if [ -n "$BAD" ]; then
+            echo "::error::New pods have restarts (likely crash-looping):"
+            echo "$BAD"
+            kubectl rollout undo deployment/medibook-app -n medibook
+            exit 1
+          fi
+          echo "All new pods stable, 0 restarts."

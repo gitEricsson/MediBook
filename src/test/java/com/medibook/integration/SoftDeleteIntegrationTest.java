@@ -362,8 +362,12 @@ public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
         assertTrue(found.isPresent());
 
         Appointment deleted = found.get();
-        // createdAt should not change
-        assertEquals(createdAtBefore, deleted.getCreatedAt());
+        // createdAt should not change. Compare at micros precision because MySQL
+        // datetime(6) rounds Java nanos to micros, so a direct equals would fail
+        // when the in-memory Java value carries sub-microsecond digits.
+        assertEquals(
+                createdAtBefore.truncatedTo(java.time.temporal.ChronoUnit.MICROS),
+                deleted.getCreatedAt().truncatedTo(java.time.temporal.ChronoUnit.MICROS));
         // updatedAt may be updated by the database on save, but createdAt must not
         assertNotNull(deleted.getUpdatedAt());
     }

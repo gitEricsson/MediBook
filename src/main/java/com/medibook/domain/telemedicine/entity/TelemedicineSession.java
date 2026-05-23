@@ -23,8 +23,8 @@ public class TelemedicineSession extends AuditableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "appointment_id", nullable = false, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "appointment_id", nullable = false)
     private Appointment appointment;
 
     @Column(name = "patient_id")

@@ -82,7 +82,7 @@ class TelemedicineSessionServiceTest {
     @Test
     void createSession_success() {
         when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
-        when(sessionRepository.findByAppointmentId(1L)).thenReturn(Optional.empty());
+        when(sessionRepository.existsByAppointmentId(1L)).thenReturn(false);
         when(videoRoomPort.createRoom(any())).thenReturn(
                 new VideoRoomPort.CreateRoomResult("stub-room-1", "https://meet.medibook.io/room/stub-room-1"));
         when(videoRoomPort.generatePatientToken(any(), any(), any())).thenReturn(
@@ -120,8 +120,7 @@ class TelemedicineSessionServiceTest {
     @Test
     void createSession_duplicateSession_throwsConflict() {
         when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
-        when(sessionRepository.findByAppointmentId(1L)).thenReturn(
-                Optional.of(TelemedicineSession.builder().id(99L).appointment(appointment).build()));
+        when(sessionRepository.existsByAppointmentId(1L)).thenReturn(true);
 
         assertThatThrownBy(() -> sessionService.createSession(1L, true, patientPrincipal))
                 .isInstanceOf(MediBookException.class)

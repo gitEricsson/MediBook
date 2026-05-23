@@ -69,7 +69,7 @@ public class TelemedicineSessionService {
             throw new MediBookException("Not authorized", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
 
-        if (sessionRepository.findByAppointmentId(appointmentId).isPresent()) {
+        if (sessionRepository.existsByAppointmentId(appointmentId)) {
             throw new MediBookException("Session already exists for this appointment",
                     HttpStatus.CONFLICT, "SESSION_EXISTS");
         }

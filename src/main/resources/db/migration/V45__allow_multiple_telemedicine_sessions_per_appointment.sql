@@ -1,0 +1,12 @@
+-- Allow a second telemedicine session to be started for the same appointment
+-- after the first call has ended (e.g. patient reconnects, reschedules within
+-- the same appointment slot, or the first attempt failed mid-call).
+--
+-- The UNIQUE constraint on appointment_id was originally written assuming
+-- one-session-ever per appointment.  In practice, a call may end and need to
+-- be restarted — the service layer already enforces "at most one ACTIVE session
+-- per appointment" via a status-scoped query, so the DB-level UNIQUE is
+-- unnecessary and actively harmful here.
+--
+-- MySQL names the auto-generated unique key after the column, so:
+ALTER TABLE telemedicine_sessions DROP INDEX appointment_id;

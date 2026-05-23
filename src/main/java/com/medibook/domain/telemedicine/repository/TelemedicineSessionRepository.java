@@ -14,7 +14,9 @@ import java.util.Optional;
 @Repository
 public interface TelemedicineSessionRepository extends JpaRepository<TelemedicineSession, Long> {
 
-    Optional<TelemedicineSession> findByAppointmentId(Long appointmentId);
+    /** Use existsByAppointmentId for presence checks — findBy returns Optional which
+     *  throws IncorrectResultSizeDataAccessException when multiple sessions exist. */
+    boolean existsByAppointmentId(Long appointmentId);
 
     Optional<TelemedicineSession> findFirstByAppointmentIdAndStatusIn(
             Long appointmentId,

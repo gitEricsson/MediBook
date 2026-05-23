@@ -378,7 +378,8 @@ class AuthServiceTest {
         EmailVerifyRequest req = new EmailVerifyRequest();
         req.setToken("valid-verify-token");
 
-        when(emailVerificationService.validateAndConsume("valid-verify-token")).thenReturn(1L);
+        testUser.setActive(false);
+        when(emailVerificationService.validate("valid-verify-token")).thenReturn(1L);
         when(userRepository.findById(1L)).thenReturn(Optional.of(testUser));
 
         authService.verifyEmail(req);
@@ -386,6 +387,7 @@ class AuthServiceTest {
         ArgumentCaptor<User> captor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(captor.capture());
         assertThat(captor.getValue().isActive()).isTrue();
+        verify(emailVerificationService).consume("valid-verify-token");
     }
 
     @Test
@@ -394,7 +396,7 @@ class AuthServiceTest {
         EmailVerifyRequest req = new EmailVerifyRequest();
         req.setToken("bad-verify-token");
 
-        when(emailVerificationService.validateAndConsume("bad-verify-token"))
+        when(emailVerificationService.validate("bad-verify-token"))
                 .thenThrow(new MediBookException("Invalid or expired email verification link",
                         HttpStatus.BAD_REQUEST, "VERIFY_TOKEN_INVALID"));
 

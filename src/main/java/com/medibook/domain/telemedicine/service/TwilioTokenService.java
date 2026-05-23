@@ -40,7 +40,9 @@ public class TwilioTokenService {
                     + "-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 8);
             String token = Jwts.builder()
                     .header()
+                    .add("typ", "JWT")
                     .add("cty", "twilio-fpa;v=1")
+                    .add("kid", properties.getApiKeySid())
                     .and()
                     .id(jti)
                     .issuer(properties.getApiKeySid())

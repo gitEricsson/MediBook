@@ -31,7 +31,7 @@ class EmailVerificationServiceTest {
 
     @BeforeEach
     void setUp() {
-        when(redisTemplate.opsForValue()).thenReturn(valueOps);
+        lenient().when(redisTemplate.opsForValue()).thenReturn(valueOps);
     }
 
 
@@ -66,22 +66,22 @@ class EmailVerificationServiceTest {
 
 
     @Test
-    @DisplayName("validateAndConsume — valid token returns userId and atomically deletes the key")
-    void validateAndConsume_validToken_returnsUserIdAndDeletes() {
-        when(valueOps.getAndDelete(argThat(k -> k.startsWith("email-verify:")))).thenReturn("7");
+    @DisplayName("validate — valid token returns userId without deleting")
+    void validate_validToken_returnsUserId() {
+        when(valueOps.get(argThat((String k) -> k.startsWith("email-verify:")))).thenReturn("7");
 
-        Long userId = emailVerificationService.validateAndConsume("any-valid-token");
+        Long userId = emailVerificationService.validate("any-valid-token");
 
         assertThat(userId).isEqualTo(7L);
-        verify(valueOps).getAndDelete(argThat(k -> k.startsWith("email-verify:")));
+        verify(redisTemplate, never()).delete((String) any());
     }
 
     @Test
-    @DisplayName("validateAndConsume — expired or invalid token throws BAD_REQUEST with VERIFY_TOKEN_INVALID")
-    void validateAndConsume_invalidToken_throws() {
-        when(valueOps.getAndDelete(argThat(k -> k.startsWith("email-verify:")))).thenReturn(null);
+    @DisplayName("validate — expired or invalid token throws BAD_REQUEST with VERIFY_TOKEN_INVALID")
+    void validate_invalidToken_throws() {
+        when(valueOps.get(argThat((String k) -> k.startsWith("email-verify:")))).thenReturn(null);
 
-        assertThatThrownBy(() -> emailVerificationService.validateAndConsume("bad-token"))
+        assertThatThrownBy(() -> emailVerificationService.validate("bad-token"))
                 .isInstanceOf(MediBookException.class)
                 .satisfies(ex -> {
                     MediBookException mbe = (MediBookException) ex;
@@ -91,18 +91,19 @@ class EmailVerificationServiceTest {
     }
 
     @Test
-    @DisplayName("validateAndConsume — token consumed once cannot be replayed (atomic delete)")
-    void validateAndConsume_sameTokenTwice_secondCallThrows() {
-        when(valueOps.getAndDelete(argThat(k -> k.startsWith("email-verify:"))))
-                .thenReturn("7")    // first call — link clicked
-                .thenReturn(null);  // second call — link already used
+    @DisplayName("validate — token can be read multiple times before consume")
+    void validate_sameTokenTwice_bothSucceed() {
+        when(valueOps.get(argThat((String k) -> k.startsWith("email-verify:")))).thenReturn("7");
 
-        Long userId = emailVerificationService.validateAndConsume("one-time-token");
-        assertThat(userId).isEqualTo(7L);
+        assertThat(emailVerificationService.validate("reusable-token")).isEqualTo(7L);
+        assertThat(emailVerificationService.validate("reusable-token")).isEqualTo(7L);
+    }
 
-        assertThatThrownBy(() -> emailVerificationService.validateAndConsume("one-time-token"))
-                .isInstanceOf(MediBookException.class)
-                .satisfies(ex -> assertThat(((MediBookException) ex).getStatus())
-                        .isEqualTo(HttpStatus.BAD_REQUEST));
+    @Test
+    @DisplayName("consume — deletes the token from Redis")
+    void consume_deletesToken() {
+        emailVerificationService.consume("spent-token");
+
+        verify(redisTemplate).delete("email-verify:spent-token");
     }
 }

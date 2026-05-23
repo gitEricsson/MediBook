@@ -226,11 +226,16 @@ public class AuthService {
 
     @Transactional
     public void verifyEmail(EmailVerifyRequest request) {
-        Long userId = emailVerificationService.validateAndConsume(request.getToken());
+        Long userId = emailVerificationService.validate(request.getToken());
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", userId));
+        if (user.isActive()) {
+            emailVerificationService.consume(request.getToken());
+            return;
+        }
         user.setActive(true);
         userRepository.save(user);
+        emailVerificationService.consume(request.getToken());
         log.info("Email verified for userId={}", userId);
     }
 

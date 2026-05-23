@@ -33,14 +33,18 @@ public class EmailVerificationService {
         return token;
     }
 
-    public Long validateAndConsume(String token) {
-        Object value = redisTemplate.opsForValue().getAndDelete(PREFIX + token);
+    public Long validate(String token) {
+        Object value = redisTemplate.opsForValue().get(PREFIX + token);
         if (value == null) {
             throw new MediBookException(
                     "Invalid or expired email verification link",
                     HttpStatus.BAD_REQUEST, "VERIFY_TOKEN_INVALID");
         }
         return Long.parseLong(value.toString());
+    }
+
+    public void consume(String token) {
+        redisTemplate.delete(PREFIX + token);
     }
 
     @Async

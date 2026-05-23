@@ -170,8 +170,6 @@ public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
         // Verify deleted
         Optional<Appointment> afterDelete = appointmentRepository.findById(appointment.getId());
         assertFalse(afterDelete.isPresent());
-
-        // Restore — load via include-deleted since @Where filters the entity
         Appointment deleted = appointmentRepository.findByIdIncludeDeleted(appointment.getId()).orElseThrow();
         deleted.restore();
         appointmentRepository.save(deleted);
@@ -328,8 +326,6 @@ public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
         appointmentRepository.save(appointment);
         appointmentRepository.save(apt2);
         flushAndClear();
-
-        // Verify deletion stats — 2 more than before
         assertEquals(initialDeleted + 2, appointmentRepository.countDeleted());
 
         // setUp's appointment was in initialTotal and is now deleted; apt2 was created and deleted
@@ -366,8 +362,13 @@ public class SoftDeleteIntegrationTest extends IntegrationTestSupport {
         assertTrue(found.isPresent());
 
         Appointment deleted = found.get();
-        // createdAt should not change
-        assertEquals(createdAtBefore, deleted.getCreatedAt());
+        // createdAt should not change. Compare at milliseconds — MySQL datetime(6)
+        // half-up-rounds Java nanos to micros, so even ChronoUnit.MICROS truncation
+        // can disagree by 1 micro after roundtrip. Millis precision is more than
+        // enough for an "audit column did not change" assertion.
+        assertEquals(
+                createdAtBefore.truncatedTo(java.time.temporal.ChronoUnit.MILLIS),
+                deleted.getCreatedAt().truncatedTo(java.time.temporal.ChronoUnit.MILLIS));
         // updatedAt may be updated by the database on save, but createdAt must not
         assertNotNull(deleted.getUpdatedAt());
     }

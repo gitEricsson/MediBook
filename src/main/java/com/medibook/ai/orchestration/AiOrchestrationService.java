@@ -47,8 +47,6 @@ public class AiOrchestrationService {
     private static final int DEFAULT_MAX_TOKENS = 512;
     private static final int SUMMARY_MAX_TOKENS = 1024;
 
-    // ── Public entry points ──────────────────────────────────────────────────
-
     /**
      * Process an inbound patient message:
      *  1. Classify safety
@@ -81,8 +79,6 @@ public class AiOrchestrationService {
                     System.currentTimeMillis() - start);
             return AiOrchestrationResult.blocked();
         }
-
-        // 3. Handle URGENT — return escalation message, do NOT call AI
         if (safety.getLabel() == SafetyLabel.URGENT) {
             String escalationMsg = promptTemplates.urgencyEscalationMessage(safety.getMatchedPatterns());
             auditService.record(actorId, "PATIENT", "URGENCY_CHECK", conversation.getId(),
@@ -90,8 +86,6 @@ public class AiOrchestrationService {
                     System.currentTimeMillis() - start);
             return AiOrchestrationResult.urgent(escalationMsg, safety.getMatchedPatterns());
         }
-
-        // 4. Handle CLINICAL_QUERY — no AI response; flag for doctor
         if (safety.getLabel() == SafetyLabel.CLINICAL_QUERY) {
             auditService.record(actorId, "PATIENT", "ASSISTANT", conversation.getId(),
                     conversation.getAppointmentId(), safety, null, false,
@@ -99,8 +93,6 @@ public class AiOrchestrationService {
             return AiOrchestrationResult.clinicalDeferred(
                     "This question has been flagged for your doctor to answer. They will respond shortly.");
         }
-
-        // 5. SAFE — generate response
         String operation = conversation.isIntakeCompleted() ? "ASSISTANT" : "INTAKE";
         String systemPrompt = conversation.isIntakeCompleted()
                 ? promptTemplates.assistantSystemPrompt("your doctor", "appointment")

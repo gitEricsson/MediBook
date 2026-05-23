@@ -79,8 +79,6 @@ class TwilioWebhookTest {
     void processingErrorStillReturns200() throws Exception {
         when(webhookValidator.isValid(any(), any())).thenReturn(true);
         doThrow(new RuntimeException("unexpected error")).when(chatService).handleTwilioWebhook(any());
-
-        // Should NOT throw — Twilio needs 200 to prevent retry storms
         mockMvc.perform(post("/api/v1/chat/twilio/webhook")
                         .contentType("application/x-www-form-urlencoded")
                         .param("EventType", "onMessageAdded")

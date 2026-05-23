@@ -78,8 +78,6 @@ public class AuthService {
                 .occurredAt(LocalDateTime.now())
                 .build();
         eventProducer.publishAuditEvent(auditEvent);
-
-        // Fire-and-forget verification email — non-blocking. Failure must not break registration.
         try {
             String verifyToken = emailVerificationService.createToken(saved.getId());
             emailVerificationService.sendVerificationEmail(saved.getEmail(), verifyToken);

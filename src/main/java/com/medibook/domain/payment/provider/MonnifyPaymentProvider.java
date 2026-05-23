@@ -64,8 +64,6 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
         return PaymentProvider.MONNIFY;
     }
 
-    // ─── Initialize ─────────────────────────────────────────────────────────
-
     @Override
     @CircuitBreaker(name = "monnifyProvider", fallbackMethod = "initiatePaymentFallback")
     public InitiateResult initiatePayment(InitiateRequest request) {
@@ -123,8 +121,6 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
         }
     }
 
-    // ─── Verify ─────────────────────────────────────────────────────────────
-
     /**
      * Verifies a transaction using Monnify's transaction-reference endpoint.
      * providerRef here is the Monnify transactionReference stored at init time.
@@ -165,8 +161,6 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
             throw new RuntimeException("Monnify verification failed", ex);
         }
     }
-
-    // ─── Refund ─────────────────────────────────────────────────────────────
 
     /**
      * Monnify refunds require a pre-configured disbursement account and separate
@@ -217,8 +211,6 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
         }
     }
 
-    // ─── Webhook signature ───────────────────────────────────────────────────
-
     /**
      * Monnify webhook signature: SHA-512 of (secretKey + rawBody), hex-encoded.
      * The computed hash must equal the "monnify-signature" header (case-insensitive).
@@ -248,8 +240,6 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
         }
     }
 
-    // ─── Circuit-breaker fallbacks ───────────────────────────────────────────
-
     InitiateResult initiatePaymentFallback(InitiateRequest request, Exception ex) {
         log.warn("Monnify circuit open — fallback for idempotencyKey={}", request.idempotencyKey());
         return new InitiateResult("MN-CB-" + request.idempotencyKey(), null, "PENDING");
@@ -264,8 +254,6 @@ public class MonnifyPaymentProvider implements PaymentProviderPort {
         log.warn("Monnify circuit open — refund fallback for ref={}", providerRef);
         throw new RuntimeException("Payment provider temporarily unavailable. Refund will be retried.", ex);
     }
-
-    // ─── Helpers ─────────────────────────────────────────────────────────────
 
     private RestClient buildClient() {
         return RestClient.builder()

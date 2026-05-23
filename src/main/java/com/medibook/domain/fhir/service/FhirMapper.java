@@ -31,8 +31,6 @@ public class FhirMapper {
     private static final String SYSTEM_APPT    = "https://medibook.io/fhir/Appointment";
     private static final String SYSTEM_OBS     = "https://medibook.io/fhir/Observation";
 
-    // ── Patient ─────────────────────────────────────────────────────────────
-
     public Map<String, Object> toFhirPatient(User user, PatientProfile profile) {
         Map<String, Object> resource = new LinkedHashMap<>();
         resource.put("resourceType", "Patient");
@@ -70,8 +68,6 @@ public class FhirMapper {
 
         return wrap(resource);
     }
-
-    // ── Practitioner ────────────────────────────────────────────────────────
 
     public Map<String, Object> toFhirPractitioner(Doctor doctor) {
         User user = doctor.getUser();
@@ -114,8 +110,6 @@ public class FhirMapper {
 
         return wrap(resource);
     }
-
-    // ── Appointment ─────────────────────────────────────────────────────────
 
     public Map<String, Object> toFhirAppointment(Appointment appt) {
         Map<String, Object> resource = new LinkedHashMap<>();
@@ -168,8 +162,6 @@ public class FhirMapper {
         return wrap(resource);
     }
 
-    // ── ConsultationNote → FHIR Observation ─────────────────────────────────
-
     public Map<String, Object> toFhirObservation(ConsultationNote note) {
         Map<String, Object> resource = new LinkedHashMap<>();
         resource.put("resourceType", "Observation");
@@ -203,8 +195,6 @@ public class FhirMapper {
 
         return wrap(resource);
     }
-
-    // ── Helpers ─────────────────────────────────────────────────────────────
 
     private Map<String, Object> wrap(Map<String, Object> resource) {
         resource.put("fhirVersion", FHIR_VERSION);

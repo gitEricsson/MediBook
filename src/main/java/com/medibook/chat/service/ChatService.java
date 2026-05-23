@@ -59,14 +59,11 @@ public class ChatService {
     private final SimpMessagingTemplate      messagingTemplate;
     private final ObjectMapper               objectMapper;
 
-    // ── Conversation Lifecycle ────────────────────────────────────────────────
-
     @Transactional
     public ConversationResponse createConversation(Long appointmentId, Long requesterId) {
         Appointment appt = appointmentRepo.findByIdWithDetails(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", appointmentId));
 
-        // Verify the requester is the patient or doctor for this appointment
         boolean isPatient = appt.getPatient().getId().equals(requesterId);
         boolean isDoctor  = appt.getDoctor().getUser().getId().equals(requesterId);
         if (!isPatient && !isDoctor) {
@@ -90,7 +87,6 @@ public class ChatService {
                     HttpStatus.BAD_REQUEST, "CHAT_NOT_ALLOWED");
         }
 
-        // Idempotent — return existing if already created
         return conversationRepo.findByAppointmentId(appointmentId)
                 .map(this::toConversationResponse)
                 .orElseGet(() -> {
@@ -123,8 +119,6 @@ public class ChatService {
                 .toList();
     }
 
-    // ── Twilio Webhook Handler ────────────────────────────────────────────────
-
     /**
      * Handle an 'onMessageAdded' event from Twilio Conversations.
      * Routes the message through safety classification and AI orchestration.
@@ -142,7 +136,6 @@ public class ChatService {
         String body            = params.get("Body");
         String messageSid      = params.get("MessageSid");
 
-        // Ignore AI's own messages to avoid infinite loops
         if (TwilioConversationsService.AI_IDENTITY.equals(author)) {
             log.debug("Ignoring AI's own message from {}", author);
             return;
@@ -199,7 +192,6 @@ public class ChatService {
                 : ChatMessage.SenderRole.DOCTOR;
         Long senderId = senderIsPatient ? conv.getPatientId() : conv.getDoctorId();
 
-        // Persist the inbound message
         ChatMessage msg = ChatMessage.builder()
                 .conversationId(conv.getId())
                 .twilioMessageSid(messageSid != null ? messageSid : "webhook_" + System.currentTimeMillis())
@@ -213,12 +205,10 @@ public class ChatService {
         afterCommit(() -> eventProducer.publishChatEvent(
                 buildEvent("CHAT_MESSAGE_RECEIVED", conv, null, null)));
 
-        // Only run AI if AI is enabled and patient consented
         if (!conv.isAiEnabled() || !hasActiveConsent(conv.getPatientId(), conv.getId())) {
             return;
         }
 
-        // Delegate to AI orchestration (patient messages only for now)
         if (senderRole == ChatMessage.SenderRole.PATIENT) {
             AiOrchestrationResult result = aiOrchestration.processPatientMessage(conv, body, senderId);
             handleOrchestrationResult(conv, msg, result);
@@ -232,7 +222,6 @@ public class ChatService {
         if (result.isUrgent()) {
             handleUrgency(conv, inbound, result);
         } else {
-            // Post AI message to Twilio
             String aiSid = twilioService.postAiMessage(conv.getTwilioConversationSid(), result.getMessage());
             persistAiMessage(conv.getId(), aiSid, result.getMessage());
             afterCommit(() -> eventProducer.publishChatEvent(
@@ -241,11 +230,9 @@ public class ChatService {
     }
 
     private void handleUrgency(ChatConversation conv, ChatMessage inbound, AiOrchestrationResult result) {
-        // Post escalation message to patient
         String aiSid = twilioService.postAiMessage(conv.getTwilioConversationSid(), result.getMessage());
         persistAiMessage(conv.getId(), aiSid, result.getMessage());
 
-        // Persist urgency alert
         try {
             String keywordsJson = objectMapper.writeValueAsString(result.getUrgencyFlags());
             UrgencyAlert alert = UrgencyAlert.builder()
@@ -262,7 +249,6 @@ public class ChatService {
             log.error("Failed to persist urgency alert: {}", ex.getMessage());
         }
 
-        // Notify doctor via existing notification pipeline + Kafka
         afterCommit(() -> {
             notificationService.sendUrgencyAlert(conv.getDoctorId(), conv.getId(),
                     String.join(", ", result.getUrgencyFlags()));
@@ -277,8 +263,6 @@ public class ChatService {
                     .build());
         });
     }
-
-    // ── AI Operations ─────────────────────────────────────────────────────────
 
     @Transactional
     public AiSummaryResponse generateSummary(Long conversationId, Long doctorId) {
@@ -299,7 +283,6 @@ public class ChatService {
         ChatConversation conv = loadAndAuthorize(conversationId, doctorId);
         requireDoctorOwnership(conv, doctorId);
 
-        // Fetch doctor info for prompt context
         AiDraftResponse draft = aiOrchestration.generateDraft(
                 conv, patientMessage, "Doctor", "General Medicine", doctorId);
 
@@ -336,7 +319,6 @@ public class ChatService {
         draft.setApprovedAt(LocalDateTime.now());
         AiDraftResponse saved = draftRepo.save(draft);
 
-        // Post the approved message to Twilio as the doctor
         String docIdentity = "doctor_" + doctorId;
         twilioService.postDoctorMessage(conv.getTwilioConversationSid(),
                 saved.getEffectiveBody(), docIdentity);
@@ -439,7 +421,6 @@ public class ChatService {
 
         MessageResponse payload = toMessageResponse(saved);
 
-        // Push to both participants via WebSocket STOMP
         afterCommit(() -> {
             messagingTemplate.convertAndSendToUser(String.valueOf(conv.getPatientId()), "/queue/chat", payload);
             messagingTemplate.convertAndSendToUser(String.valueOf(conv.getDoctorId()), "/queue/chat", payload);
@@ -448,8 +429,6 @@ public class ChatService {
         log.debug("Direct message sent in conversation {} by user {} ({})", conversationId, principal.getId(), role);
         return payload;
     }
-
-    // ── Consent ───────────────────────────────────────────────────────────────
 
     @Transactional
     public void grantConsent(Long conversationId, Long patientId, boolean granted,
@@ -461,7 +440,6 @@ public class ChatService {
             throw new MediBookException("Access denied", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
 
-        // Upsert consent record
         AiConsentRecord consent = consentRepo.findByPatientIdAndConversationId(patientId, conversationId)
                 .orElse(AiConsentRecord.builder()
                         .patientId(patientId)
@@ -482,7 +460,6 @@ public class ChatService {
 
         consentRepo.save(consent);
 
-        // Enable/disable AI on the conversation
         conv.setAiEnabled(granted);
         conversationRepo.save(conv);
 
@@ -493,8 +470,6 @@ public class ChatService {
         log.info("AI consent {} for patient {} in conversation {}", granted ? "GRANTED" : "REVOKED",
                 patientId, conversationId);
     }
-
-    // ── Urgency Acknowledgement ───────────────────────────────────────────────
 
     @Transactional
     public void acknowledgeUrgency(Long conversationId, Long alertId, Long doctorId) {
@@ -510,8 +485,6 @@ public class ChatService {
     public List<UrgencyAlert> getUnacknowledgedAlerts(Long doctorId) {
         return urgencyRepo.findByDoctorIdAndAcknowledgedAtIsNullOrderByCreatedAtDesc(doctorId);
     }
-
-    // ── Helpers ───────────────────────────────────────────────────────────────
 
     private ChatConversation loadAndAuthorize(Long conversationId, Long userId) {
         ChatConversation conv = conversationRepo.findById(conversationId)

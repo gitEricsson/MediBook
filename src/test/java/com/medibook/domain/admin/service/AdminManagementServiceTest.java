@@ -58,8 +58,6 @@ class AdminManagementServiceTest {
                 .build();
     }
 
-    // ─── createAdmin ────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("createAdmin — success: persists admin with ROLE_ADMIN, active, and encoded password")
     void createAdmin_success() {
@@ -103,8 +101,6 @@ class AdminManagementServiceTest {
         verify(userRepository, never()).save(any());
     }
 
-    // ─── getAdmin ────────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("getAdmin — returns admin if found with ROLE_ADMIN")
     void getAdmin_found() {
@@ -135,8 +131,6 @@ class AdminManagementServiceTest {
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
-    // ─── listAdmins ──────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("listAdmins — without query delegates to findByRole")
     void listAdmins_noQuery_usesFindByRole() {
@@ -165,8 +159,6 @@ class AdminManagementServiceTest {
         verify(userRepository, never()).findByRole(any(), any());
     }
 
-    // ─── updateAdmin ─────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("updateAdmin — persists updated name and phone")
     void updateAdmin_success() {
@@ -183,8 +175,6 @@ class AdminManagementServiceTest {
         assertThat(response.getFirstName()).isEqualTo("Updated");
         assertThat(response.getLastName()).isEqualTo("Name");
     }
-
-    // ─── activate / deactivate ───────────────────────────────────────────────
 
     @Test
     @DisplayName("activateAdmin — sets enabled=true and active=true")
@@ -223,8 +213,6 @@ class AdminManagementServiceTest {
                 .satisfies(ex -> assertThat(((MediBookException) ex).getStatus()).isEqualTo(HttpStatus.FORBIDDEN));
     }
 
-    // ─── deleteAdmin ─────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("deleteAdmin — soft deletes by disabling the account")
     void deleteAdmin_softDelete() {
@@ -236,8 +224,6 @@ class AdminManagementServiceTest {
         assertThat(adminUser.isEnabled()).isFalse();
         verify(refreshTokenService).revokeAllForUser(10L);
     }
-
-    // ─── resetAdminPassword ──────────────────────────────────────────────────
 
     @Test
     @DisplayName("resetAdminPassword — encodes new password and revokes all sessions")

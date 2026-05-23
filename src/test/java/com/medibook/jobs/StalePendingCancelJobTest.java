@@ -45,7 +45,6 @@ class StalePendingCancelJobTest {
 
     @BeforeEach
     void wire() {
-        // TTL = 30 min, reminder = 5 min before — defaults from @Value bindings.
         ReflectionTestUtils.setField(job, "pendingTtlMinutes", 30);
         ReflectionTestUtils.setField(job, "reminderBeforeMinutes", 5);
         lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(counter);
@@ -89,8 +88,6 @@ class StalePendingCancelJobTest {
     void runSwallowsExceptions() {
         when(appointmentRepository.findStalePending(any(LocalDateTime.class)))
                 .thenThrow(new RuntimeException("db down"));
-
-        // Should not throw — the scheduled framework would otherwise stop calling us.
         job.run();
 
         verify(counter).increment();

@@ -50,7 +50,6 @@ class VisitCopilotServiceTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        // Inject a real ObjectMapper into the service via reflection — @InjectMocks
         // would otherwise leave it null since it's a final field on a mocked dep tree.
         org.springframework.test.util.ReflectionTestUtils.setField(service, "objectMapper", realMapper);
 

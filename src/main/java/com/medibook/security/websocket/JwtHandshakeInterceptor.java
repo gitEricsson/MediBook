@@ -52,14 +52,12 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
         attributes.put("userId", userId);
         log.debug("WebSocket handshake accepted; userId={}", userId);
 
-        // Audit log for successful WebSocket connection
         try {
             String remoteAddr = request.getRemoteAddress() != null
                     ? request.getRemoteAddress().toString()
                     : "unknown";
             log.info("audit=WEBSOCKET_CONNECTED userId={} remoteAddr={}", userId, remoteAddr);
 
-            // Persist audit event asynchronously
             auditLogService.persist(
                     AuditEvent.builder()
                             .eventId(UUID.randomUUID().toString())
@@ -71,7 +69,6 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
             );
         } catch (Exception ex) {
             log.error("Failed to audit WebSocket connection for userId: {}", userId, ex);
-            // Don't fail the handshake due to audit logging errors
         }
 
         return true;
@@ -80,16 +77,13 @@ public class JwtHandshakeInterceptor implements HandshakeInterceptor {
     @Override
     public void afterHandshake(ServerHttpRequest request, ServerHttpResponse response,
                                WebSocketHandler wsHandler, Exception ex) {
-        // no-op
     }
 
     private String extractToken(ServerHttpRequest request) {
-        // 1. Authorization header
         String authHeader = request.getHeaders().getFirst("Authorization");
         if (StringUtils.hasText(authHeader) && authHeader.startsWith("Bearer ")) {
             return authHeader.substring(7);
         }
-        // 2. Query param (?token=...) — browser WebSocket/STOMP clients
         String query = request.getURI().getQuery();
         if (StringUtils.hasText(query)) {
             for (String param : query.split("&")) {

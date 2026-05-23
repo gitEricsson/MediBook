@@ -32,8 +32,6 @@ public class ChatController {
     private final ChatService    chatService;
     private final AiAuditService auditService;
 
-    // ── Conversation ─────────────────────────────────────────────────────────
-
     @PostMapping("/conversations")
     @Operation(summary = "Create a new AI-assisted conversation for an appointment")
     public ResponseEntity<ApiResponse<ConversationResponse>> create(
@@ -58,8 +56,6 @@ public class ChatController {
             @CurrentUser UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(chatService.getConversation(id, principal.getId())));
     }
-
-    // ── AI Operations (Doctor only) ───────────────────────────────────────────
 
     @PostMapping("/{conversationId}/ai/summary")
     @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
@@ -105,8 +101,6 @@ public class ChatController {
         return ResponseEntity.ok(ApiResponse.ok(chatService.rejectDraft(conversationId, draftId, principal.getId())));
     }
 
-    // ── AI Operations (Patient) ───────────────────────────────────────────────
-
     @PostMapping("/{conversationId}/ai/intake")
     @PreAuthorize("hasRole('PATIENT')")
     @Operation(summary = "Start or continue the AI-guided intake questionnaire (Patient only)")
@@ -130,8 +124,6 @@ public class ChatController {
         return ResponseEntity.ok(ApiResponse.noContent(req.granted() ? "Consent granted" : "Consent revoked"));
     }
 
-    // ── Direct Messaging ────────────────────────────────────────────────────────
-
     @PostMapping("/conversations/{id}/messages")
     @Operation(summary = "Send a direct message in a conversation (patient or doctor)")
     public ResponseEntity<ApiResponse<MessageResponse>> sendMessage(
@@ -141,8 +133,6 @@ public class ChatController {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(chatService.sendDirectMessage(id, req.body(), principal)));
     }
-
-    // ── Urgency ───────────────────────────────────────────────────────────────
 
     @PostMapping("/{conversationId}/urgency/{alertId}/acknowledge")
     @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
@@ -155,15 +145,12 @@ public class ChatController {
         return ResponseEntity.ok(ApiResponse.noContent("Urgency alert acknowledged"));
     }
 
-    // ── Audit ─────────────────────────────────────────────────────────────────
-
     @GetMapping("/{conversationId}/ai/audit")
     @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
     @Operation(summary = "Get AI audit trail for a conversation (Doctor/Admin only)")
     public ResponseEntity<ApiResponse<List<AiMessageAudit>>> getAudit(
             @PathVariable Long conversationId,
             @CurrentUser UserPrincipal principal) {
-        // Authorization enforced by audit service (conversationId visible to doctor/admin only)
         return ResponseEntity.ok(ApiResponse.ok(auditService.getConversationAudit(conversationId)));
     }
 }

@@ -13,15 +13,15 @@ import java.util.List;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class ErrorResponse {
 
-    private boolean success;           // Always false for error responses
-    private String message;            // Human-readable error message
+    private boolean success;
+    private String message;
     @JsonProperty("errorCode")
-    private String code;               // Machine-readable error code
-    private Instant timestamp;         // ISO 8601 timestamp (UTC)
-    private String correlationId;      // UUID for request correlation
-    private String path;               // Request path
+    private String code;
+    private Instant timestamp;
+    private String correlationId;
+    private String path;
     @JsonProperty("errors")
-    private List<FieldError> fieldErrors; // Validation errors
+    private List<FieldError> fieldErrors;
 
     @Data
     @Builder

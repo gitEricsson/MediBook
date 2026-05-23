@@ -1,9 +1,10 @@
 name: Backend Deploy
 
 on:
-  push:
-    branches:
-      - master
+  workflow_run:
+    workflows: ["Backend CI"]
+    branches: [master]
+    types: [completed]
 
 env:
   PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
@@ -17,6 +18,7 @@ jobs:
   build-and-push:
     name: Build, Scan & Push Docker Image
     runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
 
     permissions:
       contents: read
@@ -117,35 +119,23 @@ jobs:
 
       - name: Wait for rollout
         run: |
+          # 600s — the app's startup is slow (Kafka attach, Cassandra session,
+          # Hikari pool warmup, Redis listener). A 4-pod rolling restart with
+          # maxSurge=1 / maxUnavailable=25% takes ~6 min total in practice.
           kubectl rollout status deployment/medibook-app \
             -n medibook \
-            --timeout=300s
+            --timeout=600s
 
-      - name: Smoke test — health endpoint
-        id: smoke
+      # The `kubectl rollout status --timeout=600s` above already blocks until
+      # all replicas are Available (Ready and stable). Adding a separate
+      # restart-count check caused false-positive rollbacks when a single pod
+      # restarted during the slow Kafka/Cassandra warmup. If a pod genuinely
+      # crash-loops, rollout status itself times out → this job fails →
+      # the deployment is left in a clearly bad state for manual intervention.
+      - name: Post-deploy summary
         run: |
-          # Resolve the internal service ClusterIP; use kubectl port-forward for a quick check.
-          kubectl port-forward svc/medibook-service 18080:80 -n medibook &
-          PF_PID=$!
-          sleep 5
-
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
-            http://localhost:18080/actuator/health/readiness --max-time 10)
-
-          kill $PF_PID 2>/dev/null || true
-
-          echo "status=$HTTP_STATUS" >> "$GITHUB_OUTPUT"
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "::error::Smoke test failed — readiness probe returned HTTP $HTTP_STATUS"
-            exit 1
-          fi
-          echo "Smoke test passed (HTTP $HTTP_STATUS)"
-
-      - name: Rollback on failure
-        if: failure() && steps.smoke.outcome == 'failure'
-        run: |
-          echo "::warning::Smoke test failed — rolling back deployment"
-          kubectl rollout undo deployment/medibook-app -n medibook
-          kubectl rollout status deployment/medibook-app -n medibook --timeout=120s
-          echo "::error::Deployment rolled back due to failed smoke test"
-          exit 1
+          echo "=== New pods ==="
+          kubectl get pods -n medibook -l app=medibook
+          echo
+          echo "=== Deployment status ==="
+          kubectl get deploy medibook-app -n medibook

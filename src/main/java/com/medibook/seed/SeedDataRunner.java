@@ -68,7 +68,6 @@ public class SeedDataRunner implements ApplicationRunner {
     private static final String  DEMO_PASSWORD = "Password123!";
     private static final LocalDate TODAY        = LocalDate.now();
 
-    // ── Repositories ────────────────────────────────────────────────────────
     private final SeedDataProperties          seedProps;
     private final UserRepository              userRepo;
     private final DepartmentRepository        deptRepo;
@@ -259,8 +258,6 @@ public class SeedDataRunner implements ApplicationRunner {
         new ApptSpec(4, 3,   9,  8, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Pre-employment medical examination"),
         new ApptSpec(4, 4,  13, 14, AppointmentStatus.PENDING,    AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "General wellness and lifestyle consultation")
     );
-
-    // Consultation notes for COMPLETED appointments (same order as APPT_SPECS — first 3 per doctor)
     private record NoteSpec(String diagnosis, String treatmentPlan, String prescriptions, int followUpDays) {}
 
     private static final List<NoteSpec> NOTE_SPECS = List.of(
@@ -361,10 +358,6 @@ public class SeedDataRunner implements ApplicationRunner {
         )
     );
 
-    // ══════════════════════════════════════════════════════════════════════════
-    // Entry point
-    // ══════════════════════════════════════════════════════════════════════════
-
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
@@ -401,10 +394,6 @@ public class SeedDataRunner implements ApplicationRunner {
         log.info("[Seed]   Patient     : patient.james@medibook.local");
         log.info("[Seed] ══════════════════════════════════════════════════");
     }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Seed methods
-    // ══════════════════════════════════════════════════════════════════════════
 
     private Map<String, Department> seedDepartments() {
         Map<String, Department> result = new HashMap<>();
@@ -549,14 +538,9 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private void seedWorkingHours(List<Doctor> doctors) {
-        // Unified shift: every doctor is on duty 08:00–22:00, Mon–Sat. With the 60-min
-        // default slot duration this gives the patient a clean hourly grid from 8 AM
-        // through 9 PM (the last slot starts at 21:00 and ends at 22:00). Patients who
-        // want a shorter consultation (e.g. 30 min) use the manual start/end picker.
-        // Always wipe + reseed in dev so any old fixed-09:00–17:00 rows are replaced.
         LocalTime shiftStart = LocalTime.of(8, 0);
         LocalTime shiftEnd   = LocalTime.of(22, 0);
-        int[] daysOfWeek     = { 1, 2, 3, 4, 5, 6 };   // Mon … Sat (Sun closed)
+        int[] daysOfWeek     = { 1, 2, 3, 4, 5, 6 };
 
         int created = 0;
         for (Doctor d : doctors) {
@@ -593,7 +577,6 @@ public class SeedDataRunner implements ApplicationRunner {
                 .isActive(true)
                 .build());
         }
-        // Doctor-specific templates
         if (!doctors.isEmpty()) {
             Doctor cardiologist = doctors.get(0);
             if (templateRepo.findAvailableForDoctor(cardiologist.getId()).stream()
@@ -626,7 +609,6 @@ public class SeedDataRunner implements ApplicationRunner {
     private List<Appointment> seedAppointments(List<User> patients, List<Doctor> doctors,
                                                 Map<String, Department> depts) {
         List<Appointment> saved = new ArrayList<>();
-        // Track (doctorIdx → localSeqNum) for generating stable confirmation codes
         Map<Integer, Integer> seq = new HashMap<>();
 
         for (ApptSpec s : APPT_SPECS) {
@@ -686,7 +668,6 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private void seedConsultationNotes(List<Appointment> appointments, List<Doctor> doctors) {
-        // NOTE_SPECS[dIdx * 3 + localPos] aligns with the first 3 COMPLETED appointments per doctor
         int doctorBlockSize = 11;
         int created = 0;
 
@@ -751,7 +732,6 @@ public class SeedDataRunner implements ApplicationRunner {
             reviewRepo.save(review);
             created++;
 
-            // Sync doctor's average rating
             Doctor doc = appt.getDoctor();
             long approvedCount = reviewRepo.countApprovedByDoctorId(doc.getId());
             double avg = reviewRepo.findAverageRatingByDoctorId(doc.getId()).orElse(0.0);
@@ -764,7 +744,6 @@ public class SeedDataRunner implements ApplicationRunner {
 
     private void seedPayments(List<Appointment> appointments) {
         int created = 0;
-        // One SUCCESSFUL payment per COMPLETED appointment
         List<Appointment> completed = appointments.stream()
             .filter(a -> a.getStatus() == AppointmentStatus.COMPLETED)
             .toList();
@@ -788,7 +767,6 @@ public class SeedDataRunner implements ApplicationRunner {
             Payment saved = paymentRepo.save(payment);
             created++;
 
-            // Invoice
             String invoiceNumber = "INV-SEED-" + appt.getConfirmationCode();
             if (invoiceRepo.findByInvoiceNumber(invoiceNumber).isEmpty()) {
                 InvoiceLineItem lineItem = InvoiceLineItem.builder()
@@ -964,10 +942,6 @@ public class SeedDataRunner implements ApplicationRunner {
         }
         log.info("[Seed] Notifications dispatched ({} appointments processed)", sent);
     }
-
-    // ══════════════════════════════════════════════════════════════════════════
-    // Helper methods
-    // ══════════════════════════════════════════════════════════════════════════
 
     private User findOrCreateUser(String email, String firstName, String lastName,
                                    String phone, LocalDate dob, Role role) {

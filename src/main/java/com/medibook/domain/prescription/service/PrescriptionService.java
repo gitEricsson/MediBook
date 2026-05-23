@@ -122,8 +122,6 @@ public class PrescriptionService {
         return Response.from(rx);
     }
 
-    // ── helpers ──────────────────────────────────────────────────────────
-
     private Prescription loadOrThrow(Long id) {
         return repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Prescription", "id", id));

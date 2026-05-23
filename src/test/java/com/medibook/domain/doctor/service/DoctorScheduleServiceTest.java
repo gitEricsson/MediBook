@@ -43,7 +43,7 @@ class DoctorScheduleServiceTest {
     @InjectMocks DoctorScheduleService scheduleService;
 
     private static final LocalDate   DATE       = LocalDate.of(2026, 6, 21);
-    private static final int         DOW        = 7; // Sunday
+    private static final int         DOW        = 7;
     private static final Long        DOCTOR_ID  = 10L;
 
     private Appointment pendingAppt;
@@ -154,7 +154,7 @@ class DoctorScheduleServiceTest {
 
         ScheduleDayResponse response = scheduleService.getDailySchedule(DOCTOR_ID, DATE);
 
-        assertThat(response.getFreeSlots()).hasSize(16);  // all 16 still free
+        assertThat(response.getFreeSlots()).hasSize(16);
     }
 
     @Test
@@ -256,7 +256,7 @@ class DoctorScheduleServiceTest {
         when(workingHoursRepository.findByDoctorIdAndDayOfWeek(DOCTOR_ID, DOW)).thenReturn(List.of(hours));
         when(appointmentRepository.findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
                 eq(DOCTOR_ID), any(), any()))
-                .thenReturn(List.of(pendingAppt, confirmedAppt));  // 2 taken at 9:00 and 10:00
+                .thenReturn(List.of(pendingAppt, confirmedAppt));
 
         ScheduleSummaryResponse response = scheduleService.getScheduleSummary(DOCTOR_ID, DATE);
 

@@ -121,19 +121,16 @@ class AppointmentSchedulingPolicyTest {
                     .doesNotThrowAnyException();
         }
         @Test void rejectsBeforeShiftStart() {
-            // 30-min default slot @ 08:45 ends 09:15 — start is before 09:00.
             assertThatThrownBy(() -> policy.checkBookable(DOCTOR_ID, MONDAY.atTime(8, 45)))
                     .isInstanceOf(MediBookException.class)
                     .hasMessageContaining("working hours");
         }
         @Test void rejectsLunchBreakStraddle_13_30start() {
-            // 13:30 + 30min = 14:00 — but starts in the closed 13:00–14:00 break.
             assertThatThrownBy(() -> policy.checkBookable(DOCTOR_ID, MONDAY.atTime(13, 30)))
                     .isInstanceOf(MediBookException.class)
                     .hasMessageContaining("working hours");
         }
         @Test void rejectsStartInsideButEndAfterShift() {
-            // 12:50 + 30min = 13:20 → ends past the 13:00 morning close.
             assertThatThrownBy(() -> policy.checkBookable(DOCTOR_ID, MONDAY.atTime(12, 50)))
                     .isInstanceOf(MediBookException.class)
                     .hasMessageContaining("working hours");
@@ -146,7 +143,6 @@ class AppointmentSchedulingPolicyTest {
                     .hasMessageContaining("does not work");
         }
         @Test void rejectsCrossMidnightWindow() {
-            // 23:30 start with 60-min duration → end 00:30 next day.
             // Without the LocalDateTime-anchored fix this would pass (00:30 < 18:00).
             LocalDateTime start = MONDAY.atTime(23, 30);
             LocalDateTime end   = start.plusMinutes(60);
@@ -180,7 +176,6 @@ class AppointmentSchedulingPolicyTest {
                     .doesNotThrowAnyException();
         }
         @Test void defaultSlotOverlapUsesDoctorSlotDuration() {
-            // 30-min slot configured on doctor — overlap check should be (start, start+30).
             LocalDateTime start = MONDAY.atTime(10, 0);
             when(appointmentRepository.existsConflict(DOCTOR_ID, start, start.plusMinutes(30)))
                     .thenReturn(true);
@@ -189,8 +184,6 @@ class AppointmentSchedulingPolicyTest {
                     .hasMessageContaining("not available");
         }
     }
-
-    // ── helpers ──────────────────────────────────────────────────────────
     private DoctorWorkingHours shift(LocalTime start, LocalTime end) {
         return DoctorWorkingHours.builder()
                 .doctor(activeDoctor)
@@ -199,8 +192,6 @@ class AppointmentSchedulingPolicyTest {
                 .endTime(end)
                 .build();
     }
-
-    // Mockito's `eq` matcher — re-exported here so the static-import block at the top
     // stays minimal and Checkstyle doesn't complain about a wildcard.
     private static <T> T eq(T value) { return org.mockito.ArgumentMatchers.eq(value); }
 }

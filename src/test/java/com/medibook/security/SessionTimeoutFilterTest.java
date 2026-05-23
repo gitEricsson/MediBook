@@ -61,13 +61,8 @@ class SessionTimeoutFilterTest {
     @Test
     @DisplayName("Should skip filter for health check endpoints")
     void testShouldSkip_HealthEndpoint() throws ServletException, IOException {
-        // Arrange
         when(request.getRequestURI()).thenReturn("/health");
-
-        // Act
         sessionTimeoutFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
         verify(filterChain, times(1)).doFilter(request, response);
         verify(sessionTimeoutService, never()).isSessionValid(anyLong());
     }
@@ -75,13 +70,8 @@ class SessionTimeoutFilterTest {
     @Test
     @DisplayName("Should skip filter for authentication endpoints")
     void testShouldSkip_AuthEndpoint() throws ServletException, IOException {
-        // Arrange
         when(request.getRequestURI()).thenReturn("/api/v1/auth/login");
-
-        // Act
         sessionTimeoutFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
         verify(filterChain, times(1)).doFilter(request, response);
         verify(sessionTimeoutService, never()).isSessionValid(anyLong());
     }
@@ -89,14 +79,9 @@ class SessionTimeoutFilterTest {
     @Test
     @DisplayName("Should skip filter for unauthenticated requests")
     void testShouldSkip_NoAuthentication() throws ServletException, IOException {
-        // Arrange
         when(request.getRequestURI()).thenReturn("/api/v1/users");
         when(securityContext.getAuthentication()).thenReturn(null);
-
-        // Act
         sessionTimeoutFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
         verify(filterChain, times(1)).doFilter(request, response);
         verify(sessionTimeoutService, never()).isSessionValid(anyLong());
     }
@@ -104,18 +89,13 @@ class SessionTimeoutFilterTest {
     @Test
     @DisplayName("Should allow request when session is valid")
     void testShouldAllowRequest_ValidSession() throws ServletException, IOException {
-        // Arrange
         when(request.getRequestURI()).thenReturn("/api/v1/appointments");
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn(userPrincipal);
         when(userPrincipal.getId()).thenReturn(1L);
         when(sessionTimeoutService.isSessionValid(1L)).thenReturn(true);
-
-        // Act
         sessionTimeoutFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
         verify(sessionTimeoutService, times(1)).isSessionValid(1L);
         verify(sessionTimeoutService, times(1)).updateActivity(1L);
         verify(filterChain, times(1)).doFilter(request, response);
@@ -124,7 +104,6 @@ class SessionTimeoutFilterTest {
     @Test
     @DisplayName("Should return 401 when session is expired")
     void testShouldRejectRequest_ExpiredSession() throws ServletException, IOException {
-        // Arrange
         when(request.getRequestURI()).thenReturn("/api/v1/appointments");
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
@@ -135,11 +114,7 @@ class SessionTimeoutFilterTest {
         StringWriter stringWriter = new StringWriter();
         PrintWriter writer = new PrintWriter(stringWriter);
         when(response.getWriter()).thenReturn(writer);
-
-        // Act
         sessionTimeoutFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
         verify(sessionTimeoutService, times(1)).isSessionValid(1L);
         verify(response, times(1)).setStatus(HttpStatus.UNAUTHORIZED.value());
         verify(response, times(1)).setContentType(MediaType.APPLICATION_JSON_VALUE);
@@ -149,18 +124,13 @@ class SessionTimeoutFilterTest {
     @Test
     @DisplayName("Should handle exceptions gracefully (fail-open)")
     void testHandleException_FailOpen() throws ServletException, IOException {
-        // Arrange
         when(request.getRequestURI()).thenReturn("/api/v1/appointments");
         when(securityContext.getAuthentication()).thenReturn(authentication);
         when(authentication.isAuthenticated()).thenReturn(true);
         when(authentication.getPrincipal()).thenReturn(userPrincipal);
         when(userPrincipal.getId()).thenReturn(1L);
         when(sessionTimeoutService.isSessionValid(1L)).thenThrow(new RuntimeException("DB error"));
-
-        // Act
         sessionTimeoutFilter.doFilterInternal(request, response, filterChain);
-
-        // Assert
         // On error, should allow request to proceed (fail-open for availability)
         verify(filterChain, times(1)).doFilter(request, response);
     }

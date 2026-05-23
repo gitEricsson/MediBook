@@ -125,8 +125,6 @@ public class AnalyticsService {
     public DailyCapacityReportResponse getDailyCapacityReport(LocalDate date) {
         LocalDateTime startOfDay = date.atStartOfDay();
         LocalDateTime endOfDay   = date.atTime(23, 59, 59);
-
-        // Day of week: Java DayOfWeek.getValue() returns 1=Mon..7=Sun — matches doctor_working_hours schema
         int dow = date.getDayOfWeek().getValue();
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDayOfWeekForActiveDoctors(dow);
 

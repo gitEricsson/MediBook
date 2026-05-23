@@ -7,6 +7,7 @@ import io.swagger.v3.parser.OpenAPIV3Parser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -14,6 +15,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @DisplayName("OpenAPI Contract Integration Test")
+@TestPropertySource(properties = {
+        "app.api-docs.enabled=true",
+        "springdoc.api-docs.enabled=true",
+        "springdoc.swagger-ui.enabled=true"
+})
 class OpenApiContractIntegrationTest extends IntegrationTestSupport {
 
     @Autowired

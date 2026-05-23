@@ -62,8 +62,6 @@ class ChatServiceRbacTest {
                 .build();
     }
 
-    // ── Patient can access own conversation ──────────────────────────────────
-
     @Test
     @DisplayName("Patient can get messages from own conversation")
     void patientAccessesOwnConversation() {
@@ -72,8 +70,6 @@ class ChatServiceRbacTest {
 
         chatService.getMessages(CONV_ID, PATIENT_ID); // must not throw
     }
-
-    // ── Stranger denied access ────────────────────────────────────────────────
 
     @Test
     @DisplayName("Stranger cannot access another patient's conversation")
@@ -85,8 +81,6 @@ class ChatServiceRbacTest {
                 .hasMessageContaining("Access denied");
     }
 
-    // ── Doctor can access assigned conversation ───────────────────────────────
-
     @Test
     @DisplayName("Doctor can access their assigned patient's conversation")
     void doctorAccessesAssignedConversation() {
@@ -95,8 +89,6 @@ class ChatServiceRbacTest {
 
         chatService.getMessages(CONV_ID, DOCTOR_ID); // must not throw
     }
-
-    // ── Summary only for doctor ───────────────────────────────────────────────
 
     @Test
     @DisplayName("Patient cannot generate AI summary (doctor-only endpoint)")
@@ -109,8 +101,6 @@ class ChatServiceRbacTest {
                 .hasMessageContaining("doctor");
     }
 
-    // ── Urgency ack only for doctor ───────────────────────────────────────────
-
     @Test
     @DisplayName("Cannot acknowledge urgency alert for another doctor's conversation")
     void wrongDoctorCannotAckUrgency() {
@@ -121,8 +111,6 @@ class ChatServiceRbacTest {
                 .isInstanceOf(MediBookException.class)
                 .hasMessageContaining("Access denied");
     }
-
-    // ── Consent ──────────────────────────────────────────────────────────────
 
     @Test
     @DisplayName("AI is enabled on conversation after patient grants consent")
@@ -161,8 +149,6 @@ class ChatServiceRbacTest {
                 .isInstanceOf(MediBookException.class)
                 .hasMessageContaining("Access denied");
     }
-
-    // ── Draft approval flow ───────────────────────────────────────────────────
 
     @Test
     @DisplayName("Draft not in PENDING state cannot be approved")

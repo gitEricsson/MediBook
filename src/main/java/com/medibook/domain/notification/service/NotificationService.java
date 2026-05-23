@@ -75,8 +75,6 @@ public class NotificationService implements MessageListener {
         log.info("Registered Redis pub/sub listener on pattern {}*", PUBSUB_PREFIX);
     }
 
-    // ─── Domain notification senders ────────────────────────────────────────
-
     public void sendAppointmentBooked(AppointmentEvent event) {
         notificationRetryTemplate.execute(context -> {
             try {
@@ -87,7 +85,6 @@ public class NotificationService implements MessageListener {
                         "Patient " + event.getPatientName() + " booked an appointment on " + event.getScheduledAt(),
                         "APPOINTMENT_BOOKED", event.getAppointmentId());
                 // Best-effort transactional emails. Email failures must not retry the
-                // whole notification — in-app and STOMP delivery have already succeeded.
                 sendEmailSafely(event.getPatientEmail(),
                         "Your MediBook appointment is booked",
                         bookedEmailBody(event));
@@ -530,8 +527,6 @@ public class NotificationService implements MessageListener {
         });
     }
 
-    // ─── REST query methods ──────────────────────────────────────────────────
-
     public List<NotificationResponse> getRecent(Long userId) {
         try {
             return notificationRepository.findRecentByUserId(userId).stream()
@@ -620,8 +615,6 @@ public class NotificationService implements MessageListener {
         }
     }
 
-    // ─── Redis Pub/Sub inbound handler ──────────────────────────────────────
-
     @Override
     public void onMessage(Message message, byte[] pattern) {
         try {
@@ -636,8 +629,6 @@ public class NotificationService implements MessageListener {
         }
     }
 
-    // ─── Persistence + Redis fan-out ────────────────────────────────────────
-
     protected void save(Long userId, String title, String message, String type, Long appointmentId) {
         Notification notification = Notification.builder()
                 .userId(userId)
@@ -650,8 +641,6 @@ public class NotificationService implements MessageListener {
                 .appointmentId(appointmentId)
                 .referenceId(String.valueOf(appointmentId))
                 .build();
-
-        // 1. Persist first — REST fallback remains available even if WS/Redis fails
         cassandraOperations.insert(notification,
                 InsertOptions.builder().ttl(NOTIFICATION_TTL).build());
 
@@ -669,8 +658,6 @@ public class NotificationService implements MessageListener {
 
         log.debug("Notification saved and published; userId={} type={}", userId, type);
     }
-
-    // ─── WebSocket delivery (best-effort) ───────────────────────────────────
 
     private void deliverViaWebSocket(Long userId, NotificationResponse payload) {
         try {
@@ -696,8 +683,6 @@ public class NotificationService implements MessageListener {
             }
         }
     }
-
-    // ─── Appointment lifecycle email helpers ───────────────────────────────
 
     /**
      * Send a transactional email without letting a delivery failure bubble up.

@@ -65,13 +65,11 @@ public class SessionTimeoutFilter extends OncePerRequestFilter {
 
         String requestPath = request.getRequestURI();
 
-        // Skip non-authenticated endpoints and system paths
         if (shouldSkip(requestPath)) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        // Only check session timeout for authenticated requests
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         if (authentication == null || !authentication.isAuthenticated() || !(authentication.getPrincipal() instanceof UserPrincipal)) {
             filterChain.doFilter(request, response);
@@ -82,7 +80,6 @@ public class SessionTimeoutFilter extends OncePerRequestFilter {
         Long userId = principal.getId();
 
         try {
-            // Check if session is still valid (within inactivity timeout)
             if (!sessionTimeoutService.isSessionValid(userId)) {
                 log.warn("Session expired for user [{}] due to inactivity", userId);
                 SecurityContextHolder.clearContext();
@@ -90,12 +87,10 @@ public class SessionTimeoutFilter extends OncePerRequestFilter {
                 return;
             }
 
-            // Update last activity timestamp
             sessionTimeoutService.updateActivity(userId);
 
         } catch (Exception ex) {
             log.error("Error checking session timeout for user [{}]", userId, ex);
-            // On error, allow request to proceed (fail-open for availability)
         }
 
         filterChain.doFilter(request, response);

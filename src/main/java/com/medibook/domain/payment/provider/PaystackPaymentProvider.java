@@ -55,7 +55,6 @@ public class PaystackPaymentProvider implements PaymentProviderPort {
 
         try {
             RestClient client = buildClient();
-            // Paystack amount is in kobo (smallest unit) — multiply by 100
             long amountInKobo = request.amount().multiply(BigDecimal.valueOf(100)).longValue();
 
             // Paystack rejects emails with non-public TLDs like .local, .test, .invalid, .localhost.
@@ -172,8 +171,6 @@ public class PaystackPaymentProvider implements PaymentProviderPort {
         }
     }
 
-    // ── Circuit breaker fallbacks ──────────────────────────────────────────
-
     InitiateResult initiatePaymentFallback(InitiateRequest request, Exception ex) {
         log.warn("Paystack circuit open — using fallback for idempotencyKey={}", request.idempotencyKey());
         return new InitiateResult("PS-CB-" + request.idempotencyKey(), null, "PENDING");
@@ -188,8 +185,6 @@ public class PaystackPaymentProvider implements PaymentProviderPort {
         log.warn("Paystack circuit open — refund fallback for ref={}", providerRef);
         throw new RuntimeException("Payment provider temporarily unavailable. Refund will be retried.", ex);
     }
-
-    // ── Helpers ────────────────────────────────────────────────────────────
 
     private RestClient buildClient() {
         return RestClient.builder()

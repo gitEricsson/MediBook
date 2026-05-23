@@ -63,8 +63,6 @@ class AiOrchestrationServiceTest {
         lenient().when(aiChatClient.modelId()).thenReturn("stub-v1");
     }
 
-    // ── BLOCKED messages must not reach AI client ─────────────────────────────
-
     @Test
     @DisplayName("BLOCKED message must not call AI client")
     void blockedMessageDoesNotCallAiClient() {
@@ -81,8 +79,6 @@ class AiOrchestrationServiceTest {
         assertThat(result.getType()).isEqualTo(AiOrchestrationResult.ResultType.BLOCKED);
         verifyNoInteractions(aiChatClient);
     }
-
-    // ── URGENT messages trigger escalation, not AI response ──────────────────
 
     @Test
     @DisplayName("URGENT message must trigger escalation and not call AI client")
@@ -103,8 +99,6 @@ class AiOrchestrationServiceTest {
         verifyNoInteractions(aiChatClient);
     }
 
-    // ── CLINICAL_QUERY messages are deferred to doctor ────────────────────────
-
     @Test
     @DisplayName("CLINICAL_QUERY message must not generate AI response for patient")
     void clinicalQueryDeferred() {
@@ -122,8 +116,6 @@ class AiOrchestrationServiceTest {
         assertThat(result.getMessage()).contains("doctor");
         verifyNoInteractions(aiChatClient);
     }
-
-    // ── SAFE messages get AI response ─────────────────────────────────────────
 
     @Test
     @DisplayName("SAFE message produces AI response")
@@ -144,8 +136,6 @@ class AiOrchestrationServiceTest {
         verify(aiChatClient, times(1)).complete(any(), any(), anyInt());
     }
 
-    // ── BAA gate ──────────────────────────────────────────────────────────────
-
     @Test
     @DisplayName("When BAA not active, AI is disabled for all messages")
     void baaNotActiveDisablesAi() {
@@ -158,8 +148,6 @@ class AiOrchestrationServiceTest {
         verifyNoInteractions(safetyClassifier);
         verifyNoInteractions(aiChatClient);
     }
-
-    // ── Draft must never auto-send ────────────────────────────────────────────
 
     @Test
     @DisplayName("Generated draft must be saved as PENDING — never auto-sent")
@@ -181,8 +169,6 @@ class AiOrchestrationServiceTest {
         verify(draftRepository).save(argThat(d ->
                 d.getStatus() == com.medibook.chat.entity.AiDraftResponse.DraftStatus.PENDING));
     }
-
-    // ── Audit is recorded for every AI call ──────────────────────────────────
 
     @Test
     @DisplayName("AI audit is recorded for every successful AI call")

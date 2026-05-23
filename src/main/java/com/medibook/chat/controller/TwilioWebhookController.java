@@ -30,16 +30,11 @@ public class TwilioWebhookController {
     private final ChatService           chatService;
     private final TwilioWebhookValidator webhookValidator;
 
-    /**
-     * Receives Twilio Conversations webhook events.
-     * Twilio sends form-encoded parameters.
-     */
     @PostMapping(value = "/webhook", consumes = "application/x-www-form-urlencoded")
     public ResponseEntity<String> handleWebhook(
             @RequestParam Map<String, String> params,
             HttpServletRequest request) {
 
-        // Validate Twilio signature
         if (!webhookValidator.isValid(request, request.getParameterMap())) {
             log.warn("Rejected invalid Twilio webhook from {}", request.getRemoteAddr());
             return ResponseEntity.status(403).body("Invalid signature");
@@ -51,11 +46,9 @@ public class TwilioWebhookController {
         try {
             chatService.handleTwilioWebhook(new HashMap<>(params));
         } catch (Exception ex) {
-            // Return 200 to prevent Twilio from retrying; log the error internally
             log.error("Twilio webhook processing error: {}", ex.getMessage(), ex);
         }
 
-        // Twilio expects a 200 response; empty body or XML accepted
         return ResponseEntity.ok("");
     }
 }

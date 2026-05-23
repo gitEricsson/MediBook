@@ -11,7 +11,6 @@ import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
-import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.telemedicine.dto.CallParticipantRequest;
 import com.medibook.domain.telemedicine.dto.VideoCallResponse;

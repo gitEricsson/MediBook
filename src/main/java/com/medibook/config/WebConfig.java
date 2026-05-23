@@ -22,6 +22,6 @@ public class WebConfig implements WebMvcConfigurer {
         log.info("Registering resource handler for local uploads directory: {}", uploadDir);
         registry.addResourceHandler("/uploads/**")
             .addResourceLocations("file:" + uploadDir + "/")
-            .setCachePeriod(3600); // Cache for 1 hour
+            .setCachePeriod(3600);
     }
 }

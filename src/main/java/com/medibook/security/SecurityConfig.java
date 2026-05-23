@@ -29,6 +29,7 @@ import jakarta.annotation.PostConstruct;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Configuration
@@ -43,11 +44,23 @@ public class SecurityConfig {
     private final SecurityResponseHeaderFilter securityResponseHeaderFilter;
     private final SessionTimeoutFilter     sessionTimeoutFilter;
 
-    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:5173}")
+    @Value("${app.cors.allowed-origins:http://localhost:3000,http://localhost:4200,http://localhost:5173}")
     private String allowedOrigins;
+
+    @Value("${app.cors.include-local-dev-origins:true}")
+    private boolean includeLocalDevOrigins;
 
     @Value("${app.security.https-redirect:false}")
     private boolean httpsRedirectEnabled;
+
+    private static final List<String> LOCAL_DEV_ORIGINS = List.of(
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:4200",
+            "http://127.0.0.1:4200",
+            "http://localhost:5173",
+            "http://127.0.0.1:5173"
+    );
 
     @PostConstruct
     public void validateCorsConfig() {
@@ -72,9 +85,7 @@ public class SecurityConfig {
             "/api/v1/auth/email/resend",
             // Payment provider webhooks must be accessible without a JWT token
             "/api/v1/payments/webhooks/**",
-            // Twilio Conversations webhook — authenticated by X-Twilio-Signature HMAC, not JWT
             "/api/v1/chat/twilio/webhook",
-            // MediBook Assistant support widget — auth optional; no PHI access
             "/api/v1/ai/chat",
             // WebSocket upgrade: HTTP auth is not used here.
             // Authentication happens inside JwtHandshakeInterceptor before the WS session opens.
@@ -126,6 +137,7 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> auth
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 .requestMatchers(PUBLIC_ENDPOINTS).permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/metadata/**").permitAll()
                 // SUPER_ADMIN is a superset of ADMIN; fine-grained locks via @PreAuthorize per endpoint
@@ -169,13 +181,16 @@ public class SecurityConfig {
         // Allowed origins are configured via app.cors.allowed-origins property.
         // See @PostConstruct validateCorsConfig() for HTTPS enforcement warnings.
         CorsConfiguration configuration = new CorsConfiguration();
-        List<String> origins = Arrays.stream(allowedOrigins.split(","))
+        Stream<String> configuredOrigins = Arrays.stream(allowedOrigins.split(","));
+        Stream<String> localDevOrigins = includeLocalDevOrigins ? LOCAL_DEV_ORIGINS.stream() : Stream.empty();
+        List<String> origins = Stream.concat(configuredOrigins, localDevOrigins)
                 .map(String::trim)
                 .filter(s -> !s.isEmpty())
+                .distinct()
                 .collect(Collectors.toList());
         configuration.setAllowedOriginPatterns(origins);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(List.of("Authorization", "Content-Type", "X-Requested-With", "X-Correlation-Id"));
+        configuration.setAllowedHeaders(List.of("*"));
         configuration.setExposedHeaders(List.of("Authorization", "X-Correlation-Id"));
         configuration.setAllowCredentials(true);
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();

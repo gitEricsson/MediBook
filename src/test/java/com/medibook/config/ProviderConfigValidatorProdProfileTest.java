@@ -35,7 +35,44 @@ class ProviderConfigValidatorProdProfileTest {
                 "spring.profiles.active=prod",
                 "app.ai.support.provider=claude-api",
                 "app.intelligence.nlp-provider=claude-api",
-                "app.telemedicine.provider=twilio"
+                "app.telemedicine.provider=twilio",
+                // Key checks: validator now refuses claude-api/gemini in prod with empty key
+                "app.intelligence.claude-api.key=sk-test-stub"
+        ).run(context -> {
+            ProviderConfigValidator v = context.getBean(ProviderConfigValidator.class);
+            v.validate();
+        });
+    }
+
+    @Test
+    void prodGeminiSupportWithoutKeyFails() {
+        ctx.withPropertyValues(
+                "spring.profiles.active=prod",
+                "app.ai.support.provider=gemini",
+                "app.intelligence.nlp-provider=claude-api",
+                "app.telemedicine.provider=twilio",
+                "app.intelligence.claude-api.key=sk-test"
+                // GEMINI_API_KEY intentionally absent
+        ).run(context -> {
+            ProviderConfigValidator v = context.getBean(ProviderConfigValidator.class);
+            try {
+                v.validate();
+                throw new AssertionError("Expected validator to refuse gemini without key");
+            } catch (IllegalStateException expected) {
+                assertThat(expected.getMessage()).contains("GEMINI_API_KEY is empty");
+            }
+        });
+    }
+
+    @Test
+    void prodGeminiSupportWithKeyPasses() {
+        ctx.withPropertyValues(
+                "spring.profiles.active=prod",
+                "app.ai.support.provider=gemini",
+                "app.intelligence.nlp-provider=claude-api",
+                "app.telemedicine.provider=twilio",
+                "app.intelligence.claude-api.key=sk-test",
+                "app.ai.gemini.api-key=AIzaTest"
         ).run(context -> {
             ProviderConfigValidator v = context.getBean(ProviderConfigValidator.class);
             v.validate();

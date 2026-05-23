@@ -9,9 +9,9 @@
         <timestampPattern>yyyy-MM-dd'T'HH:mm:ss.SSS'Z'</timestampPattern>
         <timeZone>UTC</timeZone>
         <!-- Inject OTel/Micrometer trace+span IDs so logs correlate with traces -->
-        <mdcKeyFieldName>traceId:trace_id</mdcKeyFieldName>
-        <mdcKeyFieldName>spanId:span_id</mdcKeyFieldName>
-        <mdcKeyFieldName>correlationId:correlation_id</mdcKeyFieldName>
+        <mdcKeyFieldName>traceId=trace_id</mdcKeyFieldName>
+        <mdcKeyFieldName>spanId=span_id</mdcKeyFieldName>
+        <mdcKeyFieldName>correlationId=correlation_id</mdcKeyFieldName>
         <customFields>{"service":"medibook","env":"prod"}</customFields>
       </encoder>
     </appender>

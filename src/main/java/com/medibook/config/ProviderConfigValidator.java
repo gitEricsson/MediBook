@@ -42,6 +42,9 @@ public class ProviderConfigValidator {
     @Value("${app.intelligence.claude-api.key:}")
     private String claudeKey;
 
+    @Value("${app.ai.gemini.api-key:}")
+    private String geminiKey;
+
     private final Environment env;
 
     public ProviderConfigValidator(Environment env) {
@@ -76,6 +79,16 @@ public class ProviderConfigValidator {
         if (isProd && "stub".equalsIgnoreCase(supportProvider)) {
             hardErrors.add("AI_SUPPORT_PROVIDER=stub in prod");
         }
+        // Provider-specific key checks: silent fallbacks in prod are worse than
+        // a loud refuse-to-start. Catch missing keys for the active provider.
+        if (isProd && "gemini".equalsIgnoreCase(supportProvider)
+                && (geminiKey == null || geminiKey.isBlank())) {
+            hardErrors.add("AI_SUPPORT_PROVIDER=gemini in prod but GEMINI_API_KEY is empty");
+        }
+        if (isProd && "claude-api".equalsIgnoreCase(supportProvider)
+                && (claudeKey == null || claudeKey.isBlank())) {
+            hardErrors.add("AI_SUPPORT_PROVIDER=claude-api in prod but CLAUDE_API_KEY is empty");
+        }
         if (isProd && "stub".equalsIgnoreCase(intelligenceProvider)) {
             hardErrors.add("INTELLIGENCE_NLP_PROVIDER=stub in prod");
         }
@@ -87,8 +100,9 @@ public class ProviderConfigValidator {
             throw new IllegalStateException(msg);
         }
 
-        log.info("[provider-config] OK — support={}, intelligence={}, telemedicine={}, claudeKeyPresent={}",
-                supportProvider, intelligenceProvider, telemedicineProvider, hasKey);
+        log.info("[provider-config] OK — support={}, intelligence={}, telemedicine={}, claudeKeyPresent={}, geminiKeyPresent={}",
+                supportProvider, intelligenceProvider, telemedicineProvider, hasKey,
+                geminiKey != null && !geminiKey.isBlank());
     }
 
     private boolean isProdProfile() {

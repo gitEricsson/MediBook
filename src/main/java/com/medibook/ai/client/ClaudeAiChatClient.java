@@ -25,7 +25,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "app.intelligence.nlp-provider", havingValue = "claude-api")
+@ConditionalOnProperty(name = "app.ai.chat.provider", havingValue = "claude")
 public class ClaudeAiChatClient implements AiChatClient {
 
     private static final String API_URL      = "https://api.anthropic.com/v1/messages";

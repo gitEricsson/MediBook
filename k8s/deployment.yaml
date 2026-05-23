@@ -273,6 +273,11 @@ spec:
                 configMapKeyRef:
                   name: medibook-config
                   key: ai-support-provider
+            - name: AI_CHAT_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: ai-chat-provider
             - name: AI_CHAT_BAA_ACTIVE
               valueFrom:
                 configMapKeyRef:

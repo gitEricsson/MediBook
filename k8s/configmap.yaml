@@ -42,6 +42,7 @@ data:
 
   # ─── AI / NLP / Telemedicine ──────────────────────────────────────────────
   ai-support-provider: "gemini"
+  ai-chat-provider: "gemini"
   ai-chat-baa-active: "true"
   intelligence-nlp-provider: "claude-api"
   telemedicine-provider: "twilio"

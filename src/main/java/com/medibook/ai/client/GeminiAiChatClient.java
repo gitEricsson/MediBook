@@ -26,7 +26,7 @@ import java.util.Map;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "app.intelligence.nlp-provider", havingValue = "gemini")
+@ConditionalOnProperty(name = "app.ai.chat.provider", havingValue = "gemini")
 public class GeminiAiChatClient implements AiChatClient {
 
     private static final String API_BASE      = "https://generativelanguage.googleapis.com/v1beta/models/";
@@ -35,7 +35,7 @@ public class GeminiAiChatClient implements AiChatClient {
     @Value("${app.ai.gemini.api-key:#{null}}")
     private String apiKey;
 
-    @Value("${app.intelligence.gemini-model:" + DEFAULT_MODEL + "}")
+    @Value("${app.ai.chat.gemini-model:" + DEFAULT_MODEL + "}")
     private String model;
 
     private final ObjectMapper objectMapper;

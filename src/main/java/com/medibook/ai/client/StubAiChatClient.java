@@ -12,7 +12,7 @@ import org.springframework.stereotype.Component;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "app.intelligence.nlp-provider", havingValue = "stub", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.ai.chat.provider", havingValue = "stub", matchIfMissing = true)
 public class StubAiChatClient implements AiChatClient {
 
     private static final String STUB_MODEL = "stub-v1";

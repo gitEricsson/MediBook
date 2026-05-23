@@ -254,10 +254,13 @@ app:
         timeout-seconds: ${OLLAMA_TIMEOUT_SECONDS:30}
     gemini:
       api-key: ${GEMINI_API_KEY:}
+    chat:
+      # Provider for consultation chat AI (drafts, summaries, urgency): stub (default) | gemini | claude
+      provider: ${AI_CHAT_PROVIDER:gemini}
+      gemini-model: ${AI_CHAT_GEMINI_MODEL:gemini-2.5-flash}
 
   intelligence:
-    nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:gemini}
-    gemini-model: ${INTELLIGENCE_GEMINI_MODEL:gemini-2.5-flash}
+    nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:stub}
     claude-api:
       key: ${CLAUDE_API_KEY:}
       max-tokens: 512

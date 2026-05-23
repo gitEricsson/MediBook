@@ -122,6 +122,26 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
+    - host: dreammedibook.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: medibook-fe-service
+                port:
+                  number: 80
+    - host: www.dreammedibook.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: medibook-fe-service
+                port:
+                  number: 80
     - host: app.medibook.com
       http:
         paths:
@@ -133,6 +153,10 @@ spec:
                 port:
                   number: 80
   tls:
+    - hosts:
+        - dreammedibook.com
+        - www.dreammedibook.com
+      secretName: medibook-fe-tls-dream
     - hosts:
         - app.medibook.com
       secretName: medibook-fe-tls

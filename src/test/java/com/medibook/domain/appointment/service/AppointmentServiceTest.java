@@ -12,11 +12,17 @@ import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.service.DoctorScheduleService;
+import com.medibook.domain.payment.repository.InvoiceRepository;
+import com.medibook.domain.payment.service.CancellationRefundService;
+import com.medibook.domain.patient.service.AccessGrantService;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
 import com.medibook.messaging.producer.AppointmentEventProducer;
 import com.medibook.security.UserPrincipal;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +57,13 @@ class AppointmentServiceTest {
     @Mock private SystemConfigRepository configRepository;
     @Mock private com.medibook.domain.schedule.service.DoctorLeaveService doctorLeaveService;
     @Mock private AppointmentSchedulingPolicy schedulingPolicy;
+    @Mock private DoctorScheduleService doctorScheduleService;
+    @Mock private AppointmentPricingService pricingService;
+    @Mock private AccessGrantService accessGrantService;
+    @Mock private CancellationRefundService cancellationRefundService;
+    @Mock private InvoiceRepository invoiceRepository;
+    @Mock private MeterRegistry meterRegistry;
+    @Mock private Counter counter;
 
     @InjectMocks
     private AppointmentService appointmentService;
@@ -81,6 +94,9 @@ class AppointmentServiceTest {
         doctorPrincipal = UserPrincipal.fromUser(doctorUser);
 
         lenient().when(userRepository.getReferenceById(anyLong())).thenReturn(patient);
+        lenient().when(pricingService.computeFee(any(), any(), any())).thenReturn(java.math.BigDecimal.ZERO);
+        lenient().when(invoiceRepository.findByAppointmentId(anyLong())).thenReturn(Optional.empty());
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(counter);
     }
 
     @Test
@@ -135,8 +151,8 @@ class AppointmentServiceTest {
         appointment.setScheduledAt(LocalDateTime.now().plusHours(12)); // Within 24h
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
         
-        SystemConfig config = new SystemConfig("CANCELLATION_NOTICE_HOURS", "24", null, null);
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS")).thenReturn(Optional.of(config));
+        SystemConfig config = new SystemConfig("CANCELLATION_NOTICE_MINUTES", "1440", null, null);
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES")).thenReturn(Optional.of(config));
 
         CancelRequest req = new CancelRequest();
         MediBookException ex = assertThrows(MediBookException.class, () -> appointmentService.cancel(100L, req, patientPrincipal));
@@ -147,7 +163,7 @@ class AppointmentServiceTest {
     void cancel_byPatientOutsideNotice_success() {
         appointment.setScheduledAt(LocalDateTime.now().plusHours(48)); // Outside 24h
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS")).thenReturn(Optional.empty()); // defaults to 24
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES")).thenReturn(Optional.empty());
         when(appointmentRepository.save(any())).thenReturn(appointment);
         when(userRepository.getReferenceById(any())).thenReturn(patient);
 
@@ -353,7 +369,7 @@ class AppointmentServiceTest {
     void cancel_setsAuditFieldsAndCancellationReason() {
         appointment.setScheduledAt(LocalDateTime.now().plusDays(5));
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS")).thenReturn(Optional.empty());
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES")).thenReturn(Optional.empty());
         when(appointmentRepository.save(any())).thenReturn(appointment);
         CancelRequest req = new CancelRequest();
         req.setReason("Personal emergency");
@@ -373,7 +389,7 @@ class AppointmentServiceTest {
     void cancel_optimisticLockingFailure_throwsConcurrentModification() {
         appointment.setScheduledAt(LocalDateTime.now().plusDays(5));
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS")).thenReturn(Optional.empty());
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES")).thenReturn(Optional.empty());
         when(appointmentRepository.save(any())).thenThrow(OptimisticLockingFailureException.class);
 
         MediBookException ex = assertThrows(MediBookException.class,
@@ -385,7 +401,7 @@ class AppointmentServiceTest {
     void cancel_publishesBothCancelledAndAuditEvents() {
         appointment.setScheduledAt(LocalDateTime.now().plusDays(5));
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS")).thenReturn(Optional.empty());
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES")).thenReturn(Optional.empty());
         when(appointmentRepository.save(any())).thenReturn(appointment);
 
         appointmentService.cancel(100L, new CancelRequest(), patientPrincipal);

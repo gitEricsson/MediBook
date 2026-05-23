@@ -7,6 +7,7 @@ import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
 import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
+import com.medibook.domain.schedule.repository.DoctorSlotBlockRepository;
 import com.medibook.domain.schedule.service.DoctorLeaveService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -47,6 +48,7 @@ class AppointmentSchedulingPolicyTest {
     @Mock DoctorWorkingHoursRepository  workingHoursRepo;
     @Mock DoctorLeaveService            doctorLeaveService;
     @Mock AppointmentRepository         appointmentRepository;
+    @Mock DoctorSlotBlockRepository     slotBlockRepository;
     @InjectMocks AppointmentSchedulingPolicy policy;
 
     private static final long DOCTOR_ID = 1L;
@@ -63,6 +65,8 @@ class AppointmentSchedulingPolicyTest {
         activeDoctor = Doctor.builder().id(DOCTOR_ID).slotDurationMins(30).isActive(true).build();
         lenient().when(doctorRepository.findById(DOCTOR_ID)).thenReturn(Optional.of(activeDoctor));
         lenient().when(doctorLeaveService.isDoctorOnLeave(anyLong(), any(LocalDate.class))).thenReturn(false);
+        lenient().when(slotBlockRepository.findByDoctorIdAndBlockDateBetweenOrderByBlockDateAscStartTimeAsc(
+                anyLong(), any(LocalDate.class), any(LocalDate.class))).thenReturn(List.of());
         lenient().when(workingHoursRepo.findByDoctorIdAndDayOfWeek(eq(DOCTOR_ID), eq(1)))
                 .thenReturn(List.of(
                         shift(LocalTime.of(9, 0),  LocalTime.of(13, 0)),

@@ -9,6 +9,7 @@ import com.medibook.chat.service.ChatService;
 import com.medibook.common.exception.MediBookException;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.telemedicine.dto.CallParticipantRequest;
@@ -25,6 +26,8 @@ import com.medibook.messaging.event.ChatEvent;
 import com.medibook.messaging.producer.ChatEventProducer;
 import com.medibook.infrastructure.metrics.EmergencyMetrics;
 import com.medibook.security.UserPrincipal;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.Timer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -55,6 +58,8 @@ class TelemedicineCallServiceTest {
     @Mock private ChatEventProducer chatEventProducer;
     @Mock private EmergencyMetrics emergencyMetrics;
     @Mock private io.micrometer.core.instrument.MeterRegistry meterRegistry;
+    @Mock private Counter counter;
+    @Mock private Timer timer;
 
     private TelemedicineCallService service;
     private User patient;
@@ -90,12 +95,18 @@ class TelemedicineCallServiceTest {
                 .patient(patient)
                 .doctor(doctor)
                 .status(AppointmentStatus.CONFIRMED)
-                .scheduledAt(LocalDateTime.now().plusMinutes(15))
+                .consultationMedium(ConsultationMedium.VIDEO)
+                .scheduledAt(LocalDateTime.now().plusMinutes(5))
+                .endTime(LocalDateTime.now().plusMinutes(35))
+                .durationMins(30)
                 .build();
 
         patientPrincipal = UserPrincipal.fromUser(patient);
         doctorPrincipal = UserPrincipal.fromUser(doctorUser);
         unrelatedPrincipal = UserPrincipal.fromUser(unrelatedUser);
+
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class))).thenReturn(counter);
+        lenient().when(meterRegistry.timer(anyString())).thenReturn(timer);
     }
 
     @Test

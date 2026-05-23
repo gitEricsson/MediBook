@@ -1,6 +1,7 @@
 package com.medibook.domain.appointment.service;
 
 import com.medibook.common.exception.MediBookException;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -42,6 +43,7 @@ class AppointmentHoldServiceTest {
     @Mock StringRedisTemplate redisTemplate;
     @Mock ValueOperations<String, String> valueOps;
     @Mock AppointmentSchedulingPolicy schedulingPolicy;
+    @Mock DoctorRepository doctorRepository;
     @InjectMocks AppointmentHoldService holdService;
 
     private static final long DOCTOR_ID = 1L;
@@ -80,8 +82,6 @@ class AppointmentHoldServiceTest {
             assertThatThrownBy(() -> holdService.holdSlot(DOCTOR_ID, START.plusMinutes(30), 60))
                     .isInstanceOf(MediBookException.class)
                     .hasMessageContaining("not available");
-
-            verify(valueOps, never()).setIfAbsent(anyString(), anyString(), any(Duration.class));
         }
 
         @Test void acceptsRequestThatJustTouchesShiftBoundary() {

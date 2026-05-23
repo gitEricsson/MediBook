@@ -4,6 +4,7 @@ import com.medibook.common.exception.MediBookException;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.entity.AppointmentType;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
@@ -70,7 +71,9 @@ class TelemedicineSessionServiceTest {
                 .scheduledAt(LocalDateTime.now().plusDays(1))
                 .endTime(LocalDateTime.now().plusDays(1).plusMinutes(30))
                 .durationMins(30).status(AppointmentStatus.CONFIRMED)
-                .type(AppointmentType.TELEMEDICINE).confirmationCode("MB-TM01").build();
+                .type(AppointmentType.TELEMEDICINE)
+                .consultationMedium(ConsultationMedium.VIDEO)
+                .confirmationCode("MB-TM01").build();
 
         patientPrincipal = UserPrincipal.fromUser(patient);
         doctorPrincipal  = UserPrincipal.fromUser(doctorUser);
@@ -105,11 +108,12 @@ class TelemedicineSessionServiceTest {
     @Test
     void createSession_notTelemedicine_throwsException() {
         appointment.setType(AppointmentType.IN_PERSON);
+        appointment.setConsultationMedium(ConsultationMedium.PHYSICAL);
         when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
 
         assertThatThrownBy(() -> sessionService.createSession(1L, true, patientPrincipal))
                 .isInstanceOf(MediBookException.class)
-                .hasMessageContaining("not a telemedicine");
+                .hasMessageContaining("VIDEO or AUDIO");
     }
 
 

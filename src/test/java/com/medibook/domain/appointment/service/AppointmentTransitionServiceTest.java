@@ -9,6 +9,7 @@ import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
+import com.medibook.domain.emergency.service.EmergencySettlementService;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.messaging.producer.AppointmentEventProducer;
@@ -35,6 +36,7 @@ class AppointmentTransitionServiceTest {
 
     @Mock AppointmentRepository appointmentRepository;
     @Mock AppointmentEventProducer eventProducer;
+    @Mock EmergencySettlementService emergencySettlementService;
 
     @InjectMocks AppointmentTransitionService transitionService;
 
@@ -88,8 +90,9 @@ class AppointmentTransitionServiceTest {
 
 
     @Test
-    @DisplayName("transition CONFIRMED→COMPLETED — saves COMPLETED status and fires STATUS_CHANGED event")
+    @DisplayName("transition IN_CONSULTATION→COMPLETED — saves COMPLETED status and fires STATUS_CHANGED event")
     void transition_confirmedToCompleted_succeeds() {
+        appointment.setStatus(AppointmentStatus.IN_CONSULTATION);
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
         when(appointmentRepository.save(any())).thenReturn(appointment);
         TransitionRequest req = transitionReq(AppointmentStatus.COMPLETED, null);
@@ -217,6 +220,7 @@ class AppointmentTransitionServiceTest {
     @Test
     @DisplayName("transition — event type encodes the target status name exactly")
     void transition_eventTypeEncodeTargetStatus() {
+        appointment.setStatus(AppointmentStatus.IN_CONSULTATION);
         when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
         when(appointmentRepository.save(any())).thenReturn(appointment);
 

@@ -97,15 +97,16 @@ class NotificationServiceTest {
     }
 
     @Test
-    @DisplayName("sendAppointmentConfirmed — inserts exactly one notification for the patient only")
+    @DisplayName("sendAppointmentConfirmed — inserts one notification for patient and one for doctor")
     void sendAppointmentConfirmed_savesOnlyPatientNotification() {
         notificationService.sendAppointmentConfirmed(event);
 
         ArgumentCaptor<Notification> captor = ArgumentCaptor.forClass(Notification.class);
-        verify(cassandraOperations, times(1)).insert(captor.capture(), any(InsertOptions.class));
-        Notification saved = captor.getValue();
-        assertThat(saved.getUserId()).isEqualTo(1L);
-        assertThat(saved.getType()).isEqualTo("APPOINTMENT_CONFIRMED");
+        verify(cassandraOperations, times(2)).insert(captor.capture(), any(InsertOptions.class));
+        assertThat(captor.getAllValues()).extracting(Notification::getUserId)
+                .containsExactlyInAnyOrder(1L, 2L);
+        assertThat(captor.getAllValues()).extracting(Notification::getType)
+                .containsOnly("APPOINTMENT_CONFIRMED");
     }
 
     @Test
@@ -270,11 +271,7 @@ class NotificationServiceTest {
     @Test
     @DisplayName("getUnreadCount - returns cached value when available")
     void getUnreadCount_returnsCachedValue() {
-        // Production code reads via cache.get(key) and casts to Number to tolerate
-        // Integer↔Long round-trips through Jackson (DefaultTyping.NON_FINAL strips
-        // type info from final scalars). Stub the untyped overload accordingly.
-        org.springframework.cache.Cache.ValueWrapper wrapper = () -> 7L;
-        when(unreadCountCache.get(1L)).thenReturn(wrapper);
+        when(unreadCountCache.get(1L, Long.class)).thenReturn(7L);
 
         long count = notificationService.getUnreadCount(1L);
 

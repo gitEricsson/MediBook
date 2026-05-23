@@ -50,7 +50,7 @@ import static org.mockito.Mockito.when;
  *   - verify is a no-op when status == SUCCESSFUL
  *   - markInvoicePaid is idempotent on already-PAID invoice + non-PENDING appointment
  *   - publishPaymentEvent uses deterministic eventId per (paymentId, eventType)
- *   - refund rejects when refundedAt is set
+ *   - refund short-circuits when payment status is already REFUNDED
  */
 @ExtendWith(MockitoExtension.class)
 @org.mockito.junit.jupiter.MockitoSettings(strictness = org.mockito.quality.Strictness.LENIENT)
@@ -111,12 +111,13 @@ class PaymentIdempotencyTest {
     @Nested @DisplayName("refundPayment")
     class Refund {
         @Test void rejectsAlreadyRefunded() {
+            existingPayment.setStatus(PaymentStatus.REFUNDED);
             existingPayment.setRefundedAt(LocalDateTime.now());
             when(paymentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(existingPayment));
 
-            assertThatThrownBy(() -> paymentService.refundPayment(100L, BigDecimal.valueOf(5000), "test", principal))
-                    .isInstanceOf(MediBookException.class)
-                    .hasMessageContaining("already refunded");
+            var response = paymentService.refundPayment(100L, BigDecimal.valueOf(5000), "test", principal);
+
+            assertThat(response.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
             verify(providerFactory, never()).get(any());
         }
 

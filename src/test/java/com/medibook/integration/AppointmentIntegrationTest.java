@@ -310,13 +310,13 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
     }
     @Test
     @Order(14)
-    @DisplayName("GET /api/v1/policies/cancellation — returns policy with default 24-hour notice")
+    @DisplayName("GET /api/v1/policies/cancellation — returns policy with default 30-minute notice")
     void getCancellationPolicy_returns200WithDefaults() throws Exception {
         mockMvc.perform(get("/api/v1/policies/cancellation")
                         .header("Authorization", "Bearer " + patientToken))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.noticeHours").value(24))
-                .andExpect(jsonPath("$.data.feeApplies").value(true));
+                .andExpect(jsonPath("$.data.noticeMinutes").value(30))
+                .andExpect(jsonPath("$.data.feeApplies").value(false));
     }
     @Test
     @Order(15)
@@ -407,7 +407,7 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
     }
     @Test
     @Order(21)
-    @DisplayName("POST /api/v1/appointments/{id}/cancel — within 24h notice returns 422 WITHIN_NOTICE_PERIOD")
+    @DisplayName("POST /api/v1/appointments/{id}/cancel — within notice period returns 422 WITHIN_NOTICE_PERIOD")
     void cancel_withinNoticePeriod_returns422() throws Exception {
         LocalDateTime futureSlot = LocalDateTime.now().plusDays(21).withMinute(0).withSecond(0).withNano(0);
         MvcResult bookResult = mockMvc.perform(post("/api/v1/appointments")
@@ -419,8 +419,8 @@ class AppointmentIntegrationTest extends IntegrationTestSupport {
         Long noticeId = objectMapper.readTree(bookResult.getResponse().getContentAsString())
                 .get("data").get("id").asLong();
         appointmentRepository.findById(noticeId).ifPresent(a -> {
-            a.setScheduledAt(LocalDateTime.now().plusHours(12));
-            a.setEndTime(LocalDateTime.now().plusHours(12).plusMinutes(30));
+            a.setScheduledAt(LocalDateTime.now().plusMinutes(10));
+            a.setEndTime(LocalDateTime.now().plusMinutes(40));
             appointmentRepository.save(a);
         });
         CancelRequest req = new CancelRequest();

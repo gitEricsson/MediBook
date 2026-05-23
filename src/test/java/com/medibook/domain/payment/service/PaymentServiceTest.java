@@ -22,6 +22,8 @@ import com.medibook.domain.user.entity.User;
 import com.medibook.common.sequence.SequenceService;
 import com.medibook.messaging.outbox.OutboxEventRepository;
 import com.medibook.security.UserPrincipal;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -51,6 +53,9 @@ class PaymentServiceTest {
     @Mock ObjectMapper               objectMapper;
     @Mock SequenceService            sequenceService;
     @Mock com.medibook.config.HospitalProperties hospitalProperties;
+    @Mock PricingEngine              pricingEngine;
+    @Mock MeterRegistry              meterRegistry;
+    @Mock Counter                    counter;
 
     @InjectMocks
     PaymentService paymentService;
@@ -99,6 +104,10 @@ class PaymentServiceTest {
 
         lenient().when(hospitalProperties.getFeeForDoctor(any(), anyInt()))
                 .thenReturn(BigDecimal.valueOf(5000));
+        lenient().when(pricingEngine.calculate(any(), any(), any()))
+                .thenReturn(BigDecimal.valueOf(5000));
+        lenient().when(meterRegistry.counter(anyString(), any(String[].class)))
+                .thenReturn(counter);
     }
 
     @Test
@@ -193,14 +202,15 @@ class PaymentServiceTest {
                 .patient(patient)
                 .provider(PaymentProvider.PAYSTACK)
                 .amount(BigDecimal.valueOf(5000))
-                .status(PaymentStatus.SUCCESSFUL)
+                .status(PaymentStatus.REFUNDED)
                 .refundedAt(LocalDateTime.now())
                 .build();
 
         when(paymentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(payment));
 
-        assertThatThrownBy(() -> paymentService.refundPayment(1L, null, null, principal))
-                .isInstanceOf(MediBookException.class)
-                .hasMessageContaining("refunded");
+        PaymentResponse response = paymentService.refundPayment(1L, null, null, principal);
+
+        assertThat(response.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
+        verifyNoInteractions(providerFactory);
     }
 }

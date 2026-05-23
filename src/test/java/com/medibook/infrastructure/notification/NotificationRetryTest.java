@@ -65,7 +65,7 @@ class NotificationRetryTest {
     private NotificationService notificationService;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws Exception {
         retryTemplate = new RetryConfig().notificationRetryTemplate();
         notificationService = new NotificationService(
             notificationRepository,
@@ -79,6 +79,7 @@ class NotificationRetryTest {
             notificationMetrics,
             transactionalEmailService
         );
+        lenient().doReturn("{}").when(objectMapper).writeValueAsString(any());
     }
 
     @Test

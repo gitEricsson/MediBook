@@ -14,10 +14,11 @@ spec:
     matchLabels:
       app: medibook-api
   progressDeadlineSeconds: 900
+  minReadySeconds: 20
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
+      maxSurge: 2
       maxUnavailable: 0
   template:
     metadata:

@@ -19,6 +19,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -28,6 +30,45 @@ public class AccessGrantService {
     private final UserRepository               userRepository;
     private final DoctorRepository             doctorRepository;
     private final NotificationService          notificationService;
+
+    /**
+     * Upsert a time-bounded access grant created from a FOLLOW_UP booking consent.
+     *
+     * <p>If a grant already exists for the (patient, doctor) pair we widen its
+     * {@code accessUpToDate} to the new cutoff (so the latest booking date wins)
+     * and re-approve it. Otherwise create a fresh APPROVED grant with the supplied
+     * cutoff. Idempotent and safe to call from {@code AppointmentService.book()}
+     * on every follow-up booking.
+     */
+    @Transactional
+    public PatientAccessGrant upsertFollowUpGrant(Long patientId, Long doctorId, LocalDate accessUpToDate) {
+        User patient = userRepository.findById(patientId)
+                .orElseThrow(() -> new ResourceNotFoundException("Patient", "id", patientId));
+        Doctor doctor = doctorRepository.findById(doctorId)
+                .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
+
+        PatientAccessGrant grant = accessGrantRepository
+                .findByPatientIdAndDoctorId(patientId, doctorId)
+                .orElseGet(() -> PatientAccessGrant.builder()
+                        .patient(patient)
+                        .doctor(doctor)
+                        .build());
+
+        grant.setStatus(PatientAccessGrant.AccessGrantStatus.APPROVED);
+        grant.setRevokedAt(null);
+        // Widen the cutoff if a later booking grants access through a more recent date.
+        if (grant.getAccessUpToDate() == null || accessUpToDate.isAfter(grant.getAccessUpToDate())) {
+            grant.setAccessUpToDate(accessUpToDate);
+        }
+        if (grant.getReason() == null) {
+            grant.setReason("Auto-granted via follow-up consultation consent");
+        }
+
+        PatientAccessGrant saved = accessGrantRepository.save(grant);
+        log.info("Follow-up auto-grant upserted: patient=[{}] doctor=[{}] accessUpTo=[{}]",
+                patientId, doctorId, saved.getAccessUpToDate());
+        return saved;
+    }
 
     @Transactional
     public AccessGrantResponse grantAccess(Long patientId, AccessGrantRequest request) {

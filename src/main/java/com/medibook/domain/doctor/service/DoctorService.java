@@ -5,6 +5,10 @@ import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.config.HospitalProperties;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.stream.Collectors;
 import com.medibook.domain.doctor.dto.AdminCreateDoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorResponse;
@@ -42,6 +46,7 @@ public class DoctorService {
     private final PasswordEncoder          passwordEncoder;
     private final AppointmentEventProducer eventProducer;
     private final HospitalProperties       hospitalProperties;
+    private final com.medibook.domain.user.service.PasswordResetService passwordResetService;
 
     @Cacheable(value = "doctors", key = "#id")
     @Bulkhead(name = "doctorService")
@@ -99,10 +104,11 @@ public class DoctorService {
         if (request.getLanguages() != null) {
             builder.languages(request.getLanguages());
         }
-        builder.telemedicineEnabled(request.isTelemedicineEnabled());
 
         Doctor doctor = builder.build();
         doctor.setSearchVector(buildSearchVector(user.getFirstName(), user.getLastName(), request.getSpecialization()));
+        applyAdditionalDepts(doctor, request.getAdditionalDepartmentIds());
+        applySpecializations(doctor, request.getSpecialization(), request.getSpecializations());
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
     }
@@ -198,9 +204,10 @@ public class DoctorService {
         if (request.getLanguages() != null) {
             doctor.setLanguages(request.getLanguages());
         }
-        doctor.setTelemedicineEnabled(request.isTelemedicineEnabled());
         doctor.setSearchVector(buildSearchVector(
                 doctor.getUser().getFirstName(), doctor.getUser().getLastName(), request.getSpecialization()));
+        applyAdditionalDepts(doctor, request.getAdditionalDepartmentIds());
+        applySpecializations(doctor, request.getSpecialization(), request.getSpecializations());
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
     }
@@ -220,7 +227,13 @@ public class DoctorService {
         Department dept = departmentRepository.findById(request.getDepartmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
 
-        // Create user account with a temporary random password
+        // Provision the user with an unguessable temporary password that the
+        // doctor will never use directly. They receive an invite email with a
+        // single-use setup-password token (7-day TTL) and choose their own
+        // password before they can sign in. We still keep the account `enabled`
+        // so the BE's pre-auth checks pass when they hit /auth/reset-password —
+        // the security gate is the inability to log in without knowing the
+        // random password we never reveal.
         String tempPassword = UUID.randomUUID().toString();
         User user = User.builder()
                 .firstName(request.getFirstName())
@@ -243,8 +256,27 @@ public class DoctorService {
                 .build();
         doctor.setSearchVector(buildSearchVector(
                 request.getFirstName(), request.getLastName(), request.getSpecialization()));
+        applyAdditionalDepts(doctor, request.getAdditionalDepartmentIds());
+        applySpecializations(doctor, request.getSpecialization(), request.getSpecializations());
 
-        return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
+        Doctor saved = doctorRepository.save(doctor);
+
+        // Dispatch the welcome / setup-password email. Async + try-wrapped so a
+        // mail outage cannot fail the provisioning transaction — the admin can
+        // resend later via the "forgot password" flow if needed.
+        try {
+            String inviteToken = passwordResetService.createInviteToken(savedUser.getId());
+            passwordResetService.sendInviteEmail(
+                    savedUser.getEmail(),
+                    savedUser.getFirstName() + " " + savedUser.getLastName(),
+                    "Doctor",
+                    inviteToken);
+        } catch (Exception ex) {
+            // Don't fail the transaction on mail issues. The doctor row is saved
+            // and the admin can resend the invite from the doctor management UI.
+        }
+
+        return DoctorResponse.fromEntity(saved, hospitalProperties);
     }
 
     private void ensureCanManageDoctor(Doctor doctor, UserPrincipal principal) {
@@ -262,5 +294,34 @@ public class DoctorService {
                 firstName  != null ? firstName  : "",
                 lastName   != null ? lastName   : "",
                 specialization != null ? specialization : "").trim();
+    }
+
+    private void applyAdditionalDepts(Doctor doctor, java.util.List<Long> additionalDeptIds) {
+        if (additionalDeptIds == null || additionalDeptIds.isEmpty()) {
+            doctor.getAdditionalDepartments().clear();
+            return;
+        }
+        Set<Department> depts = additionalDeptIds.stream()
+                .filter(id -> !id.equals(doctor.getDepartment().getId()))
+                .map(id -> departmentRepository.findById(id)
+                        .orElseThrow(() -> new com.medibook.common.exception.ResourceNotFoundException("Department", "id", id)))
+                .collect(Collectors.toSet());
+        doctor.getAdditionalDepartments().clear();
+        doctor.getAdditionalDepartments().addAll(depts);
+    }
+
+    private void applySpecializations(Doctor doctor, String primary, java.util.List<String> extras) {
+        Set<String> all = new HashSet<>();
+        if (primary != null && !primary.isBlank()) {
+            all.add(primary.trim());
+        }
+        if (extras != null) {
+            extras.stream()
+                    .filter(s -> s != null && !s.isBlank())
+                    .map(String::trim)
+                    .forEach(all::add);
+        }
+        doctor.getSpecializations().clear();
+        doctor.getSpecializations().addAll(all);
     }
 }

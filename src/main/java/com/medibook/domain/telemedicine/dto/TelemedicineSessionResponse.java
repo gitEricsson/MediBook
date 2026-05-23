@@ -30,6 +30,10 @@ public class TelemedicineSessionResponse {
     private boolean doctorReviewed;
     private String callNoteDraft;
     private LocalDateTime createdAt;
+    /** Appointment scheduled start — used by frontend to enforce ±10 min join window. */
+    private LocalDateTime appointmentScheduledAt;
+    /** Appointment duration in minutes — used by frontend to compute session-end boundary. */
+    private Integer appointmentDurationMins;
 
     public static TelemedicineSessionResponse fromEntity(TelemedicineSession s, boolean isDoctor) {
         return TelemedicineSessionResponse.builder()
@@ -53,6 +57,8 @@ public class TelemedicineSessionResponse {
                 // Only expose call note draft to doctor
                 .callNoteDraft(isDoctor ? s.getCallNoteDraft() : null)
                 .createdAt(s.getCreatedAt())
+                .appointmentScheduledAt(s.getAppointment().getScheduledAt())
+                .appointmentDurationMins(s.getAppointment().getDurationMins())
                 .build();
     }
 }

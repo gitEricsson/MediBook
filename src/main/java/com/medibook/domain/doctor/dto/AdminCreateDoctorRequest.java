@@ -3,6 +3,8 @@ package com.medibook.domain.doctor.dto;
 import jakarta.validation.constraints.*;
 import lombok.Data;
 
+import java.util.List;
+
 /**
  * Request body for admin-provisioned doctor creation.
  * Creates both a User account (sent invitation email) and Doctor profile in one call.
@@ -29,8 +31,14 @@ public class AdminCreateDoctorRequest {
     @NotNull(message = "Department ID is required")
     private Long departmentId;
 
+    /** Additional departments this doctor is cross-listed in. */
+    private List<Long> additionalDepartmentIds;
+
     @Size(max = 150)
     private String specialization;
+
+    /** All specializations; any beyond the primary go here. */
+    private List<@Size(max = 150) String> specializations;
 
     @Size(max = 100)
     private String licenseNumber;

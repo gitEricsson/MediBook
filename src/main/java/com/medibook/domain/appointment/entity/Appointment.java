@@ -1,6 +1,7 @@
 package com.medibook.domain.appointment.entity;
 
 import com.medibook.common.audit.SoftDeleteEntity;
+import com.medibook.common.encryption.PhiAttributeConverter;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.schedule.entity.AppointmentSeries;
@@ -9,9 +10,10 @@ import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.annotations.SQLDelete;
-import org.hibernate.annotations.Where;
+import org.hibernate.annotations.SQLRestriction;
 import org.hibernate.type.SqlTypes;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -23,7 +25,7 @@ import java.time.LocalDateTime;
             @Index(name = "idx_appt_scheduled", columnList = "scheduled_at")
         })
 @SQLDelete(sql = "UPDATE appointments SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?1 WHERE id = ?2")
-@Where(clause = "deleted_at IS NULL")
+@SQLRestriction("deleted_at IS NULL")
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class Appointment extends SoftDeleteEntity {
 
@@ -59,9 +61,11 @@ public class Appointment extends SoftDeleteEntity {
     @Builder.Default
     private AppointmentStatus status = AppointmentStatus.PENDING;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(columnDefinition = "TEXT")
     private String reason;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(columnDefinition = "TEXT")
     private String notes;
 
@@ -83,6 +87,28 @@ public class Appointment extends SoftDeleteEntity {
     @Column(name = "appointment_type", nullable = false, length = 20)
     @Builder.Default
     private AppointmentType type = AppointmentType.IN_PERSON;
+
+    /** PHYSICAL / AUDIO / VIDEO — controls whether telemedicine session is gated */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "consultation_medium", nullable = false, length = 20)
+    @Builder.Default
+    private ConsultationMedium consultationMedium = ConsultationMedium.PHYSICAL;
+
+    /** FIRST_VISIT / FOLLOW_UP / EMERGENCY */
+    @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "consultation_type", nullable = false, length = 20)
+    @Builder.Default
+    private AppointmentType consultationType = AppointmentType.FIRST_VISIT;
+
+    /** True when patient consented to share prior records for a FOLLOW_UP consultation */
+    @Column(name = "follow_up_consent_given", nullable = false)
+    @Builder.Default
+    private boolean followUpConsentGiven = false;
+
+    @Column(name = "consultation_fee", precision = 10, scale = 2)
+    private BigDecimal consultationFee;
 
     @Column(name = "confirmation_code", unique = true, length = 20)
     private String confirmationCode;

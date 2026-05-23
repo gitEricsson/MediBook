@@ -115,12 +115,22 @@ public class NotificationService implements MessageListener {
     public void sendAppointmentConfirmed(AppointmentEvent event) {
         notificationRetryTemplate.execute(context -> {
             try {
+                // Patient
                 save(event.getPatientId(), "Appointment Confirmed",
                         "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is confirmed.",
                         "APPOINTMENT_CONFIRMED", event.getAppointmentId());
                 sendEmailSafely(event.getPatientEmail(),
                         "Your MediBook appointment is confirmed",
                         confirmedEmailBody(event));
+                // Doctor
+                if (event.getDoctorId() != null) {
+                    save(event.getDoctorId(), "Appointment Confirmed",
+                            "Appointment with " + event.getPatientName() + " on " + event.getScheduledAt() + " is now confirmed.",
+                            "APPOINTMENT_CONFIRMED", event.getAppointmentId());
+                    sendEmailSafely(event.getDoctorEmail(),
+                            "Patient appointment confirmed",
+                            doctorConfirmedEmailBody(event));
+                }
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
@@ -175,9 +185,46 @@ public class NotificationService implements MessageListener {
     public void sendAppointmentReminder(AppointmentEvent event) {
         notificationRetryTemplate.execute(context -> {
             try {
-                save(event.getPatientId(), "Appointment Reminder",
-                        "Your appointment with Dr. " + event.getDoctorName() + " on " + event.getScheduledAt() + " is tomorrow.",
-                        "APPOINTMENT_REMINDER", event.getAppointmentId());
+                int hours = event.getHoursBeforeAppointment() != null ? event.getHoursBeforeAppointment() : 24;
+                String timeLabel = switch (hours) {
+                    case 48 -> "in 2 days";
+                    case 2  -> "in 2 hours";
+                    default -> "tomorrow";
+                };
+                String subject = "Reminder: Your appointment is " + timeLabel;
+                String body = "Your appointment with Dr. " + event.getDoctorName()
+                        + " is scheduled for " + event.getScheduledAt() + ". "
+                        + "Please ensure you are on time.";
+
+                // ── Patient: in-app + email ───────────────────────────────
+                save(event.getPatientId(), subject, body, "APPOINTMENT_REMINDER", event.getAppointmentId());
+                if (event.getPatientEmail() != null && !event.getPatientEmail().isBlank()) {
+                    String html = "<p>Hi " + event.getPatientName() + ",</p>"
+                            + "<p>This is a reminder that your appointment with <strong>Dr. " + event.getDoctorName()
+                            + "</strong> is coming up <strong>" + timeLabel + "</strong>.</p>"
+                            + "<p><strong>Scheduled time:</strong> " + event.getScheduledAt() + "</p>"
+                            + "<p>If you need to reschedule or cancel, please do so through the MediBook app.</p>"
+                            + "<p>See you soon,<br/>The MediBook Team</p>";
+                    transactionalEmailService.sendHtml(event.getPatientEmail(), subject, html);
+                }
+
+                // ── Doctor: in-app + email ────────────────────────────────
+                if (event.getDoctorId() != null) {
+                    String doctorBody = "Upcoming appointment with " + event.getPatientName()
+                            + " is " + timeLabel + " (" + event.getScheduledAt() + ").";
+                    save(event.getDoctorId(), "Upcoming appointment " + timeLabel,
+                            doctorBody, "APPOINTMENT_REMINDER", event.getAppointmentId());
+                    if (event.getDoctorEmail() != null && !event.getDoctorEmail().isBlank()) {
+                        String doctorHtml = "<p>Hi Dr. " + event.getDoctorName() + ",</p>"
+                                + "<p>This is a reminder that you have an appointment with <strong>"
+                                + event.getPatientName() + "</strong> coming up <strong>" + timeLabel + "</strong>.</p>"
+                                + "<p><strong>Scheduled time:</strong> " + event.getScheduledAt() + "</p>"
+                                + "<p>The MediBook Team</p>";
+                        transactionalEmailService.sendHtml(event.getDoctorEmail(),
+                                "Upcoming patient appointment " + timeLabel, doctorHtml);
+                    }
+                }
+
                 notificationMetrics.recordSuccess();
                 return null;
             } catch (RuntimeException e) {
@@ -185,7 +232,7 @@ public class NotificationService implements MessageListener {
                     notificationMetrics.recordPermanentFailure();
                     throw e;
                 }
-                log.warn("Notification send failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
+                log.warn("Reminder notification failed (attempt {}), will retry: {}", context.getRetryCount() + 1, e.getMessage());
                 notificationMetrics.recordRetry();
                 throw new TemporaryFailureException("Failed to send appointment reminder notification", e);
             } catch (Exception e) {
@@ -509,10 +556,17 @@ public class NotificationService implements MessageListener {
 
     public long getUnreadCount(Long userId) {
         Cache cache = cacheManager.getCache(UNREAD_COUNT_CACHE);
+        // Cache reads are best-effort. A Redis outage must not propagate as 5xx —
+        // the count is recoverable from Cassandra and the cache is just an accelerator.
         if (cache != null) {
-            Long cached = cache.get(userId, Long.class);
-            if (cached != null) {
-                return cached;
+            try {
+                Long cached = cache.get(userId, Long.class);
+                if (cached != null) {
+                    return cached;
+                }
+            } catch (Exception e) {
+                log.warn("Unread-count cache GET failed for user {}; falling through to Cassandra: {}",
+                        userId, e.getMessage());
             }
         }
 
@@ -525,7 +579,11 @@ public class NotificationService implements MessageListener {
             return 0L;
         }
         if (cache != null) {
-            cache.put(userId, count);
+            try {
+                cache.put(userId, count);
+            } catch (Exception e) {
+                log.warn("Unread-count cache PUT failed for user {}: {}", userId, e.getMessage());
+            }
         }
         return count;
     }
@@ -630,7 +688,12 @@ public class NotificationService implements MessageListener {
     private void evictUnreadCount(Long userId) {
         Cache cache = cacheManager.getCache(UNREAD_COUNT_CACHE);
         if (cache != null) {
-            cache.evict(userId);
+            try {
+                cache.evict(userId);
+            } catch (Exception e) {
+                // Best-effort — the cached value will simply stay stale until TTL.
+                log.warn("Unread-count cache EVICT failed for user {}: {}", userId, e.getMessage());
+            }
         }
     }
 
@@ -680,6 +743,16 @@ public class NotificationService implements MessageListener {
                 "<p>Hi " + safe(event.getPatientName()) + ",</p>"
                 + "<p>Payment received. Your appointment with <strong>Dr. " + safe(event.getDoctorName()) + "</strong>"
                 + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> is now confirmed.</p>"
+                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+        );
+    }
+
+    private String doctorConfirmedEmailBody(AppointmentEvent event) {
+        return wrap(
+                "Patient appointment confirmed",
+                "<p>Hi Dr. " + safe(event.getDoctorName()) + ",</p>"
+                + "<p>The appointment with <strong>" + safe(event.getPatientName()) + "</strong>"
+                + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been paid and confirmed.</p>"
                 + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
         );
     }

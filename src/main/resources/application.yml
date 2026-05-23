@@ -168,8 +168,14 @@ app:
       last-name: ${SUPER_ADMIN_LAST_NAME:Admin}
       phone: ${SUPER_ADMIN_PHONE:}
   payment:
+    # Default-on / default-off here picks which gateway is wired up when no env
+    # var is set. Monnify is on by default because it's the primary gateway for
+    # the deployment; Paystack stays available but opt-in. Each provider is
+    # `@ConditionalOnProperty`-gated server-side, so flipping these flags adds
+    # or removes the matching bean (and the FE's /payments/providers endpoint
+    # reflects whatever is actually wired up).
     paystack:
-      enabled: ${PAYSTACK_ENABLED:true}
+      enabled: ${PAYSTACK_ENABLED:false}
       secret-key: ${PAYSTACK_SECRET_KEY:}
       base-url: ${PAYSTACK_BASE_URL:https://api.paystack.co}
     flutterwave:
@@ -181,7 +187,7 @@ app:
       secret-key: ${STRIPE_SECRET_KEY:}
       webhook-secret: ${STRIPE_WEBHOOK_SECRET:}
     monnify:
-      enabled: ${MONNIFY_ENABLED:false}
+      enabled: ${MONNIFY_ENABLED:true}
       api-key: ${MONNIFY_API_KEY:}
       secret-key: ${MONNIFY_SECRET_KEY:}
       contract-code: ${MONNIFY_CONTRACT_CODE:}
@@ -189,11 +195,22 @@ app:
       base-url: ${MONNIFY_BASE_URL:https://sandbox.monnify.com}
       redirect-url: ${MONNIFY_REDIRECT_URL:http://localhost:3000/payment/callback}
   hospital:
-    # Fallback / default base fee when a doctor's specialization is not listed below.
+    # Minimum notice required for a free patient cancellation (minutes before scheduled start).
+    cancellation-notice-minutes: ${HOSPITAL_CANCELLATION_NOTICE_MINUTES:30}
+    # Fallback base fee when Department.baseConsultationFee is not set.
     consultation-fee: ${HOSPITAL_CONSULTATION_FEE:5000.00}
+    # Senior consultant surcharge (applied when yearsOfExperience > experience-threshold-years).
     experience-premium-percent: ${HOSPITAL_EXPERIENCE_PREMIUM_PERCENT:20}
-    experience-threshold-years: ${HOSPITAL_EXPERIENCE_THRESHOLD_YEARS:10}
-    # Specialization base fees (NGN). Senior premium is layered on top automatically.
+    # Doctors with more than this many years of experience qualify for the senior surcharge.
+    experience-threshold-years: ${HOSPITAL_EXPERIENCE_THRESHOLD_YEARS:20}
+    # EMERGENCY fee = base × (1 + emergency-multiplier-pct/100). Default 150 → 2.5× base.
+    emergency-multiplier-pct: ${HOSPITAL_EMERGENCY_MULTIPLIER_PCT:150}
+    # FOLLOW_UP discount: fee = base × (1 - follow-up-discount-pct/100). Default 20 → 0.8× base.
+    follow-up-discount-pct: ${HOSPITAL_FOLLOW_UP_DISCOUNT_PCT:20}
+    # VIDEO/AUDIO medium surcharge: fee += fee × medium-surcharge-pct/100. Default 10%.
+    medium-surcharge-pct: ${HOSPITAL_MEDIUM_SURCHARGE_PCT:10}
+    # Specialization base fees (NGN) — legacy fallback for DoctorResponse display only.
+    # Primary fee source is Department.baseConsultationFee set at department creation.
     # Override individual entries via env e.g. HOSPITAL_FEE_CARDIOLOGY, or change config and redeploy.
     specialization-fees:
       Cardiology:           ${HOSPITAL_FEE_CARDIOLOGY:15000}
@@ -253,13 +270,17 @@ app:
   api-docs:
     enabled: ${OPENAPI_ENABLED:false}
   storage:
-    type: ${STORAGE_TYPE:local}
+    type: ${STORAGE_TYPE:local}   # local | s3 | gcs
     local:
       path: ${STORAGE_LOCAL_PATH:./uploads}
       base-url: ${STORAGE_BASE_URL:http://localhost:8080}
     s3:
       bucket: ${AWS_S3_BUCKET:medibook-avatars}
       region: ${AWS_REGION:us-east-1}
+    gcs:
+      bucket: ${GCS_BUCKET:medibook-avatars}
+      project-id: ${GCP_PROJECT_ID:}
+      credentials-path: ${GCS_CREDENTIALS_PATH:}   # leave blank to use ADC / Workload Identity
   notification:
     retry:
       max-attempts: 3
@@ -394,8 +415,16 @@ springdoc:
     tags-sorter: alpha
     operations-sorter: alpha
 
-# ─── Actuator / Prometheus ──────────────────────────────────────────────────
+# ─── Actuator / Prometheus / Tracing ────────────────────────────────────────
 management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+    propagation:
+      type: w3c
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://otel-collector:4318/v1/traces}
   endpoints:
     web:
       exposure:
@@ -432,10 +461,9 @@ management:
         enabled: true
 
 # ─── Logging ────────────────────────────────────────────────────────────────
+# Level overrides here; pattern/format is owned by logback-spring.xml (profile-aware).
 logging:
   level:
     com.medibook: INFO
     org.springframework.security: INFO
     org.hibernate.SQL: WARN
-  pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{correlationId:-}] %logger{36} - %msg%n"

@@ -76,6 +76,9 @@ public class DepartmentService {
                 .code(request.getCode().toUpperCase())
                 .description(request.getDescription())
                 .isActive(true)
+                .slotDurationMins(request.getSlotDurationMins())
+                .bufferMins(request.getBufferMins())
+                .baseConsultationFee(request.getBaseConsultationFee())
                 .build();
         return DepartmentResponse.fromEntity(departmentRepository.save(dept));
     }
@@ -98,6 +101,9 @@ public class DepartmentService {
         dept.setName(request.getName());
         dept.setCode(request.getCode().toUpperCase());
         dept.setDescription(request.getDescription());
+        dept.setSlotDurationMins(request.getSlotDurationMins());
+        dept.setBufferMins(request.getBufferMins());
+        dept.setBaseConsultationFee(request.getBaseConsultationFee());
         return DepartmentResponse.fromEntity(departmentRepository.save(dept));
     }
 

@@ -19,6 +19,13 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     Optional<Invoice> findByPaymentId(Long paymentId);
 
+    @Query("""
+        SELECT i FROM Invoice i
+        JOIN FETCH i.payment p
+        WHERE p.appointment.id = :appointmentId
+        """)
+    Optional<Invoice> findByAppointmentId(@Param("appointmentId") Long appointmentId);
+
     Page<Invoice> findByPatientId(Long patientId, Pageable pageable);
 
     @Query("""

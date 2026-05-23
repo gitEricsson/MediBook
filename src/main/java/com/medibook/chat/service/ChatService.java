@@ -165,6 +165,33 @@ public class ChatService {
             return;
         }
 
+        // Enforce the consultation window. Twilio must receive a 2xx even when we
+        // reject the message, so we log and return instead of throwing.
+        if (conv.getStatus() == ChatConversation.ConversationStatus.CLOSED
+                || conv.getStatus() == ChatConversation.ConversationStatus.ARCHIVED) {
+            log.warn("Twilio webhook message dropped — conversation {} is {}", conv.getId(), conv.getStatus());
+            return;
+        }
+        appointmentRepo.findByIdWithDetails(conv.getAppointmentId()).ifPresent(appt -> {
+            if (appt.getConsultationMedium() == com.medibook.domain.appointment.entity.ConsultationMedium.PHYSICAL) {
+                log.warn("Twilio webhook message dropped — conversation {} linked to PHYSICAL appointment", conv.getId());
+                // Physical appointments must not have chat messages — see sendDirectMessage() for enforcement.
+            }
+        });
+        Appointment webhookAppt = appointmentRepo.findByIdWithDetails(conv.getAppointmentId()).orElse(null);
+        if (webhookAppt != null) {
+            LocalDateTime wNow   = LocalDateTime.now();
+            LocalDateTime wOpen  = webhookAppt.getScheduledAt().minusMinutes(CHAT_WINDOW_PRE_MINUTES);
+            LocalDateTime wClose = (webhookAppt.getEndTime() != null
+                    ? webhookAppt.getEndTime()
+                    : webhookAppt.getScheduledAt().plusMinutes(webhookAppt.getDurationMins()))
+                    .plusMinutes(CHAT_WINDOW_POST_MINUTES);
+            if (wNow.isBefore(wOpen) || wNow.isAfter(wClose)) {
+                log.warn("Twilio webhook message for conversation {} rejected — outside consultation window", conv.getId());
+                return;
+            }
+        }
+
         // Determine sender role and ID
         boolean senderIsPatient = author != null && String.valueOf(conv.getPatientId()).equals(author);
         ChatMessage.SenderRole senderRole = senderIsPatient
@@ -349,9 +376,49 @@ public class ChatService {
 
     // ── Direct Messaging ─────────────────────────────────────────────────────
 
+    private static final long CHAT_WINDOW_PRE_MINUTES  = 10;
+    private static final long CHAT_WINDOW_POST_MINUTES = 10;
+
     @Transactional
     public MessageResponse sendDirectMessage(Long conversationId, String body, UserPrincipal principal) {
         ChatConversation conv = loadAndAuthorize(conversationId, principal.getId());
+
+        if (conv.getStatus() == ChatConversation.ConversationStatus.CLOSED
+                || conv.getStatus() == ChatConversation.ConversationStatus.ARCHIVED) {
+            throw new MediBookException(
+                    "This conversation is closed. Chat is read-only after consultation completion.",
+                    HttpStatus.GONE, "CONVERSATION_CLOSED");
+        }
+
+        // Enforce the ±10-minute consultation window.
+        Appointment appt = appointmentRepo.findByIdWithDetails(conv.getAppointmentId())
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", conv.getAppointmentId()));
+
+        if (appt.getConsultationMedium() == com.medibook.domain.appointment.entity.ConsultationMedium.PHYSICAL) {
+            throw new MediBookException(
+                    "Chat is not available for physical consultations.",
+                    HttpStatus.BAD_REQUEST, "PHYSICAL_CONSULTATION_NO_CHAT");
+        }
+
+        LocalDateTime now        = LocalDateTime.now();
+        LocalDateTime windowOpen = appt.getScheduledAt().minusMinutes(CHAT_WINDOW_PRE_MINUTES);
+        LocalDateTime windowClose = (appt.getEndTime() != null
+                ? appt.getEndTime()
+                : appt.getScheduledAt().plusMinutes(appt.getDurationMins()))
+                .plusMinutes(CHAT_WINDOW_POST_MINUTES);
+
+        if (now.isBefore(windowOpen)) {
+            long minutesUntil = java.time.Duration.between(now, windowOpen).toMinutes() + 1;
+            throw new MediBookException(
+                    "Chat opens " + CHAT_WINDOW_PRE_MINUTES + " minutes before the scheduled time. "
+                            + "Please try again in " + minutesUntil + " minute(s).",
+                    HttpStatus.CONFLICT, "SESSION_WINDOW_NOT_OPEN");
+        }
+        if (now.isAfter(windowClose)) {
+            throw new MediBookException(
+                    "The consultation window has closed. Chat is read-only.",
+                    HttpStatus.GONE, "SESSION_WINDOW_EXPIRED");
+        }
 
         ChatMessage.SenderRole role = switch (principal.getRole().name()) {
             case "ROLE_DOCTOR" -> ChatMessage.SenderRole.DOCTOR;

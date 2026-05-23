@@ -35,13 +35,18 @@ public class TwilioTokenService {
 
         try {
             SecretKey key = Keys.hmacShaKeyFor(properties.getApiKeySecret().getBytes(StandardCharsets.UTF_8));
+            // jti must be globally unique per token issuance to prevent replay.
+            // Using apiKeySid + nanosecond epoch + random suffix gives sufficient entropy.
+            String jti = properties.getApiKeySid() + "-" + now.getEpochSecond()
+                    + "-" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 8);
             String token = Jwts.builder()
                     .header()
                     .add("cty", "twilio-fpa;v=1")
                     .and()
-                    .id(properties.getApiKeySid() + "-" + now.getEpochSecond())
+                    .id(jti)
                     .issuer(properties.getApiKeySid())
                     .subject(properties.getAccountSid())
+                    .issuedAt(Date.from(now))
                     .expiration(Date.from(expiresAt))
                     .claim("grants", Map.of(
                             "identity", identity,

@@ -27,7 +27,8 @@ public class PatientProfile extends AuditableEntity {
     @Column(name = "ssn_enc", columnDefinition = "TEXT")
     private String ssnEnc;
 
-    @Column(name = "blood_group", length = 10)
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(name = "blood_group", columnDefinition = "TEXT")
     private String bloodGroup;
 
     @Convert(converter = PhiAttributeConverter.class)
@@ -38,6 +39,7 @@ public class PatientProfile extends AuditableEntity {
     @Column(name = "medical_history_enc", columnDefinition = "TEXT")
     private String medicalHistoryEnc;
 
-    @Column(name = "emergency_contact")
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(name = "emergency_contact", columnDefinition = "TEXT")
     private String emergencyContact;
 }

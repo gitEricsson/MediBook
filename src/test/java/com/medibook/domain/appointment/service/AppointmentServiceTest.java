@@ -396,22 +396,22 @@ class AppointmentServiceTest {
 
 
     @Test
-    void getCancellationPolicy_readsNoticeHoursFromSystemConfig() {
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS"))
-                .thenReturn(Optional.of(new SystemConfig("CANCELLATION_NOTICE_HOURS", "48", null, null)));
+    void getCancellationPolicy_readsNoticeMinutesFromSystemConfig() {
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES"))
+                .thenReturn(Optional.of(new SystemConfig("CANCELLATION_NOTICE_MINUTES", "120", null, null)));
 
         CancellationPolicyResponse policy = appointmentService.getCancellationPolicy();
-        assertEquals(48, policy.getNoticeHours());
-        assertTrue(policy.isFeeApplies());
+        assertEquals(120, policy.getNoticeMinutes());
+        assertFalse(policy.isFeeApplies());
     }
 
     @Test
-    void getCancellationPolicy_defaultsTo24WhenConfigAbsent() {
-        when(configRepository.findById("CANCELLATION_NOTICE_HOURS")).thenReturn(Optional.empty());
+    void getCancellationPolicy_defaultsTo30WhenConfigAbsent() {
+        when(configRepository.findById("CANCELLATION_NOTICE_MINUTES")).thenReturn(Optional.empty());
 
         CancellationPolicyResponse policy = appointmentService.getCancellationPolicy();
-        assertEquals(24, policy.getNoticeHours());
-        assertTrue(policy.isFeeApplies());
+        assertEquals(30, policy.getNoticeMinutes());
+        assertFalse(policy.isFeeApplies());
     }
 
 

@@ -38,6 +38,10 @@ public class TwilioVideoService {
             form.add("UniqueName", roomName);
             form.add("Type", properties.getVideoRoomType());
             form.add("MaxParticipants", "2");
+            // Expire the Twilio room after the consultation window plus post-window grace.
+            // Token TTL (900s) + 10-min pre + 10-min post window = at most ~2700s from creation.
+            // We set a hard ceiling so rooms cannot stay open indefinitely after abandonment.
+            form.add("MaxParticipantDuration", String.valueOf(properties.getRoomMaxDurationSeconds()));
             if (properties.getVideoStatusCallbackUrl() != null
                     && !properties.getVideoStatusCallbackUrl().isBlank()) {
                 form.add("StatusCallback", properties.getVideoStatusCallbackUrl());

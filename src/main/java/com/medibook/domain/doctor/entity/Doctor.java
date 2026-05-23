@@ -7,6 +7,8 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
 @Table(name = "doctors",
@@ -15,7 +17,6 @@ import java.math.BigDecimal;
             @Index(name = "idx_doctors_specialization",columnList = "specialization"),
             @Index(name = "idx_doctors_accepting_new", columnList = "accepting_new"),
             @Index(name = "idx_doctors_is_active",     columnList = "is_active"),
-            @Index(name = "idx_doctors_telemedicine",  columnList = "telemedicine_enabled, is_active"),
             @Index(name = "idx_doctors_rating",        columnList = "average_rating")
         })
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
@@ -33,8 +34,26 @@ public class Doctor extends AuditableEntity {
     @JoinColumn(name = "department_id", nullable = false)
     private Department department;
 
+    /** Secondary departments this doctor is cross-listed in. */
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(
+        name = "doctor_departments",
+        joinColumns = @JoinColumn(name = "doctor_id"),
+        inverseJoinColumns = @JoinColumn(name = "department_id")
+    )
+    @Builder.Default
+    private Set<Department> additionalDepartments = new HashSet<>();
+
+    /** Primary specialization — displayed first and used for fee lookup. */
     @Column(length = 150)
     private String specialization;
+
+    /** All specializations including the primary one. */
+    @ElementCollection(fetch = FetchType.LAZY)
+    @CollectionTable(name = "doctor_specializations", joinColumns = @JoinColumn(name = "doctor_id"))
+    @Column(name = "specialization_value", length = 150)
+    @Builder.Default
+    private Set<String> specializations = new HashSet<>();
 
     @Column(name = "license_number", nullable = false, unique = true, length = 100)
     private String licenseNumber;
@@ -71,10 +90,6 @@ public class Doctor extends AuditableEntity {
 
     @Column(length = 10)
     private String gender;
-
-    @Column(name = "telemedicine_enabled", nullable = false)
-    @Builder.Default
-    private boolean telemedicineEnabled = false;
 
     @Column(name = "average_rating", nullable = false)
     @Builder.Default

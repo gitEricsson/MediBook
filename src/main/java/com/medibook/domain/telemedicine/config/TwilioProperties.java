@@ -17,6 +17,8 @@ public class TwilioProperties {
     private String videoRoomType = "group";
     private long videoTokenTtlSeconds = 900;
     private String videoStatusCallbackUrl;
+    /** Hard ceiling on how long a Twilio room stays open (seconds). Default: 3600 (1 hour). */
+    private long roomMaxDurationSeconds = 3600;
 
     public boolean isVideoConfigured() {
         return hasText(accountSid) && hasText(apiKeySid) && hasText(apiKeySecret);

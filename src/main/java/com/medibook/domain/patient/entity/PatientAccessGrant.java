@@ -8,6 +8,7 @@ import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -47,6 +48,15 @@ public class PatientAccessGrant {
 
     @Column(length = 500)
     private String reason;
+
+    /**
+     * Inclusive upper bound for which patient records this doctor may view.
+     * Set when the grant was auto-created from a FOLLOW_UP consent — the
+     * patient agreed to share history up to (and including) this date only.
+     * {@code null} means no cutoff (legacy approval flow / manual grant).
+     */
+    @Column(name = "access_up_to_date")
+    private LocalDate accessUpToDate;
 
     public enum AccessGrantStatus {
         PENDING,

@@ -3,6 +3,7 @@ package com.medibook.domain.schedule.controller;
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.common.response.ApiResponse;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.schedule.dto.AdminLeaveResponse;
 import com.medibook.domain.schedule.dto.DoctorLeaveRequest;
 import com.medibook.domain.schedule.dto.DoctorLeaveResponse;
 import com.medibook.domain.schedule.entity.DoctorLeave;
@@ -76,25 +77,33 @@ public class DoctorLeaveController {
     @GetMapping("/api/v1/admin/leaves/pending")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Get all pending leave requests for admin review")
-    public ApiResponse<List<DoctorLeave>> getPendingLeaves() {
-        return ApiResponse.ok(leaveService.getAllPendingLeaves());
+    public ApiResponse<List<AdminLeaveResponse>> getPendingLeaves() {
+        return ApiResponse.ok(leaveService.getAllPendingLeaveResponses());
+    }
+
+    @GetMapping("/api/v1/admin/leaves")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @Operation(summary = "List leave requests across all doctors; optional ?status= filter")
+    public ApiResponse<List<AdminLeaveResponse>> listAdminLeaves(
+            @RequestParam(required = false) String status) {
+        return ApiResponse.ok(leaveService.getAllLeaveResponses(status));
     }
 
     @PostMapping("/api/v1/admin/leaves/{leaveId}/approve")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Approve a pending leave request")
-    public ApiResponse<DoctorLeave> approveLeave(
+    public ApiResponse<AdminLeaveResponse> approveLeave(
             @PathVariable Long leaveId,
             @CurrentUser UserPrincipal principal) {
-        return ApiResponse.ok(leaveService.approveLeave(leaveId, principal));
+        return ApiResponse.ok(leaveService.approveLeaveResponse(leaveId, principal));
     }
 
     @PostMapping("/api/v1/admin/leaves/{leaveId}/reject")
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "Reject a pending leave request")
-    public ApiResponse<DoctorLeave> rejectLeave(
+    public ApiResponse<AdminLeaveResponse> rejectLeave(
             @PathVariable Long leaveId,
             @CurrentUser UserPrincipal principal) {
-        return ApiResponse.ok(leaveService.rejectLeave(leaveId, principal));
+        return ApiResponse.ok(leaveService.rejectLeaveResponse(leaveId, principal));
     }
 }

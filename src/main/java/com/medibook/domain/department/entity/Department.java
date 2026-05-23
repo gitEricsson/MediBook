@@ -32,6 +32,16 @@ public class Department extends AuditableEntity {
     @Builder.Default
     private BigDecimal baseConsultationFee = BigDecimal.valueOf(5000.00);
 
+    /** Default slot duration for all doctors in this department (minutes). Doctor-level override takes precedence. */
+    @Column(name = "slot_duration_mins", nullable = false)
+    @Builder.Default
+    private int slotDurationMins = 30;
+
+    /** Buffer between consecutive slots for cleaning/preparation (minutes). */
+    @Column(name = "buffer_mins", nullable = false)
+    @Builder.Default
+    private int bufferMins = 0;
+
     @Version
     @Builder.Default
     private Long version = 0L;

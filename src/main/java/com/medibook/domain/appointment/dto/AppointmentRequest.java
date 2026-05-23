@@ -10,6 +10,7 @@ import lombok.Data;
 import java.time.LocalDateTime;
 
 import com.medibook.domain.appointment.entity.AppointmentType;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 
 @Data
 public class AppointmentRequest {
@@ -18,6 +19,17 @@ public class AppointmentRequest {
 
     @NotNull(message = "Appointment type is required")
     private AppointmentType type = AppointmentType.IN_PERSON;
+
+    /** PHYSICAL / AUDIO / VIDEO — determines telemedicine eligibility */
+    @NotNull(message = "Consultation medium is required")
+    private ConsultationMedium consultationMedium = ConsultationMedium.PHYSICAL;
+
+    /** FIRST_VISIT / FOLLOW_UP / EMERGENCY */
+    @NotNull(message = "Consultation type is required")
+    private AppointmentType consultationType = AppointmentType.FIRST_VISIT;
+
+    /** Required to be true when consultationType == FOLLOW_UP */
+    private boolean followUpConsentGiven = false;
 
     @NotNull(message = "Doctor ID is required")
     private Long doctorId;

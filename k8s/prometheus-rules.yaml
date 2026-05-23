@@ -1,0 +1,155 @@
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: medibook-alerts
+  namespace: medibook
+  labels:
+    app: medibook
+    prometheus: kube-prometheus
+    role: alert-rules
+spec:
+  groups:
+
+    # ── API Reliability ──────────────────────────────────────────────────────
+    - name: medibook.api.reliability
+      interval: 60s
+      rules:
+
+        - alert: HighErrorRate
+          expr: |
+            (
+              sum(rate(http_server_requests_seconds_count{application="medibook", status=~"5.."}[5m]))
+              /
+              sum(rate(http_server_requests_seconds_count{application="medibook"}[5m]))
+            ) > 0.05
+          for: 2m
+          labels:
+            severity: critical
+            team: backend
+          annotations:
+            summary: "MediBook API error rate > 5%"
+            description: "HTTP 5xx rate is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+        - alert: HighP99Latency
+          expr: |
+            histogram_quantile(0.99,
+              sum(rate(http_server_requests_seconds_bucket{application="medibook"}[5m])) by (le, uri)
+            ) > 1
+          for: 5m
+          labels:
+            severity: warning
+            team: backend
+          annotations:
+            summary: "MediBook p99 latency > 1s on {{ $labels.uri }}"
+            description: "p99 response time is {{ $value | humanizeDuration }} on {{ $labels.uri }}."
+
+        - alert: HighP95Latency
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(http_server_requests_seconds_bucket{application="medibook"}[5m])) by (le)
+            ) > 0.5
+          for: 5m
+          labels:
+            severity: warning
+            team: backend
+          annotations:
+            summary: "MediBook p95 latency > 500ms"
+            description: "p95 response time is {{ $value | humanizeDuration }}."
+
+    # ── Pod Health ───────────────────────────────────────────────────────────
+    - name: medibook.pod.health
+      interval: 60s
+      rules:
+
+        - alert: PodRestartingFrequently
+          expr: |
+            rate(kube_pod_container_status_restarts_total{namespace="medibook"}[15m]) * 60 > 1
+          for: 5m
+          labels:
+            severity: warning
+            team: platform
+          annotations:
+            summary: "Pod {{ $labels.pod }} is restarting frequently"
+            description: "Container {{ $labels.container }} has restarted more than once per minute for 5 minutes."
+
+        - alert: OOMKill
+          expr: |
+            kube_pod_container_status_last_terminated_reason{reason="OOMKilled", namespace="medibook"} == 1
+          for: 0m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "OOMKill: {{ $labels.pod }}/{{ $labels.container }}"
+            description: "Container was terminated due to OOM. Review memory limits."
+
+        - alert: DeploymentReplicasMismatch
+          expr: |
+            kube_deployment_spec_replicas{namespace="medibook"}
+            != kube_deployment_status_available_replicas{namespace="medibook"}
+          for: 5m
+          labels:
+            severity: critical
+            team: platform
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} has fewer replicas than desired"
+            description: "Expected {{ $value }} available replicas; some pods may be crash-looping."
+
+    # ── Kafka Consumer Lag ───────────────────────────────────────────────────
+    - name: medibook.kafka.lag
+      interval: 60s
+      rules:
+
+        - alert: KafkaConsumerLagHigh
+          expr: |
+            kafka_consumer_group_lag{namespace="medibook"} > 1000
+          for: 5m
+          labels:
+            severity: warning
+            team: backend
+          annotations:
+            summary: "Kafka consumer lag high for group {{ $labels.group }}"
+            description: "Consumer group {{ $labels.group }} on topic {{ $labels.topic }} is {{ $value }} messages behind."
+
+        - alert: KafkaConsumerLagCritical
+          expr: |
+            kafka_consumer_group_lag{namespace="medibook"} > 10000
+          for: 2m
+          labels:
+            severity: critical
+            team: backend
+          annotations:
+            summary: "Kafka consumer lag critical for group {{ $labels.group }}"
+            description: "Consumer group {{ $labels.group }} is {{ $value }} messages behind — refund or payment events may be stalled."
+
+    # ── Business Domain ──────────────────────────────────────────────────────
+    - name: medibook.business
+      interval: 300s
+      rules:
+
+        - alert: NoAppointmentsBooked
+          expr: |
+            sum(increase(appointments_created_total{application="medibook"}[1h])) == 0
+          for: 0m
+          labels:
+            severity: warning
+            team: product
+          annotations:
+            summary: "No appointments booked in the last hour"
+            description: "Zero appointments.created recorded. Could indicate a booking flow outage."
+
+        - alert: PaymentSuccessRateLow
+          expr: |
+            (
+              sum(increase(payments_succeeded_total{application="medibook"}[30m]))
+              /
+              (sum(increase(payments_initiated_total{application="medibook"}[30m])) + 1)
+            ) < 0.5
+          for: 10m
+          labels:
+            severity: warning
+            team: backend
+          annotations:
+            summary: "Payment success rate below 50% in the last 30 minutes"
+            description: "Success rate is {{ $value | humanizePercentage }}. Payment gateway may be degraded."

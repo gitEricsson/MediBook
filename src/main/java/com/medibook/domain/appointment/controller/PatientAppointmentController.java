@@ -34,6 +34,7 @@ public class PatientAppointmentController {
 
     private final AppointmentService appointmentService;
     private final AppointmentIdempotencyService appointmentIdempotencyService;
+    private final com.medibook.domain.appointment.service.AppointmentPricingService pricingService;
 
     @PostMapping("/appointments")
     @PreAuthorize("hasRole('PATIENT')")
@@ -205,5 +206,20 @@ public class PatientAppointmentController {
     @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode ="200", description = "Cancellation policy retrieved successfully")
     public ResponseEntity<ApiResponse<CancellationPolicyResponse>> getCancellationPolicy() {
         return ResponseEntity.ok(ApiResponse.ok(appointmentService.getCancellationPolicy()));
+    }
+
+    @GetMapping("/appointments/fee-estimate")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(
+        summary = "Estimate consultation fee",
+        description = "Computes the fee for the given doctor + consultation type + medium combination. "
+                    + "Use on the booking review page to update the displayed fee dynamically.",
+        tags = {"Patient Appointments"}
+    )
+    public ResponseEntity<ApiResponse<com.medibook.domain.appointment.dto.FeeEstimateResponse>> estimateFee(
+            @RequestParam Long doctorId,
+            @RequestParam(defaultValue = "FIRST_VISIT") com.medibook.domain.appointment.entity.AppointmentType consultationType,
+            @RequestParam(defaultValue = "PHYSICAL") com.medibook.domain.appointment.entity.ConsultationMedium medium) {
+        return ResponseEntity.ok(ApiResponse.ok(pricingService.estimateFee(doctorId, consultationType, medium)));
     }
 }

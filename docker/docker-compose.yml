@@ -100,6 +100,14 @@ services:
           memory: 512M
 
   # ─── Cassandra
+  #
+  # Memory tuning notes — exit 137 means the kernel OOM-killed it during
+  # startup. Cassandra 4.x autotunes its JVM heap based on the *host* RAM it
+  # can see, which on Docker Desktop is generous (4–8 GB) even though the
+  # actual VM ceiling is much lower. We pin MAX_HEAP_SIZE explicitly so the
+  # JVM behaves itself in a constrained dev environment. Compose v2's
+  # `deploy.resources.limits` is Swarm-only and silently ignored by
+  # `docker compose up`, so we use the top-level `mem_limit` key instead.
   cassandra:
     image: cassandra:4.1
     container_name: medibook-cassandra
@@ -107,24 +115,31 @@ services:
     environment:
       CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-MediBookCluster}
       CASSANDRA_DC: ${CASSANDRA_DATACENTER:-datacenter1}
+      # Explicit heap sizing — 1G heap + 256M new-gen is plenty for dev.
+      # Don't auto-tune from container "host" memory.
+      MAX_HEAP_SIZE: ${CASSANDRA_MAX_HEAP:-1G}
+      HEAP_NEWSIZE: ${CASSANDRA_HEAP_NEWSIZE:-256M}
+      # Reduce default memtable size so the JVM doesn't reserve more off-heap
+      # than the container has room for.
+      JVM_OPTS: "-Xss256k"
+    mem_limit: 2g
+    mem_reservation: 1g
     ports:
       - "9042:9042"
     volumes:
       - cassandra-data:/var/lib/cassandra
     healthcheck:
-      test: ["CMD-SHELL", "cqlsh -e 'describe keyspaces' || exit 1"]
-      interval: 30s
-      timeout: 20s
-      retries: 20
-      start_period: 120s
+      # Use cqlsh with --no-color (faster startup) and a short timeout so a
+      # single slow probe doesn't pile up memory pressure.
+      test: ["CMD-SHELL", "cqlsh --no-color -e 'SELECT release_version FROM system.local' >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 30
+      # Cassandra cold-start on a laptop with a 1G heap can take 2–4 minutes.
+      # Generous start_period stops the orchestrator from giving up early.
+      start_period: 240s
     networks:
       - medibook-net
-    deploy:
-      resources:
-        limits:
-          memory: 1536M
-        reservations:
-          memory: 1024M
 
   cassandra-init:
     image: cassandra:4.1
@@ -132,12 +147,20 @@ services:
     depends_on:
       cassandra:
         condition: service_healthy
+    # Cap the init JVM tightly — it only runs cqlsh once. Without a heap pin
+    # this sidecar tries to claim ~1G alongside the main Cassandra node,
+    # doubling up on memory pressure during the boot phase.
+    environment:
+      MAX_HEAP_SIZE: 256M
+      HEAP_NEWSIZE: 64M
+    mem_limit: 512m
     command:
       - /bin/sh
       - -c
       - >
         cqlsh cassandra ${CASSANDRA_PORT:-9042} -e "CREATE KEYSPACE IF NOT EXISTS ${CASSANDRA_KEYSPACE:-medibook}
         WITH replication = {'class': 'NetworkTopologyStrategy', '${CASSANDRA_DATACENTER:-datacenter1}': 1};"
+    restart: "no"
     networks:
       - medibook-net
 

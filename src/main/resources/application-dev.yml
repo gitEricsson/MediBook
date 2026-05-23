@@ -48,7 +48,17 @@ app:
   seed:
     enabled: ${SEED_DATA_ENABLED:true}
 
+# ─── Observability — disable OTLP export in local dev (no collector running) ──
+management:
+  tracing:
+    enabled: false
+  otlp:
+    tracing:
+      endpoint: ""   # prevents the OkHttp thread from polling a missing host
+
 logging:
   level:
     com.medibook: DEBUG
     org.springframework.security: DEBUG
+    # Suppress the OTel exporter noise in dev
+    io.opentelemetry.exporter: ERROR

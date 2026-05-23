@@ -3,7 +3,7 @@ package com.medibook.domain.telemedicine.service;
 import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.appointment.entity.Appointment;
-import com.medibook.domain.appointment.entity.AppointmentType;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.telemedicine.dto.ChatMessageRequest;
 import com.medibook.domain.telemedicine.dto.ChatMessageResponse;
@@ -29,6 +29,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -51,14 +53,14 @@ public class TelemedicineSessionService {
         Appointment appointment = appointmentRepository.findByIdWithDetails(appointmentId)
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", appointmentId));
 
-        if (appointment.getType() != AppointmentType.TELEMEDICINE) {
-            throw new MediBookException("Appointment is not a telemedicine appointment",
-                    HttpStatus.BAD_REQUEST, "NOT_TELEMEDICINE");
-        }
-
-        if (!appointment.getDoctor().isTelemedicineEnabled()) {
-            throw new MediBookException("Doctor is not enabled for telemedicine",
-                    HttpStatus.BAD_REQUEST, "TELEMEDICINE_NOT_ENABLED");
+        // Guard: PHYSICAL consultations have no video/audio channel.
+        // We check medium rather than legacy type so FIRST_VISIT/FOLLOW_UP with VIDEO or AUDIO
+        // medium are accepted; only explicitly PHYSICAL slots are rejected.
+        if (appointment.getConsultationMedium() == null
+                || appointment.getConsultationMedium() == ConsultationMedium.PHYSICAL) {
+            throw new MediBookException(
+                    "Telemedicine sessions can only be created for VIDEO or AUDIO consultations.",
+                    HttpStatus.BAD_REQUEST, "PHYSICAL_CONSULTATION_NO_TELEMEDICINE");
         }
 
         if (!appointment.getPatient().getId().equals(principal.getId())
@@ -193,6 +195,9 @@ public class TelemedicineSessionService {
         return TelemedicineSessionResponse.fromEntity(session, isDoctor);
     }
 
+    private static final long CHAT_WINDOW_PRE_MINUTES  = 10;
+    private static final long CHAT_WINDOW_POST_MINUTES = 10;
+
     @Transactional
     public ChatMessageResponse sendChatMessage(Long sessionId, ChatMessageRequest req, UserPrincipal principal) {
         TelemedicineSession session = getSessionWithAuthCheck(sessionId, principal);
@@ -203,17 +208,59 @@ public class TelemedicineSessionService {
                     HttpStatus.BAD_REQUEST, "SESSION_NOT_ACTIVE");
         }
 
+        Appointment appt = session.getAppointment();
+
+        // Physical consultations have no telemedicine chat channel.
+        if (appt.getConsultationMedium() == ConsultationMedium.PHYSICAL) {
+            throw new MediBookException(
+                    "In-session chat is not available for physical consultations.",
+                    HttpStatus.BAD_REQUEST, "PHYSICAL_CONSULTATION_NO_CHAT");
+        }
+
+        // Enforce the ±10-minute consultation window — mirrors TelemedicineCallService.ensureCallAllowed().
+        LocalDateTime now        = LocalDateTime.now();
+        LocalDateTime windowOpen = appt.getScheduledAt().minusMinutes(CHAT_WINDOW_PRE_MINUTES);
+        LocalDateTime windowClose = (appt.getEndTime() != null
+                ? appt.getEndTime()
+                : appt.getScheduledAt().plusMinutes(appt.getDurationMins()))
+                .plusMinutes(CHAT_WINDOW_POST_MINUTES);
+
+        if (now.isBefore(windowOpen)) {
+            long minutesUntil = java.time.Duration.between(now, windowOpen).toMinutes() + 1;
+            throw new MediBookException(
+                    "Chat opens " + CHAT_WINDOW_PRE_MINUTES + " minutes before the scheduled time. "
+                            + "Please try again in " + minutesUntil + " minute(s).",
+                    HttpStatus.CONFLICT, "SESSION_WINDOW_NOT_OPEN");
+        }
+        if (now.isAfter(windowClose)) {
+            throw new MediBookException(
+                    "The consultation window has closed. Chat is read-only after "
+                            + CHAT_WINDOW_POST_MINUTES + " minutes past the scheduled end time.",
+                    HttpStatus.GONE, "SESSION_WINDOW_EXPIRED");
+        }
+
         User sender = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", principal.getId()));
 
         String role = principal.getAuthorities().iterator().next().getAuthority();
-        Instant now = Instant.now();
+        Instant msgInstant = Instant.now();
         UUID messageId = UUID.randomUUID();
 
-        // Write to Cassandra (high-frequency write path)
+        // Write to MySQL first — inside the @Transactional boundary so a rollback
+        // here does not leave a Cassandra orphan. Cassandra is written after commit.
+        ChatMessage msg = ChatMessage.builder()
+                .session(session)
+                .sender(sender)
+                .senderRole(role)
+                .message(req.getMessage())
+                .sentAt(java.time.LocalDateTime.ofInstant(msgInstant, java.time.ZoneOffset.UTC))
+                .build();
+        ChatMessageResponse response = ChatMessageResponse.fromEntity(chatMessageRepository.save(msg));
+
+        // Mirror to Cassandra after the MySQL commit succeeds (eventual-consistency write).
         CassandraChatMessage cassandraMsg = CassandraChatMessage.builder()
                 .sessionId(sessionId)
-                .sentAt(now)
+                .sentAt(msgInstant)
                 .messageId(messageId)
                 .senderId(sender.getId())
                 .senderName(sender.getFullName())
@@ -221,18 +268,15 @@ public class TelemedicineSessionService {
                 .message(req.getMessage())
                 .system(false)
                 .build();
-        cassandraChatRepo.save(cassandraMsg);
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { cassandraChatRepo.save(cassandraMsg); }
+            });
+        } else {
+            cassandraChatRepo.save(cassandraMsg);
+        }
 
-        // Also mirror to MySQL for relational integrity and history queries
-        ChatMessage msg = ChatMessage.builder()
-                .session(session)
-                .sender(sender)
-                .senderRole(role)
-                .message(req.getMessage())
-                .sentAt(java.time.LocalDateTime.ofInstant(now, java.time.ZoneOffset.UTC))
-                .build();
-
-        return ChatMessageResponse.fromEntity(chatMessageRepository.save(msg));
+        return response;
     }
 
     @Transactional(readOnly = true)

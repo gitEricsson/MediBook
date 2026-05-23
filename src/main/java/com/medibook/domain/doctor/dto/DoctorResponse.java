@@ -2,12 +2,16 @@ package com.medibook.domain.doctor.dto;
 
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.config.HospitalProperties;
+import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
 import lombok.Builder;
 import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Data
 @Builder
@@ -24,16 +28,21 @@ public class DoctorResponse {
     private String bio;
     private Long departmentId;
     private String departmentName;
+    /** All department IDs: primary + additional. */
+    private List<Long> departmentIds;
+    /** All department names: primary + additional. */
+    private List<String> departmentNames;
+    /** All specializations: primary + additional. Empty list if none set. */
+    private List<String> specializations;
     private String languages;
     private boolean acceptingNew;
+    /** True when the doctor profile is active (admin has not deactivated it). */
+    private boolean isActive;
     private int slotDurationMins;
     private int yearsOfExperience;
     private BigDecimal consultationFee;
     private boolean seniorConsultant;
     private String gender;
-    private boolean telemedicineEnabled;
-    private double averageRating;
-    private int reviewCount;
     private LocalDateTime createdAt;
 
     /**
@@ -50,6 +59,8 @@ public class DoctorResponse {
             throw new ResourceNotFoundException("Department", "doctor.id", d.getId());
         }
         boolean senior = hospitalProps.isSeniorConsultant(d.getYearsOfExperience());
+        // Base fee comes from department (policy-driven); surcharges are applied at booking time.
+        java.math.BigDecimal baseFee = d.getDepartment().getBaseConsultationFee();
         return DoctorResponse.builder()
                 .id(d.getId())
                 .userId(d.getUser().getId())
@@ -60,18 +71,56 @@ public class DoctorResponse {
                 .bio(d.getBio())
                 .departmentId(d.getDepartment().getId())
                 .departmentName(d.getDepartment().getName())
+                .departmentIds(buildDeptIds(d))
+                .departmentNames(buildDeptNames(d))
+                .specializations(buildSpecializations(d))
                 .languages(d.getLanguages())
                 .acceptingNew(d.isAcceptingNew())
+                .isActive(d.isActive())
                 .slotDurationMins(d.getSlotDurationMins())
                 .yearsOfExperience(d.getYearsOfExperience())
-                .consultationFee(hospitalProps.getFeeForDoctor(d.getSpecialization(), d.getYearsOfExperience()))
+                .consultationFee(baseFee)
                 .seniorConsultant(senior)
                 .gender(d.getGender())
-                .telemedicineEnabled(d.isTelemedicineEnabled())
-                .averageRating(d.getAverageRating())
-                .reviewCount(d.getReviewCount())
                 .createdAt(d.getCreatedAt())
                 .build();
+    }
+
+    private static List<Long> buildDeptIds(Doctor d) {
+        List<Long> ids = new ArrayList<>();
+        ids.add(d.getDepartment().getId());
+        if (d.getAdditionalDepartments() != null) {
+            d.getAdditionalDepartments().stream()
+                    .map(Department::getId)
+                    .filter(id -> !ids.contains(id))
+                    .forEach(ids::add);
+        }
+        return ids;
+    }
+
+    private static List<String> buildDeptNames(Doctor d) {
+        List<String> names = new ArrayList<>();
+        names.add(d.getDepartment().getName());
+        if (d.getAdditionalDepartments() != null) {
+            d.getAdditionalDepartments().stream()
+                    .map(Department::getName)
+                    .filter(n -> !names.contains(n))
+                    .forEach(names::add);
+        }
+        return names;
+    }
+
+    private static List<String> buildSpecializations(Doctor d) {
+        List<String> specs = new ArrayList<>();
+        if (d.getSpecialization() != null && !d.getSpecialization().isBlank()) {
+            specs.add(d.getSpecialization());
+        }
+        if (d.getSpecializations() != null) {
+            d.getSpecializations().stream()
+                    .filter(s -> s != null && !s.isBlank() && !specs.contains(s))
+                    .forEach(specs::add);
+        }
+        return specs;
     }
 
     /** @deprecated Use {@link #fromEntity(Doctor, HospitalProperties)} instead */
@@ -94,16 +143,17 @@ public class DoctorResponse {
                 .bio(d.getBio())
                 .departmentId(d.getDepartment().getId())
                 .departmentName(d.getDepartment().getName())
+                .departmentIds(buildDeptIds(d))
+                .departmentNames(buildDeptNames(d))
+                .specializations(buildSpecializations(d))
                 .languages(d.getLanguages())
                 .acceptingNew(d.isAcceptingNew())
+                .isActive(d.isActive())
                 .slotDurationMins(d.getSlotDurationMins())
                 .yearsOfExperience(d.getYearsOfExperience())
                 .consultationFee(d.getEffectiveConsultationFee())
                 .seniorConsultant(senior)
                 .gender(d.getGender())
-                .telemedicineEnabled(d.isTelemedicineEnabled())
-                .averageRating(d.getAverageRating())
-                .reviewCount(d.getReviewCount())
                 .createdAt(d.getCreatedAt())
                 .build();
     }

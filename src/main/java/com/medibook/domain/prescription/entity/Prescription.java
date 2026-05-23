@@ -35,16 +35,20 @@ public class Prescription extends SoftDeleteEntity {
     @JoinColumn(name = "patient_id", nullable = false)
     private User patient;
 
-    @Column(name = "drug_name", nullable = false, length = 255)
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(name = "drug_name", nullable = false, columnDefinition = "TEXT")
     private String drugName;
 
-    @Column(nullable = false, length = 120)
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String dosage;
 
-    @Column(length = 60)
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(columnDefinition = "TEXT")
     private String route;
 
-    @Column(nullable = false, length = 120)
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(nullable = false, columnDefinition = "TEXT")
     private String frequency;
 
     @Column(name = "duration_days")
@@ -68,6 +72,7 @@ public class Prescription extends SoftDeleteEntity {
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
-    @Column(name = "cancelled_reason", length = 255)
+    @Convert(converter = PhiAttributeConverter.class)
+    @Column(name = "cancelled_reason", columnDefinition = "TEXT")
     private String cancelledReason;
 }

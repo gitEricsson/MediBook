@@ -3,7 +3,9 @@ package com.medibook.seed;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.entity.AppointmentType;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
+import com.medibook.domain.appointment.service.AppointmentPricingService;
 import com.medibook.domain.consultation.entity.ConsultationNote;
 import com.medibook.domain.consultation.repository.ConsultationNoteRepository;
 import com.medibook.domain.department.entity.Department;
@@ -50,8 +52,10 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Slf4j
@@ -81,27 +85,37 @@ public class SeedDataRunner implements ApplicationRunner {
     private final WaitlistRepository          waitlistRepo;
     private final NotificationService         notificationService;
     private final PasswordEncoder             passwordEncoder;
+    private final AppointmentPricingService   pricingService;
 
     // ══════════════════════════════════════════════════════════════════════════
     // Static seed data specs
     // ══════════════════════════════════════════════════════════════════════════
 
-    private record DeptSpec(String name, String code, String desc, BigDecimal fee) {}
+    /**
+     * slotDurationMins = avg consultation time (minutes) — actual patient face-time.
+     * bufferMins       = prep/cleanup gap between consecutive slots.
+     * Total step       = slotDurationMins + bufferMins.
+     */
+    private record DeptSpec(
+        String name, String code, String desc,
+        BigDecimal fee, int slotDurationMins, int bufferMins
+    ) {}
 
     private static final List<DeptSpec> DEPT_SPECS = List.of(
-        new DeptSpec("Cardiology",       "CARD", "Heart and cardiovascular disease management",          new BigDecimal("15000.00")),
-        new DeptSpec("Dermatology",      "DERM", "Skin, hair, and nail conditions",                     new BigDecimal("8000.00")),
-        new DeptSpec("Pediatrics",       "PEDS", "Medical care for infants, children, and adolescents", new BigDecimal("7500.00")),
-        new DeptSpec("Neurology",        "NEUR", "Brain and nervous system disorders",                  new BigDecimal("12000.00")),
-        new DeptSpec("General Medicine", "GMED", "Primary and preventive healthcare",                   new BigDecimal("5000.00")),
-        new DeptSpec("Orthopedics",      "ORTH", "Bone, joint, and musculoskeletal conditions",         new BigDecimal("10000.00")),
-        new DeptSpec("Emergency",        "EMRG", "Acute and emergency medical care",                    new BigDecimal("20000.00"))
+        new DeptSpec("Cardiology",       "CARD", "Heart and cardiovascular disease management",          new BigDecimal("15000.00"), 45, 10),
+        new DeptSpec("Dermatology",      "DERM", "Skin, hair, and nail conditions",                     new BigDecimal("8000.00"),  20,  5),
+        new DeptSpec("Pediatrics",       "PEDS", "Medical care for infants, children, and adolescents", new BigDecimal("7500.00"),  30,  5),
+        new DeptSpec("Neurology",        "NEUR", "Brain and nervous system disorders",                  new BigDecimal("12000.00"), 45, 10),
+        new DeptSpec("General Medicine", "GMED", "Primary and preventive healthcare",                   new BigDecimal("5000.00"),  15,  5),
+        new DeptSpec("Orthopedics",      "ORTH", "Bone, joint, and musculoskeletal conditions",         new BigDecimal("10000.00"), 30,  5),
+        new DeptSpec("Emergency",        "EMRG", "Acute and emergency medical care",                    new BigDecimal("20000.00"), 60, 10)
     );
 
     private record DoctorSpec(
         String email, String firstName, String lastName, String phone,
         String deptName, String specialization, String license,
-        String bio, int years, BigDecimal fee, String gender, boolean telemedicine
+        String bio, int years, BigDecimal fee, String gender,
+        List<String> additionalDeptNames, List<String> extraSpecializations
     ) {}
 
     private static final List<DoctorSpec> DOCTOR_SPECS = List.of(
@@ -109,31 +123,41 @@ public class SeedDataRunner implements ApplicationRunner {
             "dr.chukwuemeka@medibook.local", "Chukwuemeka", "Obiora", "+2348012345001",
             "Cardiology", "Interventional Cardiology", "LIC-CARD-001",
             "Senior cardiologist with 15 years of experience in interventional procedures and heart failure management. Fellow of the Nigerian Cardiac Society.",
-            15, new BigDecimal("18000.00"), "Male", true
+            15, new BigDecimal("18000.00"), "Male",
+            List.of("Emergency"),
+            List.of("Electrophysiology", "Heart Failure Management")
         ),
         new DoctorSpec(
             "dr.aisha@medibook.local", "Aisha", "Mohammed", "+2348012345002",
             "Dermatology", "Clinical Dermatology", "LIC-DERM-002",
             "Specialist in inflammatory skin disorders, cosmetic dermatology, and paediatric skin conditions. MSc Dermatology, University of Lagos.",
-            8, new BigDecimal("10000.00"), "Female", false
+            8, new BigDecimal("10000.00"), "Female",
+            List.of("Pediatrics"),
+            List.of("Cosmetic Dermatology", "Paediatric Dermatology")
         ),
         new DoctorSpec(
             "dr.adaeze@medibook.local", "Adaeze", "Nwosu", "+2348012345003",
             "Pediatrics", "General Pediatrics", "LIC-PEDS-003",
             "Compassionate paediatrician dedicated to children's health from newborns through adolescence. Special interest in developmental and nutritional disorders.",
-            12, new BigDecimal("8500.00"), "Female", true
+            12, new BigDecimal("8500.00"), "Female",
+            List.of("General Medicine"),
+            List.of("Neonatology", "Adolescent Medicine")
         ),
         new DoctorSpec(
             "dr.ibrahim@medibook.local", "Ibrahim", "Aliyu", "+2348012345004",
             "Neurology", "Neurology", "LIC-NEUR-004",
-            "Consultant neurologist specialising in epilepsy, stroke, and neurodegenerative disorders. 20 years of academic and clinical neurology practice.",
-            20, new BigDecimal("15000.00"), "Male", false
+            "Consultant neurologist specialising in epilepsy, stroke, and neurodegenerative disorders. 22 years of academic and clinical neurology practice — qualifies as senior consultant.",
+            22, new BigDecimal("15000.00"), "Male",
+            List.of("General Medicine"),
+            List.of("Epileptology", "Stroke Medicine", "Neurorehabilitation")
         ),
         new DoctorSpec(
             "dr.taiwo@medibook.local", "Taiwo", "Ogunleye", "+2348012345005",
             "General Medicine", "Family Medicine", "LIC-GMED-005",
             "Family physician providing holistic primary care and chronic disease management. Certified in preventive medicine and lifestyle medicine.",
-            6, new BigDecimal("6000.00"), "Female", true
+            6, new BigDecimal("6000.00"), "Female",
+            List.of("Pediatrics"),
+            List.of("Preventive Medicine", "Occupational Medicine")
         )
     );
 
@@ -155,77 +179,85 @@ public class SeedDataRunner implements ApplicationRunner {
         new PatientSpec("patient.chidinma@medibook.local", "Chidinma", "Uche",      "+2347001111010", LocalDate.of(1998,  2, 18), "B+")
     );
 
-    // dIdx=doctor index, pIdx=patient index, dayOffset, hour, status, type, reason
+    // dIdx=doctor index, pIdx=patient index, dayOffset, hour, status, type, medium, reason
     private record ApptSpec(
         int dIdx, int pIdx, int dayOffset, int hour,
-        AppointmentStatus status, AppointmentType type, String reason
+        AppointmentStatus status, AppointmentType type, ConsultationMedium medium, String reason
     ) {}
 
     private static final List<ApptSpec> APPT_SPECS = List.of(
         // ── Doctor 0: Cardiology (Chukwuemeka) ──────────────────────────────
-        new ApptSpec(0, 0, -14,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Chest pain evaluation and stress test"),
-        new ApptSpec(0, 1, -10,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Hypertension management and medication review"),
-        new ApptSpec(0, 2,  -7,  9, AppointmentStatus.COMPLETED,  AppointmentType.TELEHEALTH, "Post-PTCA cardiac follow-up"),
-        new ApptSpec(0, 3,  -6, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Cardiac stress test"),
-        new ApptSpec(0, 4,  -4,  9, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Echocardiogram review"),
-        new ApptSpec(0, 5,  -2, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Arrhythmia consultation"),
-        new ApptSpec(0, 6,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: palpitations and shortness of breath"),
-        new ApptSpec(0, 7,   2,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Post-surgery follow-up"),
-        new ApptSpec(0, 8,   4, 14, AppointmentStatus.CONFIRMED,  AppointmentType.TELEHEALTH, "Medication review"),
-        new ApptSpec(0, 9,   8,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Pre-surgery cardiac clearance"),
-        new ApptSpec(0, 0,  12, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Annual cardiac screening"),
+        new ApptSpec(0, 0, -14,  9, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Chest pain evaluation and stress test"),
+        new ApptSpec(0, 1, -10,  9, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Hypertension management and medication review"),
+        new ApptSpec(0, 2,  -7,  9, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Post-PTCA cardiac follow-up"),
+        new ApptSpec(0, 3,  -6, 14, AppointmentStatus.CANCELLED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Cardiac stress test"),
+        new ApptSpec(0, 4,  -4,  9, AppointmentStatus.NO_SHOW,    AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Echocardiogram review"),
+        new ApptSpec(0, 5,  -2, 14, AppointmentStatus.REFUNDED,   AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Arrhythmia consultation"),
+        new ApptSpec(0, 6,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "New patient: palpitations and shortness of breath"),
+        new ApptSpec(0, 7,   2,  9, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Post-surgery follow-up"),
+        new ApptSpec(0, 8,   4, 14, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Medication review"),
+        new ApptSpec(0, 9,   8,  9, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Pre-surgery cardiac clearance"),
+        new ApptSpec(0, 0,  12, 14, AppointmentStatus.PENDING,    AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Annual cardiac screening"),
 
         // ── Doctor 1: Dermatology (Aisha) ────────────────────────────────────
-        new ApptSpec(1, 1, -13, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Eczema flare-up evaluation"),
-        new ApptSpec(1, 2,  -9, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Acne vulgaris treatment review"),
-        new ApptSpec(1, 3,  -6, 10, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Psoriasis plaque management"),
-        new ApptSpec(1, 4,  -5, 15, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Skin biopsy consultation"),
-        new ApptSpec(1, 5,  -3, 10, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Generalised rash evaluation"),
-        new ApptSpec(1, 6,  -1, 15, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Seborrheic dermatitis follow-up"),
-        new ApptSpec(1, 7,   0, 10, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: chronic pruritus"),
-        new ApptSpec(1, 8,   3, 10, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Post-laser treatment check"),
-        new ApptSpec(1, 9,   5, 15, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Mole mapping and dermoscopy"),
-        new ApptSpec(1, 0,   9, 10, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Keloid scar treatment consultation"),
-        new ApptSpec(1, 1,  13, 15, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Vitiligo management plan"),
+        new ApptSpec(1, 1, -13, 10, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Eczema flare-up evaluation"),
+        new ApptSpec(1, 2,  -9, 10, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Acne vulgaris treatment review"),
+        new ApptSpec(1, 3,  -6, 10, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Psoriasis plaque management"),
+        new ApptSpec(1, 4,  -5, 15, AppointmentStatus.CANCELLED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Skin biopsy consultation"),
+        new ApptSpec(1, 5,  -3, 10, AppointmentStatus.NO_SHOW,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Generalised rash evaluation"),
+        new ApptSpec(1, 6,  -1, 15, AppointmentStatus.CANCELLED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Seborrheic dermatitis follow-up"),
+        new ApptSpec(1, 7,   0, 10, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "New patient: chronic pruritus"),
+        new ApptSpec(1, 8,   3, 10, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Post-laser treatment check"),
+        new ApptSpec(1, 9,   5, 15, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Mole mapping and dermoscopy"),
+        new ApptSpec(1, 0,   9, 10, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Keloid scar treatment consultation"),
+        new ApptSpec(1, 1,  13, 15, AppointmentStatus.PENDING,    AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Vitiligo management plan"),
 
         // ── Doctor 2: Pediatrics (Adaeze) ────────────────────────────────────
-        new ApptSpec(2, 2, -12,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Child wellness check-up, age 5"),
-        new ApptSpec(2, 3,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Fever, cough, and sore throat"),
-        new ApptSpec(2, 4,  -5,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Asthma management and inhaler technique"),
-        new ApptSpec(2, 5,  -4, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Routine vaccination — 18-month schedule"),
-        new ApptSpec(2, 6,  -2,  9, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Growth and developmental assessment"),
-        new ApptSpec(2, 7,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Ear infection follow-up"),
-        new ApptSpec(2, 8,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: developmental delay evaluation"),
-        new ApptSpec(2, 9,   2,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Post-infection recovery check"),
-        new ApptSpec(2, 0,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Food allergy testing referral"),
-        new ApptSpec(2, 1,   9,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Child nutrition and growth consultation"),
-        new ApptSpec(2, 2,  14, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "School readiness and vision screening"),
+        new ApptSpec(2, 2, -12,  9, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Child wellness check-up, age 5"),
+        new ApptSpec(2, 3,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Fever, cough, and sore throat"),
+        new ApptSpec(2, 4,  -5,  9, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Asthma management and inhaler technique"),
+        new ApptSpec(2, 5,  -4, 14, AppointmentStatus.CANCELLED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Routine vaccination — 18-month schedule"),
+        new ApptSpec(2, 6,  -2,  9, AppointmentStatus.NO_SHOW,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Growth and developmental assessment"),
+        new ApptSpec(2, 7,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Ear infection follow-up"),
+        new ApptSpec(2, 8,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "New patient: developmental delay evaluation"),
+        new ApptSpec(2, 9,   2,  9, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Post-infection recovery check"),
+        new ApptSpec(2, 0,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Food allergy testing referral"),
+        new ApptSpec(2, 1,   9,  9, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Child nutrition and growth consultation"),
+        new ApptSpec(2, 2,  14, 14, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.VIDEO,    "School readiness and vision screening"),
 
         // ── Doctor 3: Neurology (Ibrahim) ─────────────────────────────────────
-        new ApptSpec(3, 3, -11,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Chronic migraine management"),
-        new ApptSpec(3, 4,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Epilepsy medication and seizure diary review"),
-        new ApptSpec(3, 5,  -4,  9, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Ischaemic stroke rehabilitation follow-up"),
-        new ApptSpec(3, 6,  -3, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Brain MRI results review"),
-        new ApptSpec(3, 7,  -2,  9, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Memory impairment assessment"),
-        new ApptSpec(3, 8,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Parkinson's disease progression review"),
-        new ApptSpec(3, 9,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "New patient: persistent headaches and visual disturbance"),
-        new ApptSpec(3, 0,   3,  9, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "EEG results interpretation"),
-        new ApptSpec(3, 1,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Multiple sclerosis disease monitoring"),
-        new ApptSpec(3, 2,  10,  9, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Peripheral neuropathy evaluation"),
-        new ApptSpec(3, 3,  14, 14, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Sleep disorder and narcolepsy consultation"),
+        new ApptSpec(3, 3, -11,  9, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Chronic migraine management"),
+        new ApptSpec(3, 4,  -8,  9, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Epilepsy medication and seizure diary review"),
+        new ApptSpec(3, 5,  -4,  9, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Ischaemic stroke rehabilitation follow-up"),
+        new ApptSpec(3, 6,  -3, 14, AppointmentStatus.CANCELLED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Brain MRI results review"),
+        new ApptSpec(3, 7,  -2,  9, AppointmentStatus.NO_SHOW,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Memory impairment assessment"),
+        new ApptSpec(3, 8,  -1, 14, AppointmentStatus.REFUNDED,   AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Parkinson's disease progression review"),
+        new ApptSpec(3, 9,   0,  9, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "New patient: persistent headaches and visual disturbance"),
+        new ApptSpec(3, 0,   3,  9, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "EEG results interpretation"),
+        new ApptSpec(3, 1,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Multiple sclerosis disease monitoring"),
+        new ApptSpec(3, 2,  10,  9, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Peripheral neuropathy evaluation"),
+        new ApptSpec(3, 3,  14, 14, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Sleep disorder and narcolepsy consultation"),
+
+        // ── Lifecycle demo entries (appended after each doctor block) ─────────
+        // Covers CHECKED_IN, IN_WAITING_ROOM, IN_CONSULTATION, PENDING_PAYMENT so
+        // all FSM states appear in seed data for UI demonstration and testing.
+        new ApptSpec(0, 1,  0, 10, AppointmentStatus.IN_CONSULTATION,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Hypertension review — consultation in progress"),
+        new ApptSpec(1, 2,  0, 11, AppointmentStatus.CHECKED_IN,       AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Eczema assessment — patient checked in"),
+        new ApptSpec(2, 3,  0, 10, AppointmentStatus.IN_WAITING_ROOM,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Child wellness check — patient in waiting room"),
+        new ApptSpec(3, 4,  0, 10, AppointmentStatus.PENDING_PAYMENT,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Migraine consultation — awaiting payment"),
 
         // ── Doctor 4: General Medicine (Taiwo) ───────────────────────────────
-        new ApptSpec(4, 4, -13,  8, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Annual physical examination and wellness screen"),
-        new ApptSpec(4, 5,  -9,  8, AppointmentStatus.COMPLETED,  AppointmentType.IN_PERSON,  "Type 2 diabetes — HbA1c and medication review"),
-        new ApptSpec(4, 6,  -5,  8, AppointmentStatus.COMPLETED,  AppointmentType.TELEHEALTH, "Blood pressure monitoring review"),
-        new ApptSpec(4, 7,  -4, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Lab results and lipid panel discussion"),
-        new ApptSpec(4, 8,  -2,  8, AppointmentStatus.NO_SHOW,    AppointmentType.IN_PERSON,  "Tetanus booster and flu vaccine"),
-        new ApptSpec(4, 9,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.IN_PERSON,  "Chest X-ray interpretation"),
-        new ApptSpec(4, 0,   0,  8, AppointmentStatus.CONFIRMED,  AppointmentType.TELEHEALTH, "New patient: chronic fatigue and sleep issues"),
-        new ApptSpec(4, 1,   2,  8, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Hypertension monitoring and medication titration"),
-        new ApptSpec(4, 2,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.IN_PERSON,  "Thyroid function test results and management"),
-        new ApptSpec(4, 3,   9,  8, AppointmentStatus.PENDING,    AppointmentType.IN_PERSON,  "Pre-employment medical examination"),
-        new ApptSpec(4, 4,  13, 14, AppointmentStatus.PENDING,    AppointmentType.TELEHEALTH, "General wellness and lifestyle consultation")
+        new ApptSpec(4, 4, -13,  8, AppointmentStatus.COMPLETED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Annual physical examination and wellness screen"),
+        new ApptSpec(4, 5,  -9,  8, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Type 2 diabetes — HbA1c and medication review"),
+        new ApptSpec(4, 6,  -5,  8, AppointmentStatus.COMPLETED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "Blood pressure monitoring review"),
+        new ApptSpec(4, 7,  -4, 14, AppointmentStatus.CANCELLED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Lab results and lipid panel discussion"),
+        new ApptSpec(4, 8,  -2,  8, AppointmentStatus.NO_SHOW,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Tetanus booster and flu vaccine"),
+        new ApptSpec(4, 9,  -1, 14, AppointmentStatus.CANCELLED,  AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Chest X-ray interpretation"),
+        new ApptSpec(4, 0,   0,  8, AppointmentStatus.CONFIRMED,  AppointmentType.FIRST_VISIT, ConsultationMedium.VIDEO,    "New patient: chronic fatigue and sleep issues"),
+        new ApptSpec(4, 1,   2,  8, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Hypertension monitoring and medication titration"),
+        new ApptSpec(4, 2,   5, 14, AppointmentStatus.CONFIRMED,  AppointmentType.FOLLOW_UP,   ConsultationMedium.PHYSICAL, "Thyroid function test results and management"),
+        new ApptSpec(4, 3,   9,  8, AppointmentStatus.PENDING,    AppointmentType.FIRST_VISIT, ConsultationMedium.PHYSICAL, "Pre-employment medical examination"),
+        new ApptSpec(4, 4,  13, 14, AppointmentStatus.PENDING,    AppointmentType.FOLLOW_UP,   ConsultationMedium.VIDEO,    "General wellness and lifestyle consultation")
     );
 
     // Consultation notes for COMPLETED appointments (same order as APPT_SPECS — first 3 per doctor)
@@ -385,10 +417,21 @@ public class SeedDataRunner implements ApplicationRunner {
                     .code(s.code())
                     .description(s.desc())
                     .baseConsultationFee(s.fee())
+                    .slotDurationMins(s.slotDurationMins())
+                    .bufferMins(s.bufferMins())
                     .isActive(true)
                     .build();
                 return deptRepo.save(nd);
             });
+            // Refresh slot policy on existing departments so re-runs pick up changes.
+            if (!isNew && (d.getSlotDurationMins() != s.slotDurationMins()
+                           || d.getBufferMins() != s.bufferMins()
+                           || d.getBaseConsultationFee().compareTo(s.fee()) != 0)) {
+                d.setSlotDurationMins(s.slotDurationMins());
+                d.setBufferMins(s.bufferMins());
+                d.setBaseConsultationFee(s.fee());
+                deptRepo.save(d);
+            }
             result.put(s.name(), d);
             if (isNew) created++;
         }
@@ -432,21 +475,47 @@ public class SeedDataRunner implements ApplicationRunner {
     }
 
     private List<Doctor> seedDoctors(Map<String, Department> depts) {
-        // Every doctor defaults to a 60-min slot. Patients who need a shorter window
-        // (e.g. 30 min) use the manual start/end picker on the booking page.
-        int[] slotDurations = { 60, 60, 60, 60, 60, 60, 60, 60 };
+        // slotDurationMins = 0 means "inherit from department policy".
+        // DoctorScheduleService.resolveSlotDurationMins() checks > 0, so 0 falls through
+        // to the department's slotDurationMins, giving us department-driven slot grids.
         List<Doctor> doctors = new ArrayList<>();
-        for (int idx = 0; idx < DOCTOR_SPECS.size(); idx++) {
-            DoctorSpec s = DOCTOR_SPECS.get(idx);
-            int slotDuration = slotDurations[idx % slotDurations.length];
+        for (DoctorSpec s : DOCTOR_SPECS) {
+            // Resolve additional departments and full specialization set for this spec.
+            Set<Department> additionalDepts = new HashSet<>();
+            for (String dn : s.additionalDeptNames()) {
+                Department add = depts.get(dn);
+                if (add != null) additionalDepts.add(add);
+            }
+            Set<String> allSpecializations = new HashSet<>();
+            allSpecializations.add(s.specialization());
+            allSpecializations.addAll(s.extraSpecializations());
+
             if (doctorRepo.existsByLicenseNumber(s.license())) {
                 doctorRepo.findByLicenseNumber(s.license()).ifPresent(existing -> {
-                    // Refresh slot duration on existing seeded doctors so the booking
-                    // grid step varies (the original seed pinned everyone to 30 min).
-                    if (existing.getSlotDurationMins() != slotDuration) {
-                        existing.setSlotDurationMins(slotDuration);
-                        doctorRepo.save(existing);
+                    boolean dirty = false;
+                    // Clear any legacy 60-min override so department policy takes effect.
+                    if (existing.getSlotDurationMins() != 0) {
+                        existing.setSlotDurationMins(0);
+                        dirty = true;
                     }
+                    // Sync additional departments and specializations on re-runs.
+                    if (!additionalDepts.equals(existing.getAdditionalDepartments())) {
+                        existing.getAdditionalDepartments().clear();
+                        existing.getAdditionalDepartments().addAll(additionalDepts);
+                        dirty = true;
+                    }
+                    if (!allSpecializations.equals(existing.getSpecializations())) {
+                        existing.getSpecializations().clear();
+                        existing.getSpecializations().addAll(allSpecializations);
+                        dirty = true;
+                    }
+                    // Sync years of experience so seed bumps land in re-runs without
+                    // requiring a fresh DB (needed for the senior-surcharge demo path).
+                    if (existing.getYearsOfExperience() != s.years()) {
+                        existing.setYearsOfExperience(s.years());
+                        dirty = true;
+                    }
+                    if (dirty) doctorRepo.save(existing);
                     doctors.add(existing);
                 });
                 continue;
@@ -457,17 +526,18 @@ public class SeedDataRunner implements ApplicationRunner {
             Doctor d = Doctor.builder()
                 .user(u)
                 .department(dept)
+                .additionalDepartments(additionalDepts)
                 .specialization(s.specialization())
+                .specializations(allSpecializations)
                 .licenseNumber(s.license())
                 .bio(s.bio())
                 .isActive(true)
                 .languages("English, Hausa, Yoruba, Igbo")
                 .acceptingNew(true)
-                .slotDurationMins(slotDuration)
+                .slotDurationMins(0)   // 0 = use department slot policy
                 .yearsOfExperience(s.years())
                 .consultationFee(s.fee())
                 .gender(s.gender())
-                .telemedicineEnabled(s.telemedicine())
                 .averageRating(0.0)
                 .reviewCount(0)
                 .searchVector(searchVector)
@@ -572,8 +642,19 @@ public class SeedDataRunner implements ApplicationRunner {
             Doctor  doctor  = doctors.get(s.dIdx());
             Department dept = doctor.getDepartment();
 
+            // Resolve slot duration from department policy (doctor override is 0 = "inherit").
+            int slotMins = (dept != null && dept.getSlotDurationMins() > 0)
+                    ? dept.getSlotDurationMins() : 30;
+
             LocalDateTime scheduledAt = TODAY.plusDays(s.dayOffset()).atTime(s.hour(), 0);
-            LocalDateTime endTime     = scheduledAt.plusMinutes(30);
+            LocalDateTime endTime     = scheduledAt.plusMinutes(slotMins);
+
+            java.math.BigDecimal fee = null;
+            try {
+                fee = pricingService.computeFee(doctor, s.type(), s.medium());
+            } catch (Exception ex) {
+                log.warn("[Seed] Could not compute fee for appt {}: {}", code, ex.getMessage());
+            }
 
             Appointment.AppointmentBuilder builder = Appointment.builder()
                 .patient(patient)
@@ -581,13 +662,16 @@ public class SeedDataRunner implements ApplicationRunner {
                 .department(dept)
                 .scheduledAt(scheduledAt)
                 .endTime(endTime)
-                .durationMins(30)
+                .durationMins(slotMins)
                 .status(s.status())
                 .type(s.type())
+                .consultationType(s.type())
+                .consultationMedium(s.medium())
+                .consultationFee(fee)
                 .reason(s.reason())
                 .confirmationCode(code);
 
-            if (s.status() == AppointmentStatus.CANCELLED) {
+            if (s.status() == AppointmentStatus.CANCELLED || s.status() == AppointmentStatus.REFUNDED) {
                 builder
                     .cancelledAt(scheduledAt.minusDays(1))
                     .cancelledBy(patient)
@@ -733,6 +817,64 @@ public class SeedDataRunner implements ApplicationRunner {
                 invoiceRepo.save(invoice);
             }
         }
+        // One PENDING payment per PENDING_PAYMENT appointment (initiated but not yet confirmed)
+        List<Appointment> pendingPayment = appointments.stream()
+            .filter(a -> a.getStatus() == AppointmentStatus.PENDING_PAYMENT)
+            .toList();
+
+        for (Appointment appt : pendingPayment) {
+            String idemKey = "SEED-PAY-" + appt.getConfirmationCode();
+            if (paymentRepo.findByIdempotencyKey(idemKey).isPresent()) continue;
+
+            BigDecimal amount = appt.getConsultationFee() != null
+                    ? appt.getConsultationFee()
+                    : appt.getDoctor().getEffectiveConsultationFee();
+
+            paymentRepo.save(Payment.builder()
+                .appointment(appt)
+                .patient(appt.getPatient())
+                .idempotencyKey(idemKey)
+                .provider(PaymentProvider.PAYSTACK)
+                .providerRef("PS-SEED-INIT-" + appt.getConfirmationCode())
+                .amount(amount)
+                .currency("NGN")
+                .status(PaymentStatus.PENDING)
+                .build());
+            created++;
+        }
+
+        // One REFUNDED payment per REFUNDED appointment (cancellation refund demo data)
+        List<Appointment> refunded = appointments.stream()
+            .filter(a -> a.getStatus() == AppointmentStatus.REFUNDED)
+            .toList();
+
+        for (Appointment appt : refunded) {
+            String idemKey = "SEED-PAY-" + appt.getConfirmationCode();
+            if (paymentRepo.findByIdempotencyKey(idemKey).isPresent()) continue;
+
+            BigDecimal amount = appt.getConsultationFee() != null
+                    ? appt.getConsultationFee()
+                    : appt.getDoctor().getEffectiveConsultationFee();
+
+            Payment payment = Payment.builder()
+                .appointment(appt)
+                .patient(appt.getPatient())
+                .idempotencyKey(idemKey)
+                .provider(PaymentProvider.PAYSTACK)
+                .providerRef("PS-SEED-" + appt.getConfirmationCode())
+                .amount(amount)
+                .currency("NGN")
+                .status(PaymentStatus.REFUNDED)
+                .refundAmount(amount)
+                .refundedAt(appt.getCancelledAt() != null
+                        ? appt.getCancelledAt().plusHours(1)
+                        : LocalDateTime.now().minusDays(1))
+                .refundRef("REF-SEED-" + appt.getConfirmationCode())
+                .build();
+            paymentRepo.save(payment);
+            created++;
+        }
+
         log.info("[Seed] Payments and invoices ready ({} created)", created);
     }
 

@@ -11,6 +11,7 @@ import com.medibook.common.exception.MediBookException;
 import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.telemedicine.dto.CallParticipantRequest;
 import com.medibook.domain.telemedicine.dto.VideoCallResponse;
@@ -18,6 +19,7 @@ import com.medibook.domain.telemedicine.dto.VideoTokenResponse;
 import com.medibook.domain.telemedicine.entity.*;
 import com.medibook.domain.telemedicine.repository.CallParticipantRepository;
 import com.medibook.domain.telemedicine.repository.TelemedicineSessionRepository;
+import com.medibook.infrastructure.metrics.EmergencyMetrics;
 import com.medibook.messaging.event.ChatEvent;
 import com.medibook.messaging.producer.ChatEventProducer;
 import com.medibook.security.UserPrincipal;
@@ -55,6 +57,8 @@ public class TelemedicineCallService {
     private final TwilioTokenService twilioTokenService;
     private final ChatEventProducer chatEventProducer;
     private final ObjectMapper objectMapper;
+    private final EmergencyMetrics emergencyMetrics;
+    private final io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     @Transactional
     public VideoCallResponse startVideoCall(Long appointmentId, UserPrincipal principal) {
@@ -86,6 +90,8 @@ public class TelemedicineCallService {
     @Transactional(readOnly = true)
     public VideoTokenResponse getToken(Long sessionId, UserPrincipal principal) {
         TelemedicineSession session = loadSessionAndAuthorize(sessionId, principal);
+        // Re-enforce window: prevent token generation outside the valid consultation window.
+        ensureCallAllowed(session.getAppointment());
         TwilioTokenService.TokenResult token = twilioTokenService.generateVideoToken(
                 identity(principal.getId()),
                 session.getTwilioRoomName());
@@ -100,6 +106,8 @@ public class TelemedicineCallService {
     @Transactional
     public VideoCallResponse join(Long sessionId, CallParticipantRequest request, UserPrincipal principal) {
         TelemedicineSession session = loadSessionAndAuthorize(sessionId, principal);
+        // Re-enforce window and medium on every join attempt.
+        ensureCallAllowed(session.getAppointment());
         CallParticipant participant = participantRepository
                 .findBySessionIdAndUserId(sessionId, principal.getId())
                 .orElseGet(() -> newParticipant(session, principal.getId(), roleFor(session, principal.getId())));
@@ -119,6 +127,9 @@ public class TelemedicineCallService {
 
         saveSystemMessage(session, principal.getId(), "VIDEO_CALL_JOINED",
                 participant.getRole() == CallParticipantRole.DOCTOR ? "Doctor joined" : "Patient joined");
+        meterRegistry.counter("telemedicine.sessions.joined",
+                "role", participant.getRole().name()
+        ).increment();
         return responseWithToken(session, principal);
     }
 
@@ -149,6 +160,11 @@ public class TelemedicineCallService {
         TelemedicineSession session = loadSessionAndAuthorize(sessionId, principal);
         endSession(session, reason == null || reason.isBlank() ? "ended by participant" : reason, principal.getId());
         publishEvent("TELEMEDICINE_CALL_ENDED", session);
+        if (session.getStartedAt() != null) {
+            meterRegistry.counter("telemedicine.sessions.ended", "trigger", "participant").increment();
+            meterRegistry.timer("telemedicine.sessions.duration")
+                    .record(Duration.between(session.getStartedAt(), LocalDateTime.now()));
+        }
         return response(sessionRepository.save(session));
     }
 
@@ -199,21 +215,54 @@ public class TelemedicineCallService {
         return appointment;
     }
 
+    /** Minutes before scheduled start that the session window opens. */
+    private static final long WINDOW_PRE_MINUTES  = 10;
+    /** Minutes after scheduled end that the session window closes. */
+    private static final long WINDOW_POST_MINUTES = 10;
+
     private void ensureCallAllowed(Appointment appointment) {
         AppointmentStatus status = appointment.getStatus();
         if (status == AppointmentStatus.CANCELLED
-                || status == AppointmentStatus.COMPLETED
-                || status == AppointmentStatus.NO_SHOW) {
+                || status == AppointmentStatus.NO_SHOW
+                || status == AppointmentStatus.REFUNDED) {
             throw new MediBookException("Telemedicine call is not allowed for this appointment",
                     HttpStatus.BAD_REQUEST, "TELEMEDICINE_NOT_ALLOWED");
         }
-        // Block calls on unpaid / unconfirmed appointments. The slot is reserved (PENDING)
-        // until payment lands and flips status to CONFIRMED — we only let confirmed pairs
-        // dial each other.
-        if (status != AppointmentStatus.CONFIRMED) {
+        if (status == AppointmentStatus.PENDING_PAYMENT || status == AppointmentStatus.PENDING) {
             throw new MediBookException(
                     "This appointment is not confirmed yet. Complete payment to start the call.",
                     HttpStatus.CONFLICT, "APPOINTMENT_NOT_CONFIRMED");
+        }
+
+        // Validate consultation medium — PHYSICAL appointments cannot use telemedicine.
+        if (appointment.getConsultationMedium() == com.medibook.domain.appointment.entity.ConsultationMedium.PHYSICAL) {
+            throw new MediBookException(
+                    "This appointment is a physical consultation and does not support telemedicine.",
+                    HttpStatus.BAD_REQUEST, "PHYSICAL_CONSULTATION_NO_TELEMEDICINE");
+        }
+
+        // Enforce the ±10 minute consultation window.
+        LocalDateTime now       = LocalDateTime.now();
+        LocalDateTime windowOpen  = appointment.getScheduledAt().minusMinutes(WINDOW_PRE_MINUTES);
+        LocalDateTime windowClose = (appointment.getEndTime() != null
+                ? appointment.getEndTime()
+                : appointment.getScheduledAt().plusMinutes(appointment.getDurationMins()))
+                .plusMinutes(WINDOW_POST_MINUTES);
+
+        if (now.isBefore(windowOpen)) {
+            emergencyMetrics.recordSessionWindowViolation();
+            long minutesUntil = java.time.Duration.between(now, windowOpen).toMinutes() + 1;
+            throw new MediBookException(
+                    "The session opens " + WINDOW_PRE_MINUTES + " minutes before the scheduled time. "
+                            + "Please try again in " + minutesUntil + " minute(s).",
+                    HttpStatus.CONFLICT, "SESSION_WINDOW_NOT_OPEN");
+        }
+        if (now.isAfter(windowClose)) {
+            emergencyMetrics.recordSessionWindowViolation();
+            throw new MediBookException(
+                    "The consultation window has closed. Sessions expire " + WINDOW_POST_MINUTES
+                            + " minutes after the scheduled end time.",
+                    HttpStatus.GONE, "SESSION_WINDOW_EXPIRED");
         }
     }
 
@@ -243,6 +292,14 @@ public class TelemedicineCallService {
                 ? session.getTwilioRoomSid()
                 : session.getTwilioRoomName());
         saveSystemMessage(session, actorUserId, "VIDEO_CALL_ENDED", callEndedMessage(session));
+
+        // Close the linked chat conversation so further writes are blocked.
+        if (session.getChatConversationId() != null) {
+            conversationRepository.findById(session.getChatConversationId()).ifPresent(conv -> {
+                conv.setStatus(com.medibook.chat.entity.ChatConversation.ConversationStatus.CLOSED);
+                conversationRepository.save(conv);
+            });
+        }
     }
 
     private void upsertInvitedParticipants(TelemedicineSession session, Appointment appointment) {

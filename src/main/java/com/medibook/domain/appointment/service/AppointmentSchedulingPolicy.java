@@ -11,6 +11,7 @@ import com.medibook.domain.schedule.service.DoctorLeaveService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -42,8 +43,10 @@ public class AppointmentSchedulingPolicy {
     private final DoctorWorkingHoursRepository workingHoursRepo;
     private final DoctorLeaveService doctorLeaveService;
     private final AppointmentRepository appointmentRepository;
+    private final com.medibook.domain.schedule.repository.DoctorSlotBlockRepository slotBlockRepository;
 
     /** Pre-hold gate using the doctor's default slot duration. */
+    @Transactional(readOnly = true)
     public void checkBookable(Long doctorId, LocalDateTime scheduledAt) {
         checkBookable(doctorId, scheduledAt, /*end*/ null);
     }
@@ -53,6 +56,7 @@ public class AppointmentSchedulingPolicy {
      * the patient's chosen window — not the doctor's default slot length — is what we
      * validate against working hours.
      */
+    @Transactional(readOnly = true)
     public void checkBookable(Long doctorId, LocalDateTime scheduledAt, LocalDateTime end) {
         if (scheduledAt == null) {
             throw new MediBookException("scheduledAt is required",
@@ -81,18 +85,41 @@ public class AppointmentSchedulingPolicy {
 
         LocalDateTime windowEnd = end != null
                 ? end
-                : scheduledAt.plusMinutes(doctor.getSlotDurationMins() > 0 ? doctor.getSlotDurationMins() : 30);
+                : scheduledAt.plusMinutes(resolveSlotDurationMins(doctor));
         ensureWithinWorkingHours(doctorId, scheduledAt, windowEnd);
+        ensureNotBlocked(doctorId, scheduledAt, windowEnd);
+    }
+
+    /**
+     * Reject a booking whose window overlaps an ad-hoc slot block declared by
+     * the doctor (e.g. "operating on patient X"). Distinct from a multi-day
+     * leave — those are caught by {@code doctorLeaveService.isDoctorOnLeave}.
+     */
+    private void ensureNotBlocked(Long doctorId, LocalDateTime start, LocalDateTime end) {
+        java.time.LocalDate day = start.toLocalDate();
+        var blocks = slotBlockRepository.findByDoctorIdAndBlockDateBetweenOrderByBlockDateAscStartTimeAsc(
+                doctorId, day, day);
+        if (blocks.isEmpty()) return;
+        java.time.LocalTime s = start.toLocalTime();
+        java.time.LocalTime e = end.toLocalTime();
+        boolean overlaps = blocks.stream().anyMatch(b ->
+                s.isBefore(b.getEndTime()) && e.isAfter(b.getStartTime()));
+        if (overlaps) {
+            throw new MediBookException(
+                    "That time conflicts with an unavailability the doctor has set for the day.",
+                    HttpStatus.CONFLICT, "SLOT_BLOCKED");
+        }
     }
 
     /**
      * Overlap check for the grid path where the patient hasn't supplied an end time —
      * we compute it from the doctor's configured {@code slotDurationMins}.
      */
+    @Transactional(readOnly = true)
     public void checkOverlapForDefaultSlot(Long doctorId, LocalDateTime start) {
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
-        int duration = doctor.getSlotDurationMins() > 0 ? doctor.getSlotDurationMins() : 60;
+        int duration = resolveSlotDurationMins(doctor);
         if (appointmentRepository.existsConflict(doctorId, start, start.plusMinutes(duration))) {
             throw new MediBookException("Doctor is not available for booking at this time",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
@@ -100,6 +127,7 @@ public class AppointmentSchedulingPolicy {
     }
 
     /** End-to-end gate including overlap check. Used at hold/book/reschedule time. */
+    @Transactional(readOnly = true)
     public void checkBookableWithOverlap(Long doctorId, LocalDateTime start, LocalDateTime end) {
         // Pass the explicit window to checkBookable so working-hours validation uses
         // the *actual* end (manual entry), not the doctor's default slot duration.
@@ -108,6 +136,14 @@ public class AppointmentSchedulingPolicy {
             throw new MediBookException("Doctor is not available for booking at this time",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
         }
+    }
+
+    /** Resolution order: doctor override → department default → global default (30). */
+    private int resolveSlotDurationMins(Doctor doctor) {
+        if (doctor.getSlotDurationMins() > 0) return doctor.getSlotDurationMins();
+        if (doctor.getDepartment() != null && doctor.getDepartment().getSlotDurationMins() > 0)
+            return doctor.getDepartment().getSlotDurationMins();
+        return 30;
     }
 
     /**

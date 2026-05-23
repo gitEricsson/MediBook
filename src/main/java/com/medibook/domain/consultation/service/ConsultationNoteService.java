@@ -159,6 +159,26 @@ public class ConsultationNoteService {
                 .toList();
     }
 
+    /**
+     * Patient fetches the consultation note for one of their own appointments.
+     * Returns empty (Optional.empty) when no note exists yet so the FE can
+     * skip rendering rather than showing a 404 error state.
+     */
+    @Transactional(readOnly = true)
+    public java.util.Optional<ConsultationNoteResponse> getByAppointmentForPatient(
+            Long appointmentId, UserPrincipal principal) {
+        Appointment appointment = appointmentRepository.findByIdWithDetails(appointmentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", appointmentId));
+
+        if (!appointment.getPatient().getId().equals(principal.getId())) {
+            throw new MediBookException("Not authorized to view this consultation note",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
+
+        return noteRepository.findByAppointmentId(appointmentId)
+                .map(ConsultationNoteResponse::fromEntity);
+    }
+
     private void ensureCanAccessAppointment(Appointment appointment, UserPrincipal principal) {
         if (principal.hasRole("ROLE_ADMIN")) {
             return;

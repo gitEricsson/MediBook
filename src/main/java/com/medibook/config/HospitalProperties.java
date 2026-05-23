@@ -45,11 +45,20 @@ public class HospitalProperties {
     /** Default consultation fee for any specialization not explicitly mapped. */
     private BigDecimal consultationFee = BigDecimal.valueOf(5000.00);
 
-    /** Premium percentage added for senior consultants. */
+    /** Premium percentage added for senior consultants (applied on top of any base fee). */
     private int experiencePremiumPercent = 20;
 
-    /** Years of experience threshold to qualify as senior consultant. */
-    private int experienceThresholdYears = 10;
+    /** Years of experience threshold to qualify as senior consultant (exclusive). */
+    private int experienceThresholdYears = 20;
+
+    /** Percentage added to the base fee for EMERGENCY consultations (e.g. 150 → 2.5× base). */
+    private int emergencyMultiplierPct = 150;
+
+    /** Percentage discount applied to base fee for FOLLOW_UP consultations (e.g. 20 → 0.8× base). */
+    private int followUpDiscountPct = 20;
+
+    /** Percentage surcharge added when consultation medium is AUDIO or VIDEO. */
+    private int mediumSurchargePct = 10;
 
     /** Per-specialization base fees. Keys are normalized to lower-case at lookup time. */
     private Map<String, BigDecimal> specializationFees = new HashMap<>();

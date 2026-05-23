@@ -22,6 +22,19 @@ spec:
       labels:
         app: medibook-fe
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: medibook-fe
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: medibook-fe
       securityContext:
         runAsNonRoot: true
         runAsUser: 101   # nginx default user

@@ -35,4 +35,10 @@ public class AppointmentEvent {
     private AppointmentStatus status;
 
     private LocalDateTime occurredAt;
+
+    /**
+     * For REMINDER events: how many hours before the appointment this reminder is for.
+     * Drives both email copy ("tomorrow" vs "in 2 hours") and deduplication key generation.
+     */
+    private Integer hoursBeforeAppointment;
 }

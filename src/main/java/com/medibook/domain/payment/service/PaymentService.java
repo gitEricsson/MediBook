@@ -39,6 +39,9 @@ import java.util.UUID;
 
 import com.medibook.common.sequence.SequenceService;
 import com.medibook.config.HospitalProperties;
+import com.medibook.domain.appointment.entity.AppointmentType;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
+import io.micrometer.core.instrument.MeterRegistry;
 
 @Slf4j
 @Service
@@ -53,6 +56,8 @@ public class PaymentService {
     private final ObjectMapper               objectMapper;
     private final SequenceService            sequenceService;
     private final HospitalProperties         hospitalProperties;
+    private final PricingEngine              pricingEngine;
+    private final MeterRegistry              meterRegistry;
 
     @Transactional
     public PaymentResponse initiatePayment(InitiatePaymentRequest req, UserPrincipal principal) {
@@ -103,11 +108,16 @@ public class PaymentService {
 
         User patient = appointment.getPatient();
         Doctor doctor = appointment.getDoctor();
-        // Server-side fee resolution wins: never trust a client-supplied amount lower than
-        // the canonical specialization-aware fee. If the client supplies a higher amount
-        // (e.g. add-ons), we honor it; otherwise we fall back to the canonical fee.
-        BigDecimal canonicalFee = hospitalProperties.getFeeForDoctor(
-                doctor.getSpecialization(), doctor.getYearsOfExperience());
+        // Server-side pricing wins: PricingEngine applies department base + consultation-type
+        // modifier + senior surcharge + medium surcharge. Client-supplied amount is honored
+        // only when it is >= the canonical fee (e.g. optional add-ons); otherwise ignored.
+        AppointmentType consultationType = appointment.getConsultationType() != null
+                ? appointment.getConsultationType()
+                : AppointmentType.FIRST_VISIT;
+        ConsultationMedium medium = appointment.getConsultationMedium() != null
+                ? appointment.getConsultationMedium()
+                : ConsultationMedium.PHYSICAL;
+        BigDecimal canonicalFee = pricingEngine.calculate(doctor, consultationType, medium);
         BigDecimal amount = (req.getAmount() != null && req.getAmount().compareTo(canonicalFee) >= 0)
                 ? req.getAmount()
                 : canonicalFee;
@@ -158,6 +168,10 @@ public class PaymentService {
         log.info("Payment [{}] initiated for appointment [{}] via [{}]",
                 saved.getId(), appointment.getId(), req.getProvider());
 
+        meterRegistry.counter("payments.initiated",
+                "provider", req.getProvider() != null ? req.getProvider().name() : "UNKNOWN"
+        ).increment();
+
         return toResponseWithUrl(saved, result.authorizationUrl());
     }
 
@@ -187,12 +201,24 @@ public class PaymentService {
 
             Payment updated = paymentRepository.save(payment);
             publishPaymentEvent(updated, newStatus == PaymentStatus.SUCCESSFUL ? "SUCCEEDED" : "FAILED");
+            if (newStatus == PaymentStatus.SUCCESSFUL) {
+                meterRegistry.counter("payments.succeeded",
+                        "provider", updated.getProvider() != null ? updated.getProvider().name() : "UNKNOWN"
+                ).increment();
+            }
             return PaymentResponse.fromEntity(updated);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Payment was modified concurrently. Please retry.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
         }
     }
 
+    /**
+     * Initiate a refund saga for a successful payment.
+     * Idempotent — if the payment is already REFUNDED the call returns immediately.
+     * The actual gateway call is made synchronously here; downstream effects
+     * (appointment → REFUNDED status, notification emails) are handled by the
+     * REFUND_INITIATED Kafka consumer so they don't block this thread.
+     */
     @Transactional
     public PaymentResponse refundPayment(Long paymentId, BigDecimal amount, String reason, UserPrincipal principal) {
         Payment payment = paymentRepository.findByIdWithDetails(paymentId)
@@ -202,13 +228,14 @@ public class PaymentService {
             throw new MediBookException("Not authorized", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
 
+        if (payment.getStatus() == PaymentStatus.REFUNDED) {
+            log.info("Idempotent refund: payment [{}] already refunded", paymentId);
+            return PaymentResponse.fromEntity(payment);
+        }
+
         if (payment.getStatus() != PaymentStatus.SUCCESSFUL) {
             throw new MediBookException("Only successful payments can be refunded",
                     HttpStatus.BAD_REQUEST, "INVALID_PAYMENT_STATUS");
-        }
-
-        if (payment.getRefundedAt() != null) {
-            throw new MediBookException("Payment already refunded", HttpStatus.CONFLICT, "ALREADY_REFUNDED");
         }
 
         BigDecimal refundAmount = amount != null ? amount : payment.getAmount();
@@ -227,10 +254,84 @@ public class PaymentService {
         payment.setRefundRef(result.refundRef());
 
         Payment updated = paymentRepository.save(payment);
-        publishPaymentEvent(updated, "REFUNDED");
 
+        // Publish REFUND_INITIATED to the outbox — consumer handles appointment
+        // status → REFUNDED and sends refund notification email.
+        publishRefundInitiatedEvent(updated, refundAmount, reason);
+
+        meterRegistry.counter("payments.refunded",
+                "provider", updated.getProvider() != null ? updated.getProvider().name() : "UNKNOWN",
+                "trigger", "manual"
+        ).increment();
         log.info("Payment [{}] refunded: amount={} ref={}", paymentId, refundAmount, result.refundRef());
         return PaymentResponse.fromEntity(updated);
+    }
+
+    private void publishRefundInitiatedEvent(Payment payment, BigDecimal refundAmount, String reason) {
+        PaymentEvent event = PaymentEvent.builder()
+                .eventId("refund-" + payment.getId() + "-" + System.currentTimeMillis())
+                .eventType("REFUND_INITIATED")
+                .schemaVersion(1)
+                .paymentId(payment.getId())
+                .appointmentId(payment.getAppointment().getId())
+                .patientId(payment.getPatient().getId())
+                .patientEmail(payment.getPatient().getEmail())
+                .provider(payment.getProvider())
+                .providerRef(payment.getRefundRef())
+                .amount(refundAmount)
+                .currency(payment.getCurrency())
+                .status(payment.getStatus())
+                .occurredAt(LocalDateTime.now())
+                .build();
+
+        try {
+            outboxRepository.save(OutboxEvent.builder()
+                    .aggregateType("Payment")
+                    .aggregateId(String.valueOf(payment.getId()))
+                    .eventType("REFUND_INITIATED")
+                    .topic(KafkaTopics.REFUND_EVENTS)
+                    .payload(objectMapper.writeValueAsString(event))
+                    .build());
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize REFUND_INITIATED event for payment [{}]", payment.getId(), e);
+        }
+    }
+
+    /**
+     * System-initiated refund — no principal auth check.
+     * Idempotent: if the payment is already REFUNDED the call returns silently.
+     * Called by RefundEventConsumer after consuming CANCELLATION_REFUND_REQUESTED.
+     */
+    @Transactional
+    public void executeSystemRefund(Long paymentId, String reason) {
+        Payment payment = paymentRepository.findByIdWithDetails(paymentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payment", "id", paymentId));
+
+        if (payment.getStatus() == PaymentStatus.REFUNDED) {
+            log.info("[SystemRefund] Payment [{}] already refunded — skipping", paymentId);
+            return;
+        }
+        if (payment.getStatus() != PaymentStatus.SUCCESSFUL) {
+            log.warn("[SystemRefund] Payment [{}] has status {} — cannot refund", paymentId, payment.getStatus());
+            return;
+        }
+
+        BigDecimal refundAmount = payment.getAmount();
+        PaymentProviderPort providerPort = providerFactory.get(payment.getProvider());
+        PaymentProviderPort.RefundResult result = providerPort.refundPayment(
+                payment.getProviderRef(), refundAmount, reason);
+
+        payment.setStatus(PaymentStatus.REFUNDED);
+        payment.setRefundAmount(refundAmount);
+        payment.setRefundedAt(LocalDateTime.now());
+        payment.setRefundRef(result.refundRef());
+        paymentRepository.save(payment);
+
+        meterRegistry.counter("payments.refunded",
+                "provider", payment.getProvider() != null ? payment.getProvider().name() : "UNKNOWN",
+                "trigger", "system"
+        ).increment();
+        log.info("[SystemRefund] Payment [{}] refunded: amount={} ref={}", paymentId, refundAmount, result.refundRef());
     }
 
     @Transactional(readOnly = true)

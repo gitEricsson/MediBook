@@ -23,14 +23,17 @@ public interface DepartmentRepository extends JpaRepository<Department, Long> {
             d.id, d.name, d.code,
             COUNT(DISTINCT doc.id),
             COUNT(DISTINCT appt.id),
-            d.isActive
+            d.isActive,
+            d.slotDurationMins,
+            d.bufferMins,
+            d.baseConsultationFee
         )
         FROM Department d
         LEFT JOIN Doctor doc ON doc.department = d AND doc.isActive = true
         LEFT JOIN Appointment appt ON appt.department = d AND appt.scheduledAt >= :startDate AND appt.status != 'CANCELLED'
         WHERE (:q IS NULL OR LOWER(d.name) LIKE LOWER(CONCAT('%', :q, '%')) OR LOWER(d.code) LIKE LOWER(CONCAT('%', :q, '%')))
           AND (:status IS NULL OR d.isActive = :status)
-        GROUP BY d.id, d.name, d.code, d.isActive
+        GROUP BY d.id, d.name, d.code, d.isActive, d.slotDurationMins, d.bufferMins, d.baseConsultationFee
     """)
     Page<DepartmentAdminResponse> getAdminStats(
             @Param("q") String q, 

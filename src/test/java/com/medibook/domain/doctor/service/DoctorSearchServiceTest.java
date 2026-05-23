@@ -50,13 +50,21 @@ class DoctorSearchServiceTest {
     @Mock AppointmentRepository appointmentRepository;
     @Mock AppointmentHoldService holdService;
     @Mock com.medibook.domain.schedule.service.DoctorLeaveService doctorLeaveService;
+    @Mock com.medibook.domain.schedule.service.DoctorSlotBlockService doctorSlotBlockService;
 
     HospitalProperties hospitalProperties = new HospitalProperties();
     DoctorSearchService service;
 
     @BeforeEach
     void setUp() {
-        service = new DoctorSearchService(doctorRepository, workingHoursRepository, appointmentRepository, holdService, hospitalProperties, doctorLeaveService);
+        service = new DoctorSearchService(
+                doctorRepository,
+                workingHoursRepository,
+                appointmentRepository,
+                holdService,
+                hospitalProperties,
+                doctorLeaveService,
+                doctorSlotBlockService);
     }
 
     @Test
@@ -88,7 +96,6 @@ class DoctorSearchServiceTest {
     @Test
     void searchDoctors_filtersTelemedicineWhenVisitTypeRequiresIt() {
         Doctor doctor = doctor();
-        doctor.setTelemedicineEnabled(true);
         when(doctorRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(doctor)));
 

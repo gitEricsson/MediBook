@@ -4,6 +4,7 @@ import jakarta.validation.constraints.*;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 @Data
 public class DoctorRequest {
@@ -14,8 +15,15 @@ public class DoctorRequest {
     @NotNull(message = "Department ID is required")
     private Long departmentId;
 
+    /** Additional departments this doctor is cross-listed in (optional). */
+    private List<Long> additionalDepartmentIds;
+
     @Size(max = 150)
     private String specialization;
+
+    /** All specializations, including the primary one. The primary is always
+     *  derived from {@code specialization}; any extras go here. */
+    private List<@Size(max = 150) String> specializations;
 
     @NotBlank(message = "License number is required")
     @Size(max = 100)
@@ -37,8 +45,6 @@ public class DoctorRequest {
 
     @Pattern(regexp = "MALE|FEMALE|OTHER", message = "Gender must be MALE, FEMALE, or OTHER")
     private String gender;
-
-    private boolean telemedicineEnabled;
 
     @Size(max = 255)
     private String languages;

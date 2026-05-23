@@ -28,10 +28,18 @@ public class AppointmentEventConsumer {
             groupId = "medibook-notification-group",
             containerFactory = "appointmentKafkaListenerContainerFactory"
     )
-    public void onAppointmentEvent(ConsumerRecord<String, AppointmentEvent> record,
+    public void onAppointmentEvent(ConsumerRecord<String, Object> record,
                                    Acknowledgment ack) {
         try {
-            AppointmentEvent event = record.value();
+            // Guard against stale messages serialized as raw Strings from a previous deployment.
+            if (!(record.value() instanceof AppointmentEvent)) {
+                log.warn("Skipping non-AppointmentEvent message on {}: valueType={}",
+                        KafkaTopics.APPOINTMENT_EVENTS,
+                        record.value() == null ? "null" : record.value().getClass().getSimpleName());
+                ack.acknowledge();
+                return;
+            }
+            AppointmentEvent event = (AppointmentEvent) record.value();
             log.info("Consumed AppointmentEvent [{}] type={}", event.getEventId(), event.getEventType());
             if (event.getEventId() != null && processedEventRepository.existsById(event.getEventId())) {
                 log.info("Skipping duplicate AppointmentEvent [{}]", event.getEventId());
@@ -58,7 +66,8 @@ public class AppointmentEventConsumer {
             log.warn("Transient notification failure, message will be retried: {}", e.getMessage());
         } catch (Exception e) {
             log.error("Failed to process appointment event", e);
-            // Still acknowledge to avoid infinite loop, but log for manual review
+            // Acknowledge to avoid infinite retry loop on unrecoverable errors.
+            ack.acknowledge();
         }
     }
 }

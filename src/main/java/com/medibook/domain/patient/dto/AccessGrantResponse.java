@@ -6,6 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Data
@@ -23,6 +24,8 @@ public class AccessGrantResponse {
     private LocalDateTime grantedAt;
     private LocalDateTime revokedAt;
     private String reason;
+    /** Inclusive cutoff for which records this doctor may view. Null = no cutoff. */
+    private LocalDate accessUpToDate;
 
     public static AccessGrantResponse fromEntity(PatientAccessGrant grant) {
         Doctor doctor = grant.getDoctor();
@@ -37,6 +40,7 @@ public class AccessGrantResponse {
                 .grantedAt(grant.getGrantedAt())
                 .revokedAt(grant.getRevokedAt())
                 .reason(grant.getReason())
+                .accessUpToDate(grant.getAccessUpToDate())
                 .build();
     }
 }

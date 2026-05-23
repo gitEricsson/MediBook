@@ -96,16 +96,20 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
         http
+            // JWT in Authorization header (not cookie) — CSRF is not exploitable.
             .csrf(AbstractHttpConfigurer::disable)
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .headers(headers -> headers
                 .contentTypeOptions(contentTypeOptions -> {})
-                .frameOptions(frameOptions -> frameOptions.sameOrigin())
+                // API endpoints should never be framed.
+                .frameOptions(frameOptions -> frameOptions.deny())
                 .referrerPolicy(referrerPolicy -> referrerPolicy
                         .policy(ReferrerPolicyHeaderWriter.ReferrerPolicy.NO_REFERRER))
                 .httpStrictTransportSecurity(hsts -> hsts
                         .includeSubDomains(true)
-                        .maxAgeInSeconds(31536000)))
+                        .maxAgeInSeconds(31536000))
+                .contentSecurityPolicy(csp -> csp
+                        .policyDirectives("default-src 'none'; frame-ancestors 'none'")))
             .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .exceptionHandling(ex -> ex
                 .authenticationEntryPoint((req, res, e) -> {

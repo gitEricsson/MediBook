@@ -10,6 +10,7 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +32,13 @@ import java.util.Map;
 public class ClaudeSupportProvider implements SupportAiProvider {
 
     private static final String API_URL       = "https://api.anthropic.com/v1/messages";
-    private static final String MODEL         = "claude-haiku-4-5-20251001";
+    // Use a real, generally-available Anthropic model id. The previous value
+    // ("claude-haiku-4-5-20251001") was not an Anthropic-released model id, so
+    // every request returned 400/404 from the API and the catch block fell
+    // through to FALLBACK_REPLY ("I'm temporarily unable to reach the
+    // assistant…"). Override at runtime via app.ai.support.claude-model if
+    // a newer model is preferred without redeploying.
+    private static final String DEFAULT_MODEL = "claude-3-5-haiku-20241022";
     private static final String ANTHROPIC_VER = "2023-06-01";
     private static final String FALLBACK_REPLY =
             "I'm temporarily unable to reach the assistant. Please try again in a moment.";
@@ -41,6 +48,10 @@ public class ClaudeSupportProvider implements SupportAiProvider {
 
     @Value("${app.ai.support.max-tokens:512}")
     private int maxTokens;
+
+    /** Override the Claude model id without touching code — e.g. when a new Haiku ships. */
+    @Value("${app.ai.support.claude-model:claude-3-5-haiku-20241022}")
+    private String model;
 
     private final ObjectMapper objectMapper;
 
@@ -83,9 +94,10 @@ public class ClaudeSupportProvider implements SupportAiProvider {
         }
         messages.add(Map.of("role", "user", "content", userMessage));
 
+        String resolvedModel = model != null && !model.isBlank() ? model : DEFAULT_MODEL;
         try {
             String body = objectMapper.writeValueAsString(Map.of(
-                    "model",      MODEL,
+                    "model",      resolvedModel,
                     "max_tokens", maxTokens,
                     "system",     systemPrompt,
                     "messages",   messages
@@ -106,8 +118,17 @@ public class ClaudeSupportProvider implements SupportAiProvider {
             String text   = root.path("content").get(0).path("text").asText("");
             return text.isBlank() ? FALLBACK_REPLY : text;
 
+        } catch (RestClientResponseException ex) {
+            // Surface the actual Anthropic error body — "model not found", auth
+            // failures, etc. otherwise stay hidden behind a generic message.
+            log.error("ClaudeSupportProvider HTTP {} from Anthropic (model={}, keyPrefix={}): {}",
+                    ex.getStatusCode(),
+                    resolvedModel,
+                    apiKey.length() > 12 ? apiKey.substring(0, 12) + "…" : "<short>",
+                    ex.getResponseBodyAsString());
+            return FALLBACK_REPLY;
         } catch (Exception ex) {
-            log.error("ClaudeSupportProvider error: {}", ex.getMessage());
+            log.error("ClaudeSupportProvider error (model={}): {}", resolvedModel, ex.getMessage(), ex);
             return FALLBACK_REPLY;
         }
     }

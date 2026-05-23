@@ -23,6 +23,7 @@ import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.messaging.event.ChatEvent;
 import com.medibook.messaging.producer.ChatEventProducer;
+import com.medibook.infrastructure.metrics.EmergencyMetrics;
 import com.medibook.security.UserPrincipal;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -52,6 +53,8 @@ class TelemedicineCallServiceTest {
     @Mock private TwilioVideoService twilioVideoService;
     @Mock private TwilioTokenService twilioTokenService;
     @Mock private ChatEventProducer chatEventProducer;
+    @Mock private EmergencyMetrics emergencyMetrics;
+    @Mock private io.micrometer.core.instrument.MeterRegistry meterRegistry;
 
     private TelemedicineCallService service;
     private User patient;
@@ -74,7 +77,9 @@ class TelemedicineCallServiceTest {
                 twilioVideoService,
                 twilioTokenService,
                 chatEventProducer,
-                new ObjectMapper());
+                new ObjectMapper(),
+                emergencyMetrics,
+                meterRegistry);
 
         patient = user(10L, Role.ROLE_PATIENT);
         doctorUser = user(20L, Role.ROLE_DOCTOR);

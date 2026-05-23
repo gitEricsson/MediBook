@@ -1,8 +1,12 @@
 package com.medibook.domain.appointment.service;
 
 import com.medibook.common.exception.MediBookException;
+import com.medibook.domain.doctor.repository.DoctorRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -10,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.data.redis.core.SessionCallback;
 import org.springframework.data.redis.core.RedisOperations;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -25,6 +30,7 @@ public class AppointmentHoldService {
 
     private final StringRedisTemplate redisTemplate;
     private final AppointmentSchedulingPolicy schedulingPolicy;
+    private final DoctorRepository doctorRepository;
     private static final String HOLD_PREFIX = "appt_hold:";
     private static final Duration HOLD_DURATION = Duration.ofMinutes(10);
     private static final DateTimeFormatter formatter = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
@@ -84,16 +90,35 @@ public class AppointmentHoldService {
     }
 
     private int resolveDefaultDurationMins(Long doctorId) {
-        // Best-effort fallback for overlap math when the patient didn't supply a length.
-        // Mirrors AppointmentSchedulingPolicy's resolution: doctor.slotDurationMins or 60.
-        return 60;
+        return doctorRepository.findByIdWithDetails(doctorId)
+                .map(d -> {
+                    if (d.getSlotDurationMins() > 0) return d.getSlotDurationMins();
+                    if (d.getDepartment() != null && d.getDepartment().getSlotDurationMins() > 0)
+                        return d.getDepartment().getSlotDurationMins();
+                    return 30;
+                })
+                .orElse(30);
     }
 
     private boolean overlapsActiveHold(Long doctorId, LocalDateTime start, LocalDateTime end, String excludeKey) {
         String prefix  = HOLD_PREFIX + doctorId + ":";
         String pattern = prefix + "*";
-        Set<String> keys = redisTemplate.keys(pattern);
-        if (keys == null) return false;
+        // Use SCAN (cursor-based, O(log n + m) per batch) instead of KEYS (O(n), blocks Redis).
+        Set<String> keys = new HashSet<>();
+        try {
+            ScanOptions opts = ScanOptions.scanOptions().match(pattern).count(100).build();
+            redisTemplate.execute((RedisCallback<Void>) conn -> {
+                try (Cursor<byte[]> cursor = conn.scan(opts)) {
+                    cursor.forEachRemaining(k -> keys.add(new String(k, StandardCharsets.UTF_8)));
+                } catch (Exception ex) {
+                    log.warn("Redis SCAN cursor close error for doctor {}: {}", doctorId, ex.getMessage());
+                }
+                return null;
+            });
+        } catch (Exception ex) {
+            log.warn("Redis SCAN failed for hold overlap check (doctor {}): {}", doctorId, ex.getMessage());
+            return false;
+        }
         for (String key : keys) {
             if (key.equals(excludeKey)) continue;
             // Key format: appt_hold:{doctorId}:{startIso}. The ISO string itself contains

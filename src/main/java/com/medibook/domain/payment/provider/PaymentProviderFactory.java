@@ -20,16 +20,33 @@ public class PaymentProviderFactory {
     private Map<PaymentProvider, PaymentProviderPort> providerMap;
 
     public PaymentProviderPort get(PaymentProvider provider) {
-        if (providerMap == null) {
-            providerMap = providers.stream()
-                    .collect(Collectors.toMap(PaymentProviderPort::getProvider, Function.identity()));
-        }
-        PaymentProviderPort port = providerMap.get(provider);
+        PaymentProviderPort port = ensureMap().get(provider);
         if (port == null) {
             throw new MediBookException(
                     "Payment provider not configured: " + provider,
                     HttpStatus.SERVICE_UNAVAILABLE, "PROVIDER_NOT_CONFIGURED");
         }
         return port;
+    }
+
+    /**
+     * Returns the set of payment providers currently wired into the application.
+     *
+     * <p>Each provider class is {@code @ConditionalOnProperty}-gated by
+     * {@code app.payment.<name>.enabled=true} in the yaml/env config, so this is
+     * effectively the deployment's payment-method allow-list. The FE pulls it
+     * before rendering the gateway buttons so we don't surface options that
+     * would 503 on click with {@code PROVIDER_NOT_CONFIGURED}.
+     */
+    public java.util.Set<PaymentProvider> getEnabledProviders() {
+        return ensureMap().keySet();
+    }
+
+    private Map<PaymentProvider, PaymentProviderPort> ensureMap() {
+        if (providerMap == null) {
+            providerMap = providers.stream()
+                    .collect(Collectors.toMap(PaymentProviderPort::getProvider, Function.identity()));
+        }
+        return providerMap;
     }
 }

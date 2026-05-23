@@ -36,7 +36,8 @@ public class ReviewController {
     }
 
     @GetMapping("/doctors/{doctorId}")
-    @Operation(summary = "Get approved reviews for a doctor (public)")
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
+    @Operation(summary = "Get internal reviews for a doctor (admin/super_admin only — not public)")
     public ApiResponse<Page<ReviewResponse>> getDoctorReviews(
             @PathVariable Long doctorId,
             @PageableDefault(size = 20) Pageable pageable) {

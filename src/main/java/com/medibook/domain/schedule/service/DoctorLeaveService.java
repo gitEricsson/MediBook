@@ -133,6 +133,40 @@ public class DoctorLeaveService {
         return leaveRepository.findByStatus("PENDING");
     }
 
+    /**
+     * Same as {@link #getAllPendingLeaves()} but materialises a flat DTO inside the
+     * transactional boundary so lazy doctor / user / department proxies are resolved
+     * before Jackson sees them — avoids LazyInitializationException at controller
+     * serialization time.
+     */
+    @Transactional(readOnly = true)
+    public List<com.medibook.domain.schedule.dto.AdminLeaveResponse> getAllPendingLeaveResponses() {
+        return leaveRepository.findByStatus("PENDING").stream()
+                .map(com.medibook.domain.schedule.dto.AdminLeaveResponse::from)
+                .toList();
+    }
+
+    /** All leave records across all doctors, optionally filtered by status. */
+    @Transactional(readOnly = true)
+    public List<com.medibook.domain.schedule.dto.AdminLeaveResponse> getAllLeaveResponses(String status) {
+        List<DoctorLeave> rows = (status == null || status.isBlank())
+                ? leaveRepository.findAll()
+                : leaveRepository.findByStatus(status);
+        return rows.stream()
+                .map(com.medibook.domain.schedule.dto.AdminLeaveResponse::from)
+                .toList();
+    }
+
+    @Transactional
+    public com.medibook.domain.schedule.dto.AdminLeaveResponse approveLeaveResponse(Long leaveId, UserPrincipal principal) {
+        return com.medibook.domain.schedule.dto.AdminLeaveResponse.from(approveLeave(leaveId, principal));
+    }
+
+    @Transactional
+    public com.medibook.domain.schedule.dto.AdminLeaveResponse rejectLeaveResponse(Long leaveId, UserPrincipal principal) {
+        return com.medibook.domain.schedule.dto.AdminLeaveResponse.from(rejectLeave(leaveId, principal));
+    }
+
     @Transactional(readOnly = true)
     public boolean isDoctorOnLeave(Long doctorId, LocalDate date) {
         return !leaveRepository.findActiveLeaveOnDate(doctorId, date).isEmpty()

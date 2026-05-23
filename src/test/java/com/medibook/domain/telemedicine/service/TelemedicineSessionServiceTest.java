@@ -63,7 +63,7 @@ class TelemedicineSessionServiceTest {
 
         Department dept = Department.builder().id(1L).name("Cardiology").build();
         doctor = Doctor.builder().id(1L).user(doctorUser).department(dept)
-                .licenseNumber("L001").telemedicineEnabled(true).build();
+                .licenseNumber("L001").build();
 
         appointment = Appointment.builder()
                 .id(1L).patient(patient).doctor(doctor).department(dept)
@@ -112,15 +112,6 @@ class TelemedicineSessionServiceTest {
                 .hasMessageContaining("not a telemedicine");
     }
 
-    @Test
-    void createSession_doctorNotEnabled_throwsException() {
-        doctor.setTelemedicineEnabled(false);
-        when(appointmentRepository.findByIdWithDetails(1L)).thenReturn(Optional.of(appointment));
-
-        assertThatThrownBy(() -> sessionService.createSession(1L, true, patientPrincipal))
-                .isInstanceOf(MediBookException.class)
-                .hasMessageContaining("not enabled for telemedicine");
-    }
 
     @Test
     void createSession_duplicateSession_throwsConflict() {

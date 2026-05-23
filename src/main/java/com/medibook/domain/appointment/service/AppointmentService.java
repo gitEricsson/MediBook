@@ -6,10 +6,14 @@ import com.medibook.common.response.CursorPageResponse;
 import com.medibook.config.repository.SystemConfigRepository;
 import com.medibook.domain.appointment.dto.*;
 import com.medibook.domain.appointment.entity.Appointment;
+import com.medibook.domain.payment.service.CancellationRefundService;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
+import com.medibook.domain.appointment.entity.AppointmentType;
+import com.medibook.domain.appointment.entity.ConsultationMedium;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.service.DoctorScheduleService;
 import com.medibook.domain.schedule.service.DoctorLeaveService;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
@@ -18,6 +22,7 @@ import com.medibook.messaging.event.AuditEvent;
 import com.medibook.messaging.producer.AppointmentEventProducer;
 import com.medibook.security.UserPrincipal;
 import io.github.resilience4j.bulkhead.annotation.Bulkhead;
+import io.micrometer.core.instrument.MeterRegistry;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
@@ -52,6 +57,26 @@ public class AppointmentService {
     private final SystemConfigRepository configRepository;
     private final DoctorLeaveService doctorLeaveService;
     private final AppointmentSchedulingPolicy schedulingPolicy;
+    private final DoctorScheduleService doctorScheduleService;
+    private final AppointmentPricingService pricingService;
+    private final com.medibook.domain.patient.service.AccessGrantService accessGrantService;
+    private final CancellationRefundService cancellationRefundService;
+    private final com.medibook.domain.payment.repository.InvoiceRepository invoiceRepository;
+    private final MeterRegistry meterRegistry;
+
+    /**
+     * Computes the outstanding balance for an appointment, if any. Returns the
+     * invoice total when an UNPAID invoice exists; null otherwise. Surfaced to
+     * the FE so the consultation-card "Pay outstanding bill" CTA can render
+     * regardless of appointment status (e.g. COMPLETED emergency appointments
+     * awaiting post-consult settlement).
+     */
+    private java.math.BigDecimal computeOutstandingBalance(Long appointmentId) {
+        return invoiceRepository.findByAppointmentId(appointmentId)
+                .filter(inv -> !"PAID".equalsIgnoreCase(inv.getStatus()))
+                .map(com.medibook.domain.payment.entity.Invoice::getTotal)
+                .orElse(null);
+    }
 
     @Bulkhead(name = "appointmentService")
     @Transactional
@@ -65,6 +90,14 @@ public class AppointmentService {
         // changed during the hold window.
         schedulingPolicy.checkBookableWithOverlap(request.getDoctorId(), request.getScheduledAt(), endTime);
 
+        // FOLLOW_UP consultations require explicit patient consent to share prior records.
+        if (request.getConsultationType() == AppointmentType.FOLLOW_UP
+                && !request.isFollowUpConsentGiven()) {
+            throw new MediBookException(
+                    "Patient consent is required to share prior medical records for a follow-up consultation.",
+                    HttpStatus.UNPROCESSABLE_ENTITY, "FOLLOW_UP_CONSENT_REQUIRED");
+        }
+
         User patient = userRepository.findById(patientId)
                 .orElseThrow(() -> new ResourceNotFoundException("User", "id", patientId));
 
@@ -72,6 +105,17 @@ public class AppointmentService {
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", request.getDoctorId()));
 
         String confirmationCode = "MB-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+
+        ConsultationMedium medium =
+                request.getConsultationMedium() != null
+                        ? request.getConsultationMedium()
+                        : ConsultationMedium.PHYSICAL;
+        AppointmentType consultationType =
+                request.getConsultationType() != null
+                        ? request.getConsultationType()
+                        : AppointmentType.FIRST_VISIT;
+
+        java.math.BigDecimal consultationFee = pricingService.computeFee(doctor, consultationType, medium);
 
         Appointment appointment = Appointment.builder()
                 .patient(patient)
@@ -82,8 +126,12 @@ public class AppointmentService {
                 .durationMins(request.getDurationMins())
                 .reason(request.getReason())
                 .type(request.getType())
+                .consultationMedium(medium)
+                .consultationType(consultationType)
+                .followUpConsentGiven(request.isFollowUpConsentGiven())
                 .status(AppointmentStatus.PENDING)
                 .confirmationCode(confirmationCode)
+                .consultationFee(consultationFee)
                 .build();
 
         Appointment saved;
@@ -92,6 +140,17 @@ public class AppointmentService {
         } catch (DataIntegrityViolationException ex) {
             throw new MediBookException("Doctor is not available for booking at this time",
                     HttpStatus.CONFLICT, "SLOT_TAKEN");
+        }
+
+        // FOLLOW_UP + consent → upsert a time-bounded access grant so the
+        // booked doctor can view consultation notes created on or before the
+        // appointment date. The grant is APPROVED automatically because the
+        // patient's consent was captured in the same booking action.
+        if (consultationType == AppointmentType.FOLLOW_UP && request.isFollowUpConsentGiven()) {
+            accessGrantService.upsertFollowUpGrant(
+                    patientId,
+                    doctor.getId(),
+                    request.getScheduledAt().toLocalDate());
         }
 
         if (request.getHoldId() != null) {
@@ -109,6 +168,8 @@ public class AppointmentService {
             }
         }
 
+        doctorScheduleService.evictSlotCache(request.getDoctorId(), request.getScheduledAt().toLocalDate());
+
         AppointmentEvent appointmentEvent = buildEvent(saved, "BOOKED");
         AuditEvent auditEvent = buildAuditEvent(saved, patientId, saved.getPatient().getEmail(), "APPOINTMENT_BOOKED");
         eventProducer.publishAppointmentEvent(appointmentEvent);
@@ -116,6 +177,11 @@ public class AppointmentService {
 
         log.info("Appointment [{}] booked by patient [{}] with doctor [{}]",
                 saved.getId(), patientId, request.getDoctorId());
+
+        meterRegistry.counter("appointments.created",
+                "type", saved.getConsultationType() != null ? saved.getConsultationType().name() : "UNKNOWN",
+                "medium", saved.getConsultationMedium() != null ? saved.getConsultationMedium().name() : "UNKNOWN"
+        ).increment();
 
         return AppointmentResponse.fromEntity(saved);
     }
@@ -125,7 +191,11 @@ public class AppointmentService {
     public AppointmentResponse cancel(Long id, CancelRequest request, UserPrincipal principal) {
         Appointment appt = getAndValidate(id);
 
-        if (appt.getStatus() == AppointmentStatus.COMPLETED || appt.getStatus() == AppointmentStatus.CANCELLED) {
+        if (appt.getStatus() == AppointmentStatus.COMPLETED
+                || appt.getStatus() == AppointmentStatus.CANCELLED
+                || appt.getStatus() == AppointmentStatus.NO_SHOW
+                || appt.getStatus() == AppointmentStatus.REFUNDED
+                || appt.getStatus() == AppointmentStatus.IN_CONSULTATION) {
             throw new MediBookException("Cannot cancel an appointment that is already " + appt.getStatus(),
                     HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
@@ -140,9 +210,11 @@ public class AppointmentService {
 
         if (isPatient && !isAdmin) {
             CancellationPolicyResponse policy = getCancellationPolicy();
-            LocalDateTime cutoff = appt.getScheduledAt().minusHours(policy.getNoticeHours());
+            LocalDateTime cutoff = appt.getScheduledAt().minusMinutes(policy.getNoticeMinutes());
             if (LocalDateTime.now().isAfter(cutoff)) {
-                throw new MediBookException("Cancellation is within the " + policy.getNoticeHours() + "-hour notice period. A cancellation fee applies.",
+                throw new MediBookException(
+                        "Cancellation is no longer possible — the appointment starts in under "
+                                + policy.getNoticeMinutes() + " minutes.",
                         HttpStatus.UNPROCESSABLE_ENTITY, "WITHIN_NOTICE_PERIOD");
             }
         }
@@ -154,10 +226,16 @@ public class AppointmentService {
 
         try {
             Appointment saved = appointmentRepository.save(appt);
+            doctorScheduleService.evictSlotCache(saved.getDoctor().getId(), saved.getScheduledAt().toLocalDate());
             AppointmentEvent appointmentEvent = buildEvent(saved, "CANCELLED");
             AuditEvent auditEvent = buildAuditEvent(saved, principal.getId(), principal.getEmail(), "APPOINTMENT_CANCELLED");
             eventProducer.publishAppointmentEvent(appointmentEvent);
             eventProducer.publishAuditEvent(auditEvent);
+            // Schedule async refund if a successful payment exists for this appointment.
+            cancellationRefundService.scheduleRefundIfPaid(saved.getId());
+            meterRegistry.counter("appointments.cancelled",
+                    "by", isAdmin ? "admin" : "patient"
+            ).increment();
             return AppointmentResponse.fromEntity(saved);
         } catch (OptimisticLockingFailureException ex) {
             throw new MediBookException("Appointment was modified concurrently. Please refresh.", HttpStatus.CONFLICT, "CONCURRENT_MODIFICATION");
@@ -172,7 +250,11 @@ public class AppointmentService {
         if (!appt.getPatient().getId().equals(principal.getId())) {
             throw new MediBookException("Not authorized to reschedule this appointment", HttpStatus.FORBIDDEN, "ACCESS_DENIED");
         }
-        if (appt.getStatus() == AppointmentStatus.COMPLETED || appt.getStatus() == AppointmentStatus.CANCELLED) {
+        if (appt.getStatus() == AppointmentStatus.COMPLETED
+                || appt.getStatus() == AppointmentStatus.CANCELLED
+                || appt.getStatus() == AppointmentStatus.IN_CONSULTATION
+                || appt.getStatus() == AppointmentStatus.REFUNDED
+                || appt.getStatus() == AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT) {
             throw new MediBookException("Cannot reschedule a completed or cancelled appointment", HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
 
@@ -228,12 +310,12 @@ public class AppointmentService {
 
     @Transactional(readOnly = true)
     public CancellationPolicyResponse getCancellationPolicy() {
-        int noticeHours = configRepository.findById("CANCELLATION_NOTICE_HOURS")
+        int noticeMinutes = configRepository.findById("CANCELLATION_NOTICE_MINUTES")
                 .map(config -> Integer.parseInt(config.getConfigValue()))
-                .orElse(24);
+                .orElse(30);
         return CancellationPolicyResponse.builder()
-                .noticeHours(noticeHours)
-                .feeApplies(true)
+                .noticeMinutes(noticeMinutes)
+                .feeApplies(false)
                 .build();
     }
 
@@ -241,7 +323,7 @@ public class AppointmentService {
     @Transactional(readOnly = true)
     public AppointmentResponse getById(Long id) {
         return appointmentRepository.findByIdWithDetails(id)
-                .map(AppointmentResponse::fromEntity)
+                .map(a -> AppointmentResponse.fromEntity(a, computeOutstandingBalance(a.getId())))
                 .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
     }
 
@@ -249,7 +331,7 @@ public class AppointmentService {
     public AppointmentResponse getByIdForDoctor(Long id, UserPrincipal principal) {
         Appointment appointment = getAndValidate(id);
         ensureDoctorOwnsAppointment(appointment, principal);
-        return AppointmentResponse.fromEntity(appointment);
+        return AppointmentResponse.fromEntity(appointment, computeOutstandingBalance(appointment.getId()));
     }
 
     @Transactional(readOnly = true)
@@ -270,13 +352,13 @@ public class AppointmentService {
     @Transactional(readOnly = true)
     public Page<AppointmentResponse> getUpcomingByPatient(Long patientId, Pageable pageable) {
         return appointmentRepository.findByPatientIdAndScheduledAtAfterOrderByScheduledAtAsc(patientId, LocalDateTime.now(), pageable)
-                .map(AppointmentResponse::fromEntity);
+                .map(a -> AppointmentResponse.fromEntity(a, computeOutstandingBalance(a.getId())));
     }
 
     @Transactional(readOnly = true)
     public Page<AppointmentResponse> getPastByPatient(Long patientId, Pageable pageable) {
         return appointmentRepository.findByPatientIdAndScheduledAtBeforeOrderByScheduledAtDesc(patientId, LocalDateTime.now(), pageable)
-                .map(AppointmentResponse::fromEntity);
+                .map(a -> AppointmentResponse.fromEntity(a, computeOutstandingBalance(a.getId())));
     }
 
     @Transactional(readOnly = true)
@@ -309,7 +391,7 @@ public class AppointmentService {
         boolean hasMore = appointments.size() > pageSize;
         List<Appointment> pageItems = hasMore ? appointments.subList(0, pageSize) : appointments;
         List<AppointmentResponse> items = pageItems.stream()
-                .map(AppointmentResponse::fromEntity)
+                .map(a -> AppointmentResponse.fromEntity(a, computeOutstandingBalance(a.getId())))
                 .toList();
 
         String nextCursor = null;

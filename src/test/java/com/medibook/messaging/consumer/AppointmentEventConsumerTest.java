@@ -119,7 +119,7 @@ class AppointmentEventConsumerTest {
         assertThat(captor.getValue().getEventType()).isEqualTo(eventType);
     }
 
-    private static ConsumerRecord<String, AppointmentEvent> record(AppointmentEvent event) {
+    private static ConsumerRecord<String, Object> record(AppointmentEvent event) {
         return new ConsumerRecord<>(KafkaTopics.APPOINTMENT_EVENTS, 0, 0L, "appointment", event);
     }
 

@@ -36,6 +36,7 @@ public class VisitCopilotSession extends AuditableEntity {
     @Column(name = "brief_json", columnDefinition = "MEDIUMTEXT")
     private String briefJson;
 
+    @Convert(converter = PhiAttributeConverter.class)
     @Column(name = "red_flags", columnDefinition = "TEXT")
     private String redFlags;
 

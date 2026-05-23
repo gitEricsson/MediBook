@@ -4,6 +4,8 @@ import com.medibook.common.response.ApiResponse;
 import com.medibook.domain.payment.dto.InitiatePaymentRequest;
 import com.medibook.domain.payment.dto.InvoiceResponse;
 import com.medibook.domain.payment.dto.PaymentResponse;
+import com.medibook.domain.payment.entity.PaymentProvider;
+import com.medibook.domain.payment.provider.PaymentProviderFactory;
 import com.medibook.domain.payment.service.PaymentService;
 import com.medibook.security.CurrentUser;
 import com.medibook.security.UserPrincipal;
@@ -27,6 +29,19 @@ import java.math.BigDecimal;
 public class PaymentController {
 
     private final PaymentService paymentService;
+    private final PaymentProviderFactory providerFactory;
+
+    @GetMapping("/providers")
+    @PreAuthorize("isAuthenticated()")
+    @Operation(summary = "List payment gateways enabled in this deployment")
+    public ApiResponse<java.util.List<PaymentProvider>> listEnabledProviders() {
+        // Sort by enum order so the FE renders Paystack → Monnify → Stripe →
+        // Flutterwave consistently regardless of bean-registration order.
+        java.util.List<PaymentProvider> enabled = providerFactory.getEnabledProviders().stream()
+                .sorted(java.util.Comparator.comparingInt(Enum::ordinal))
+                .toList();
+        return ApiResponse.ok(enabled);
+    }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)

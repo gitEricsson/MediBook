@@ -1,9 +1,15 @@
 package com.medibook.domain.appointment.entity;
 
 public enum AppointmentStatus {
+    PENDING_PAYMENT,
     PENDING,
     CONFIRMED,
-    CANCELLED,
+    CHECKED_IN,
+    IN_WAITING_ROOM,
+    IN_CONSULTATION,
     COMPLETED,
-    NO_SHOW
+    CANCELLED,
+    NO_SHOW,
+    REFUNDED,
+    EMERGENCY_PENDING_SETTLEMENT
 }

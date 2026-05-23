@@ -20,6 +20,8 @@ import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.criteria.JoinType;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -39,6 +41,7 @@ public class DoctorSearchService {
     private final com.medibook.domain.appointment.service.AppointmentHoldService holdService;
     private final HospitalProperties hospitalProperties;
     private final DoctorLeaveService doctorLeaveService;
+    private final com.medibook.domain.schedule.service.DoctorSlotBlockService doctorSlotBlockService;
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> searchDoctors(
@@ -66,19 +69,33 @@ public class DoctorSearchService {
         }
 
         if (departmentIds != null && !departmentIds.isEmpty()) {
-            spec = spec.and((root, q, cb) -> root.get("department").get("id").in(departmentIds));
+            final List<Long> deptIds = departmentIds;
+            spec = spec.and((root, q, cb) -> {
+                if (!q.getResultType().equals(Long.class)) {
+                    q.distinct(true);
+                }
+                return cb.or(
+                    root.get("department").get("id").in(deptIds),
+                    root.join("additionalDepartments", JoinType.LEFT).get("id").in(deptIds)
+                );
+            });
         }
 
         if (specialisations != null && !specialisations.isEmpty()) {
-            spec = spec.and((root, q, cb) -> root.get("specialization").in(specialisations));
+            final List<String> specs = specialisations;
+            spec = spec.and((root, q, cb) -> {
+                if (!q.getResultType().equals(Long.class)) {
+                    q.distinct(true);
+                }
+                return cb.or(
+                    root.get("specialization").in(specs),
+                    root.join("specializations", JoinType.LEFT).in(specs)
+                );
+            });
         }
 
         if (acceptingNew != null) {
             spec = spec.and((root, q, cb) -> cb.equal(root.get("acceptingNew"), acceptingNew));
-        }
-
-        if (visitType != null && !visitType.isBlank() && requestsTelemedicine(visitType)) {
-            spec = spec.and((root, q, cb) -> cb.isTrue(root.get("telemedicineEnabled")));
         }
 
         spec = spec.and((root, q, cb) -> cb.isTrue(root.get("isActive")));
@@ -97,7 +114,13 @@ public class DoctorSearchService {
     public AvailabilityGridResponse getAvailability(Long doctorId, LocalDate from, LocalDate to) {
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
-        int slotDuration = doctor.getSlotDurationMins();
+        // Slot duration: doctor override → department default → 30 (matches DoctorScheduleService).
+        // Step: slot duration + department buffer so the grid reflects the realistic cadence
+        // (consult time + cleaning/prep), and any configured midday break falls out naturally
+        // because each working-hours shift is iterated separately.
+        int slotDuration = resolveSlotDurationMins(doctor);
+        int bufferMins   = resolveBufferMins(doctor);
+        int stepMins     = slotDuration + bufferMins;
         LocalDateTime now = LocalDateTime.now();
 
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
@@ -116,34 +139,48 @@ public class DoctorSearchService {
             for (DoctorWorkingHours hours : workingHours) {
                 if (hours.getDayOfWeek() != dayOfWeek) continue;
                 LocalTime current = hours.getStartTime();
-                while (current.isBefore(hours.getEndTime())) {
+                // A slot only fits if (current + slotDuration) is still inside the shift —
+                // otherwise we'd offer a window that bleeds past closing time.
+                while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
                     LocalDateTime slotStart = date.atTime(current);
-                    // Skip slots whose start time has already passed
                     if (!slotStart.isBefore(now)) {
                         allSlotStarts.add(slotStart);
                     }
-                    current = current.plusMinutes(slotDuration);
+                    current = current.plusMinutes(stepMins);
                 }
             }
         }
 
         Set<LocalDateTime> heldSlots = holdService.getHeldSlots(doctorId, allSlotStarts);
 
+        // Ad-hoc per-day blocks the doctor declared (e.g. "operating on patient X").
+        // Pulled once for the whole window — overlap checks per slot are O(blocks)
+        // which is tiny in practice.
+        var slotBlocks = doctorSlotBlockService.findRawForDoctor(doctorId, from, to);
+
         List<AvailabilityGridResponse.DaySlots> days = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
             int dayOfWeek = date.getDayOfWeek().getValue();
             boolean onLeave = doctorLeaveService.isDoctorOnLeave(doctorId, date);
+            final LocalDate dateF = date;
+            var blocksForDay = slotBlocks.stream()
+                    .filter(b -> b.getBlockDate().equals(dateF))
+                    .toList();
             List<AvailabilityGridResponse.SlotInfo> slots = new ArrayList<>();
 
             for (DoctorWorkingHours hours : workingHours) {
                 if (hours.getDayOfWeek() != dayOfWeek) continue;
                 LocalTime current = hours.getStartTime();
-                while (current.isBefore(hours.getEndTime())) {
+                while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
                     LocalDateTime start = date.atTime(current);
                     LocalDateTime end   = start.plusMinutes(slotDuration);
+                    final LocalTime curF = current;
+                    final LocalTime endF = current.plusMinutes(slotDuration);
+                    boolean isBlocked = blocksForDay.stream()
+                            .anyMatch(b -> curF.isBefore(b.getEndTime()) && endF.isAfter(b.getStartTime()));
 
                     // Mark past slots as PAST instead of excluding them entirely
-                    // so the frontend can grey them out for visual context
+                    // so the frontend can grey them out for visual context.
                     String status;
                     if (start.isBefore(now)) {
                         status = "PAST";
@@ -151,6 +188,8 @@ public class DoctorSearchService {
                         status = "ON_LEAVE";
                     } else if (overlapsAnyAppointment(start, end, bookedAppointments)) {
                         status = "TAKEN";
+                    } else if (isBlocked) {
+                        status = "BLOCKED";
                     } else if (heldSlots.contains(start)) {
                         status = "HELD";
                     } else {
@@ -160,7 +199,7 @@ public class DoctorSearchService {
                     slots.add(AvailabilityGridResponse.SlotInfo.builder()
                             .start(start).end(end).status(status).build());
 
-                    current = current.plusMinutes(slotDuration);
+                    current = current.plusMinutes(stepMins);
                 }
             }
 
@@ -169,6 +208,21 @@ public class DoctorSearchService {
         }
 
         return AvailabilityGridResponse.builder().days(days).build();
+    }
+
+    /** Resolution order: doctor override → department default → global default (30). */
+    private int resolveSlotDurationMins(Doctor doctor) {
+        if (doctor.getSlotDurationMins() > 0) return doctor.getSlotDurationMins();
+        if (doctor.getDepartment() != null && doctor.getDepartment().getSlotDurationMins() > 0)
+            return doctor.getDepartment().getSlotDurationMins();
+        return 30;
+    }
+
+    private int resolveBufferMins(Doctor doctor) {
+        if (doctor.getDepartment() != null) {
+            return Math.max(0, doctor.getDepartment().getBufferMins());
+        }
+        return 0;
     }
 
     private boolean overlapsAnyAppointment(LocalDateTime start, LocalDateTime end, List<Appointment> appointments) {
@@ -188,14 +242,6 @@ public class DoctorSearchService {
                         Sort.Order.desc("reviewCount"),
                         Sort.Order.asc("id"));
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
-    }
-
-    private boolean requestsTelemedicine(String visitType) {
-        String normalized = visitType.trim().toLowerCase();
-        return normalized.equals("telehealth")
-                || normalized.equals("video")
-                || normalized.equals("virtual")
-                || normalized.equals("online");
     }
 
     private String toBooleanModeQuery(String query) {

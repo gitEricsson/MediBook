@@ -106,7 +106,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            JOIN FETCH d.user
            JOIN FETCH d.department
            WHERE a.scheduledAt BETWEEN :from AND :to
-           AND a.status = 'CONFIRMED'
+           AND a.status IN ('CONFIRMED', 'CHECKED_IN', 'IN_WAITING_ROOM')
            """)
     List<Appointment> findUpcomingConfirmed(LocalDateTime from, LocalDateTime to);
 
@@ -116,7 +116,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            WHERE a.doctor.id = :doctorId
            AND a.scheduledAt < :endTime
            AND a.endTime > :scheduledAt
-           AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
+           AND a.status NOT IN ('CANCELLED', 'NO_SHOW', 'REFUNDED')
            """)
     boolean existsConflict(Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
 
@@ -126,7 +126,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
            AND a.doctor.id = :doctorId
            AND a.scheduledAt < :endTime
            AND a.endTime > :scheduledAt
-           AND a.status NOT IN ('CANCELLED', 'NO_SHOW')
+           AND a.status NOT IN ('CANCELLED', 'NO_SHOW', 'REFUNDED')
            """)
     boolean existsConflictExcluding(Long appointmentId, Long doctorId, LocalDateTime scheduledAt, LocalDateTime endTime);
 
@@ -135,32 +135,91 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     List<Appointment> findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(Long doctorId, LocalDateTime startOfDay, LocalDateTime endOfDay);
 
     @Query("""
-        SELECT COUNT(a) FROM Appointment a 
-        WHERE a.doctor.id = :doctorId 
-        AND a.scheduledAt BETWEEN :startOfDay AND :endOfDay 
+        SELECT COUNT(a) FROM Appointment a
+        WHERE a.doctor.id = :doctorId
+        AND a.scheduledAt BETWEEN :startOfDay AND :endOfDay
         AND a.status = :status
     """)
     long countByDoctorIdAndDateAndStatus(Long doctorId, LocalDateTime startOfDay, LocalDateTime endOfDay, AppointmentStatus status);
+
+    /**
+     * Return active appointment counts per doctor for a given day, in a single query.
+     * Used by emergency doctor assignment to avoid N+1.
+     * Counts IN_CONSULTATION + CONFIRMED + EMERGENCY_PENDING_SETTLEMENT so that a doctor
+     * just assigned to an emergency is not immediately eligible as the "least loaded" again.
+     */
+    @Query("""
+        SELECT a.doctor.id, COUNT(a) FROM Appointment a
+        WHERE a.doctor.id IN :doctorIds
+        AND a.scheduledAt BETWEEN :startOfDay AND :endOfDay
+        AND a.status IN ('IN_CONSULTATION', 'CONFIRMED', 'EMERGENCY_PENDING_SETTLEMENT')
+        GROUP BY a.doctor.id
+    """)
+    List<Object[]> countActiveAppointmentsByDoctorIds(
+            @Param("doctorIds") List<Long> doctorIds,
+            @Param("startOfDay") LocalDateTime startOfDay,
+            @Param("endOfDay") LocalDateTime endOfDay);
 
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     Optional<Appointment> findFirstByDoctorIdAndScheduledAtAfterAndStatusOrderByScheduledAtAsc(Long doctorId, LocalDateTime now, AppointmentStatus status);
 
     boolean existsByConfirmationCode(String confirmationCode);
 
+    /** Check whether patient has an unresolved emergency balance. */
+    @Query("""
+           SELECT COUNT(a) > 0 FROM Appointment a
+           WHERE a.patient.id = :patientId
+           AND a.status = com.medibook.domain.appointment.entity.AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT
+           """)
+    boolean existsUnresolvedEmergencyDebt(@Param("patientId") Long patientId);
+
     /** PENDING appointments older than the cutoff — fed to StalePendingCancelJob. */
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     @Query("""
            SELECT a FROM Appointment a
-           WHERE a.status = com.medibook.domain.appointment.entity.AppointmentStatus.PENDING
+           WHERE a.status IN (
+               com.medibook.domain.appointment.entity.AppointmentStatus.PENDING,
+               com.medibook.domain.appointment.entity.AppointmentStatus.PENDING_PAYMENT
+           )
              AND a.createdAt < :cutoff
            """)
     List<Appointment> findStalePending(LocalDateTime cutoff);
+
+    /**
+     * CONFIRMED / IN_WAITING_ROOM appointments whose scheduled start is before the NO_SHOW cutoff.
+     * These are fed to AppointmentLifecycleJob to be auto-marked as NO_SHOW.
+     */
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.status IN (
+               com.medibook.domain.appointment.entity.AppointmentStatus.CONFIRMED,
+               com.medibook.domain.appointment.entity.AppointmentStatus.IN_WAITING_ROOM
+           )
+             AND a.scheduledAt < :cutoff
+           """)
+    List<Appointment> findMissedAppointments(LocalDateTime cutoff);
+
+    /**
+     * IN_CONSULTATION appointments whose endTime has passed the overtime cutoff.
+     * These are fed to AppointmentLifecycleJob to be auto-completed.
+     */
+    @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
+    @Query("""
+           SELECT a FROM Appointment a
+           WHERE a.status = com.medibook.domain.appointment.entity.AppointmentStatus.IN_CONSULTATION
+             AND a.endTime < :cutoff
+           """)
+    List<Appointment> findOvertimeConsultations(LocalDateTime cutoff);
 
     /** PENDING appointments due to auto-cancel in the soon-window — for the reminder job. */
     @EntityGraph(attributePaths = {"patient", "doctor", "doctor.user", "doctor.department"})
     @Query("""
            SELECT a FROM Appointment a
-           WHERE a.status = com.medibook.domain.appointment.entity.AppointmentStatus.PENDING
+           WHERE a.status IN (
+               com.medibook.domain.appointment.entity.AppointmentStatus.PENDING,
+               com.medibook.domain.appointment.entity.AppointmentStatus.PENDING_PAYMENT
+           )
              AND a.createdAt BETWEEN :reminderFrom AND :reminderTo
            """)
     List<Appointment> findPendingDueForReminder(LocalDateTime reminderFrom, LocalDateTime reminderTo);

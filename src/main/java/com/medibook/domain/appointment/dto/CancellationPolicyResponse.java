@@ -6,6 +6,6 @@ import lombok.Data;
 @Data
 @Builder
 public class CancellationPolicyResponse {
-    private int noticeHours;
+    private int noticeMinutes;
     private boolean feeApplies;
 }

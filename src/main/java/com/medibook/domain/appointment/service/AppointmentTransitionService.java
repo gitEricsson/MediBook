@@ -7,6 +7,7 @@ import com.medibook.domain.appointment.dto.TransitionRequest;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
+import com.medibook.domain.emergency.service.EmergencySettlementService;
 import com.medibook.messaging.event.AppointmentEvent;
 import com.medibook.messaging.producer.AppointmentEventProducer;
 import lombok.RequiredArgsConstructor;
@@ -18,6 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
+import java.util.Map;
+import java.util.Set;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -25,6 +29,34 @@ public class AppointmentTransitionService {
 
     private final AppointmentRepository appointmentRepository;
     private final AppointmentEventProducer eventProducer;
+    private final EmergencySettlementService emergencySettlementService;
+
+    /**
+     * Valid forward transitions per the full appointment lifecycle FSM.
+     *
+     * PENDING_PAYMENT → PENDING (on payment initiation)
+     * PENDING         → CONFIRMED (payment webhook success)
+     * CONFIRMED       → CHECKED_IN, CANCELLED, NO_SHOW
+     * CHECKED_IN      → IN_WAITING_ROOM
+     * IN_WAITING_ROOM → IN_CONSULTATION
+     * IN_CONSULTATION → COMPLETED
+     * COMPLETED       → REFUNDED (on approved refund saga)
+     * CANCELLED       → REFUNDED (on approved refund saga)
+     * EMERGENCY_PENDING_SETTLEMENT stays terminal until settled externally
+     */
+    private static final Map<AppointmentStatus, Set<AppointmentStatus>> ALLOWED_TRANSITIONS = Map.ofEntries(
+            Map.entry(AppointmentStatus.PENDING_PAYMENT,           Set.of(AppointmentStatus.PENDING, AppointmentStatus.CANCELLED)),
+            Map.entry(AppointmentStatus.PENDING,                   Set.of(AppointmentStatus.CONFIRMED, AppointmentStatus.CANCELLED)),
+            Map.entry(AppointmentStatus.CONFIRMED,                 Set.of(AppointmentStatus.CHECKED_IN, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW)),
+            Map.entry(AppointmentStatus.CHECKED_IN,                Set.of(AppointmentStatus.IN_WAITING_ROOM, AppointmentStatus.CANCELLED)),
+            Map.entry(AppointmentStatus.IN_WAITING_ROOM,           Set.of(AppointmentStatus.IN_CONSULTATION, AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW)),
+            Map.entry(AppointmentStatus.IN_CONSULTATION,           Set.of(AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED)),
+            Map.entry(AppointmentStatus.COMPLETED,                 Set.of(AppointmentStatus.REFUNDED)),
+            Map.entry(AppointmentStatus.CANCELLED,                 Set.of(AppointmentStatus.REFUNDED)),
+            Map.entry(AppointmentStatus.NO_SHOW,                   Set.of()),
+            Map.entry(AppointmentStatus.REFUNDED,                  Set.of()),
+            Map.entry(AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT, Set.of(AppointmentStatus.COMPLETED, AppointmentStatus.CANCELLED))
+    );
 
     @CacheEvict(value = "appointments", key = "#id")
     @Transactional
@@ -39,21 +71,65 @@ public class AppointmentTransitionService {
         AppointmentStatus current = appt.getStatus();
         AppointmentStatus target = request.getTo();
 
-        if (target == AppointmentStatus.CONFIRMED) {
-            if (current != AppointmentStatus.PENDING) {
-                throw new MediBookException("Only PENDING appointments can be confirmed", HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
-            }
-        } else if (target == AppointmentStatus.COMPLETED || target == AppointmentStatus.NO_SHOW) {
-            if (current != AppointmentStatus.CONFIRMED) {
-                throw new MediBookException("Only CONFIRMED appointments can be marked as " + target, HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
-            }
-        } else if (target == AppointmentStatus.CANCELLED) {
-            if (current == AppointmentStatus.COMPLETED || current == AppointmentStatus.NO_SHOW) {
-                throw new MediBookException("Cannot cancel a completed or no-show appointment", HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
-            }
+        Set<AppointmentStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(current, Set.of());
+        if (!allowed.contains(target)) {
+            throw new MediBookException(
+                    "Transition from " + current + " to " + target + " is not allowed.",
+                    HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
+        }
+
+        if (target == AppointmentStatus.CANCELLED) {
             appt.setCancellationReason(request.getReason());
-        } else {
-            throw new MediBookException("Unsupported target status: " + target, HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
+            appt.setCancelledAt(java.time.LocalDateTime.now());
+        }
+
+        appt.setStatus(target);
+        Appointment saved = appointmentRepository.save(appt);
+
+        String eventType = "STATUS_CHANGED_TO_" + target.name();
+        AppointmentEvent event = AppointmentEvent.builder()
+                .eventType(eventType)
+                .appointmentId(saved.getId())
+                .patientId(saved.getPatient().getId())
+                .patientEmail(saved.getPatient().getEmail())
+                .patientName(saved.getPatient().getFullName())
+                .status(saved.getStatus())
+                .build();
+
+        final Long savedId = saved.getId();
+        final AppointmentStatus prevStatus = current;
+        afterCommit(() -> {
+            eventProducer.publishAppointmentEvent(event);
+            if (prevStatus == AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT
+                    && target == AppointmentStatus.COMPLETED) {
+                emergencySettlementService.generateOutstandingInvoice(savedId);
+            }
+        });
+        log.info("Appointment [{}] transitioned {} → {} by doctor [{}]", id, current, target, doctorId);
+        return AppointmentResponse.fromEntity(saved);
+    }
+
+    /**
+     * Internal system-level transition (e.g. payment webhooks, refund sagas).
+     * No doctor ownership check — caller is responsible for authorization.
+     */
+    @CacheEvict(value = "appointments", key = "#id")
+    @Transactional
+    public AppointmentResponse systemTransition(Long id, AppointmentStatus target, String reason) {
+        Appointment appt = appointmentRepository.findByIdWithDetails(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Appointment", "id", id));
+
+        AppointmentStatus current = appt.getStatus();
+        Set<AppointmentStatus> allowed = ALLOWED_TRANSITIONS.getOrDefault(current, Set.of());
+        if (!allowed.contains(target)) {
+            throw new MediBookException(
+                    "System transition from " + current + " to " + target + " is not allowed.",
+                    HttpStatus.BAD_REQUEST, "INVALID_TRANSITION");
+        }
+
+        if (target == AppointmentStatus.CANCELLED && reason != null) {
+            appt.setCancellationReason(reason);
+            appt.setCancelledAt(java.time.LocalDateTime.now());
         }
 
         appt.setStatus(target);
@@ -67,8 +143,9 @@ public class AppointmentTransitionService {
                 .patientName(saved.getPatient().getFullName())
                 .status(saved.getStatus())
                 .build();
-        eventProducer.publishAppointmentEvent(event);
 
+        afterCommit(() -> eventProducer.publishAppointmentEvent(event));
+        log.info("Appointment [{}] system-transitioned {} → {} reason={}", id, current, target, reason);
         return AppointmentResponse.fromEntity(saved);
     }
 

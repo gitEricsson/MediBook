@@ -1,5 +1,6 @@
 package com.medibook.domain.intelligence.controller;
 
+import com.medibook.common.exception.MediBookException;
 import com.medibook.common.response.ApiResponse;
 import com.medibook.domain.intelligence.service.NoShowPredictionService;
 import com.medibook.domain.intelligence.service.SymptomTriageService;
@@ -9,6 +10,7 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
@@ -36,14 +38,22 @@ public class IntelligenceController {
     }
 
     @PostMapping("/symptom-triage")
-    @PreAuthorize("hasAnyRole('DOCTOR', 'ADMIN')")
-    @Operation(summary = "AI-assisted symptom triage. OUTPUT IS NOT A DIAGNOSIS. Doctor review mandatory.")
+    @PreAuthorize("hasAnyRole('PATIENT', 'DOCTOR', 'ADMIN')")
+    @Operation(summary = "AI-assisted symptom triage. OUTPUT IS NOT A DIAGNOSIS. Doctor review mandatory for any clinical use.")
     public ApiResponse<SymptomTriageService.TriageResult> triageSymptoms(
             @RequestParam Long patientId,
             @RequestParam(required = false) String patientAge,
             @RequestParam(required = false) String patientGender,
             @RequestBody List<String> symptoms,
             @CurrentUser UserPrincipal principal) {
+        // Patients may only triage their own symptoms. Doctors/admins may triage on behalf of any patient.
+        boolean isPatient = principal.getAuthorities().stream()
+                .anyMatch(a -> "ROLE_PATIENT".equals(a.getAuthority()));
+        if (isPatient && !principal.getId().equals(patientId)) {
+            throw new MediBookException(
+                    "Patients can only triage their own symptoms.",
+                    HttpStatus.FORBIDDEN, "ACCESS_DENIED");
+        }
         return ApiResponse.ok(triageService.triageSymptoms(patientId, symptoms, patientAge, patientGender));
     }
 }

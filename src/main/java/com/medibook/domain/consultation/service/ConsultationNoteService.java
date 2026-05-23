@@ -131,6 +131,17 @@ public class ConsultationNoteService {
     }
 
     /**
+     * Soft-deletes a consultation note. Honoured by the entity's @SQLDelete clause.
+     * Only the authoring doctor or an admin may delete.
+     */
+    public void delete(Long id, UserPrincipal principal) {
+        ConsultationNote note = noteRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("ConsultationNote", "id", id));
+        ensureCanAccessAppointment(note.getAppointment(), principal);
+        noteRepository.delete(note);
+    }
+
+    /**
      * Doctor views a patient's consultation notes. Requires an APPROVED access grant.
      * Notes are limited to those created before the grant's request time.
      */

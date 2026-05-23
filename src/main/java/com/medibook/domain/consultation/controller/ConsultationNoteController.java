@@ -82,4 +82,14 @@ public class ConsultationNoteController {
             @CurrentUser UserPrincipal principal) {
         return ResponseEntity.ok(ApiResponse.ok(noteService.update(id, request, principal)));
     }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('DOCTOR','ADMIN')")
+    @Operation(summary = "Soft-delete a consultation note (Doctor/Admin)")
+    public ResponseEntity<Void> delete(
+            @PathVariable Long id,
+            @CurrentUser UserPrincipal principal) {
+        noteService.delete(id, principal);
+        return ResponseEntity.noContent().build();
+    }
 }

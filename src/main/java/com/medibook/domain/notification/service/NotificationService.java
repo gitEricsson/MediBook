@@ -196,13 +196,21 @@ public class NotificationService implements MessageListener {
                 // ── Patient: in-app + email ───────────────────────────────
                 save(event.getPatientId(), subject, body, "APPOINTMENT_REMINDER", event.getAppointmentId());
                 if (event.getPatientEmail() != null && !event.getPatientEmail().isBlank()) {
-                    String html = "<p>Hi " + event.getPatientName() + ",</p>"
-                            + "<p>This is a reminder that your appointment with <strong>Dr. " + event.getDoctorName()
-                            + "</strong> is coming up <strong>" + timeLabel + "</strong>.</p>"
-                            + "<p><strong>Scheduled time:</strong> " + event.getScheduledAt() + "</p>"
-                            + "<p>If you need to reschedule or cancel, please do so through the MediBook app.</p>"
-                            + "<p>See you soon,<br/>The MediBook Team</p>";
-                    transactionalEmailService.sendHtml(event.getPatientEmail(), subject, html);
+                    String patientDetails = detailsTable(
+                            "Doctor",     "Dr. " + safe(event.getDoctorName()),
+                            "When",       formatDateTime(event.getScheduledAt()),
+                            "Reference",  "#" + event.getAppointmentId()
+                    );
+                    String patientHtml = wrap(
+                            "Your appointment is " + timeLabel,
+                            "Reminder · " + hours + "h",
+                            "Hi " + safe(event.getPatientName()) + ",",
+                            "This is a friendly reminder that your appointment is coming up " + timeLabel + ". Please make sure you're on time.",
+                            patientDetails,
+                            "If you need to reschedule or cancel, do so from My Visits in the app.",
+                            ctaButton("https://app.medibook.health/patient/appts", "View appointment")
+                    );
+                    transactionalEmailService.sendHtml(event.getPatientEmail(), subject, patientHtml);
                 }
 
                 // ── Doctor: in-app + email ────────────────────────────────
@@ -212,11 +220,20 @@ public class NotificationService implements MessageListener {
                     save(event.getDoctorId(), "Upcoming appointment " + timeLabel,
                             doctorBody, "APPOINTMENT_REMINDER", event.getAppointmentId());
                     if (event.getDoctorEmail() != null && !event.getDoctorEmail().isBlank()) {
-                        String doctorHtml = "<p>Hi Dr. " + event.getDoctorName() + ",</p>"
-                                + "<p>This is a reminder that you have an appointment with <strong>"
-                                + event.getPatientName() + "</strong> coming up <strong>" + timeLabel + "</strong>.</p>"
-                                + "<p><strong>Scheduled time:</strong> " + event.getScheduledAt() + "</p>"
-                                + "<p>The MediBook Team</p>";
+                        String doctorDetails = detailsTable(
+                                "Patient",    safe(event.getPatientName()),
+                                "When",       formatDateTime(event.getScheduledAt()),
+                                "Reference",  "#" + event.getAppointmentId()
+                        );
+                        String doctorHtml = wrap(
+                                "Upcoming patient appointment " + timeLabel,
+                                "Reminder · " + hours + "h",
+                                "Hi Dr. " + safe(event.getDoctorName()) + ",",
+                                "You have an upcoming appointment on your schedule.",
+                                doctorDetails,
+                                null,
+                                ctaButton("https://app.medibook.health/doctor/schedule", "Open schedule")
+                        );
                         transactionalEmailService.sendHtml(event.getDoctorEmail(),
                                 "Upcoming patient appointment " + timeLabel, doctorHtml);
                     }
@@ -699,46 +716,71 @@ public class NotificationService implements MessageListener {
     }
 
     private String bookedEmailBody(AppointmentEvent event) {
+        String details = detailsTable(
+                "Doctor",      "Dr. " + safe(event.getDoctorName()),
+                "Department",  event.getDepartmentName() != null ? safe(event.getDepartmentName()) : "—",
+                "When",        formatDateTime(event.getScheduledAt()),
+                "Reference",   "#" + event.getAppointmentId()
+        );
         return wrap(
                 "Your appointment is booked",
-                "<p>Hi " + safe(event.getPatientName()) + ",</p>"
-                + "<p>Your appointment with <strong>Dr. " + safe(event.getDoctorName()) + "</strong>"
-                + (event.getDepartmentName() != null ? " (" + safe(event.getDepartmentName()) + ")" : "")
-                + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been booked."
-                + "</p>"
-                + "<p>The booking is held but only fully confirmed once payment lands. "
-                + "You can complete payment from <em>My Visits</em> in the app.</p>"
-                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+                "Booked",
+                "Hi " + safe(event.getPatientName()) + ",",
+                "Your booking has been received. The slot is held for you and will be fully confirmed once payment lands.",
+                details,
+                "Complete payment from My Visits in the app to lock in the slot.",
+                ctaButton("https://app.medibook.health/patient/appts", "Pay & confirm")
         );
     }
 
     private String doctorBookedEmailBody(AppointmentEvent event) {
+        String details = detailsTable(
+                "Patient",    safe(event.getPatientName()),
+                "When",       formatDateTime(event.getScheduledAt()),
+                "Reference",  "#" + event.getAppointmentId()
+        );
         return wrap(
-                "New appointment booked",
-                "<p>Hi Dr. " + safe(event.getDoctorName()) + ",</p>"
-                + "<p>Patient <strong>" + safe(event.getPatientName()) + "</strong> has booked an appointment "
-                + "on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong>.</p>"
-                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+                "New patient booking",
+                "New booking",
+                "Hi Dr. " + safe(event.getDoctorName()) + ",",
+                "A new appointment has just been booked on your schedule.",
+                details,
+                "Open your schedule to review it.",
+                ctaButton("https://app.medibook.health/doctor/schedule", "View schedule")
         );
     }
 
     private String confirmedEmailBody(AppointmentEvent event) {
+        String details = detailsTable(
+                "Doctor",      "Dr. " + safe(event.getDoctorName()),
+                "When",        formatDateTime(event.getScheduledAt()),
+                "Reference",   "#" + event.getAppointmentId()
+        );
         return wrap(
                 "Your appointment is confirmed",
-                "<p>Hi " + safe(event.getPatientName()) + ",</p>"
-                + "<p>Payment received. Your appointment with <strong>Dr. " + safe(event.getDoctorName()) + "</strong>"
-                + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> is now confirmed.</p>"
-                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+                "Confirmed",
+                "Hi " + safe(event.getPatientName()) + ",",
+                "Payment received — your appointment is now locked in. We'll send reminders 48, 24, and 2 hours before the visit.",
+                details,
+                null,
+                ctaButton("https://app.medibook.health/patient/appts", "View appointment")
         );
     }
 
     private String doctorConfirmedEmailBody(AppointmentEvent event) {
+        String details = detailsTable(
+                "Patient",    safe(event.getPatientName()),
+                "When",       formatDateTime(event.getScheduledAt()),
+                "Reference",  "#" + event.getAppointmentId()
+        );
         return wrap(
                 "Patient appointment confirmed",
-                "<p>Hi Dr. " + safe(event.getDoctorName()) + ",</p>"
-                + "<p>The appointment with <strong>" + safe(event.getPatientName()) + "</strong>"
-                + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been paid and confirmed.</p>"
-                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>"
+                "Confirmed",
+                "Hi Dr. " + safe(event.getDoctorName()) + ",",
+                "The patient has completed payment and the appointment is locked into your schedule.",
+                details,
+                null,
+                ctaButton("https://app.medibook.health/doctor/schedule", "View schedule")
         );
     }
 
@@ -746,24 +788,300 @@ public class NotificationService implements MessageListener {
         String greet = toPatient
                 ? "Hi " + safe(event.getPatientName()) + ","
                 : "Hi Dr. " + safe(event.getDoctorName()) + ",";
-        String body = toPatient
-                ? "<p>Your appointment with Dr. " + safe(event.getDoctorName())
-                  + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been cancelled.</p>"
-                : "<p>Appointment with patient <strong>" + safe(event.getPatientName()) + "</strong>"
-                  + " on <strong>" + safe(String.valueOf(event.getScheduledAt())) + "</strong> has been cancelled.</p>";
-        return wrap("Appointment cancelled", "<p>" + greet + "</p>" + body
-                + "<p>Reference: <code>" + event.getAppointmentId() + "</code></p>");
+        String intro = toPatient
+                ? "Your appointment with Dr. " + safe(event.getDoctorName()) + " has been cancelled. If a payment was made, the refund will be processed within 5–7 business days."
+                : "The appointment with patient " + safe(event.getPatientName()) + " has been cancelled. The slot is now free on your schedule.";
+        String details = toPatient
+                ? detailsTable(
+                        "Doctor",     "Dr. " + safe(event.getDoctorName()),
+                        "When",       formatDateTime(event.getScheduledAt()),
+                        "Reference",  "#" + event.getAppointmentId())
+                : detailsTable(
+                        "Patient",    safe(event.getPatientName()),
+                        "When",       formatDateTime(event.getScheduledAt()),
+                        "Reference",  "#" + event.getAppointmentId());
+        return wrap(
+                "Appointment cancelled",
+                "Cancelled",
+                greet,
+                intro,
+                details,
+                null,
+                null
+        );
     }
 
-    /** Minimal HTML shell — keep it simple and mail-client-friendly. */
+    // ────────────────────────────────────────────────────────────────────────
+    //  Email shell + helpers
+    //
+    //  Mail-client safe: table-based layout, inline styles, web-safe fonts.
+    //  Avoid background-image, transform, flexbox, grid, CSS vars.
+    //  Linear gradients are tolerated by modern clients; older clients fall
+    //  back to the solid background-color set immediately before them.
+    // ────────────────────────────────────────────────────────────────────────
+
+    private static final String BRAND       = "#0E8A5F";
+    private static final String BRAND_DARK  = "#086043";
+    private static final String BRAND_DARKER= "#054732";
+    private static final String BRAND_50    = "#ECFAF3";
+    private static final String BRAND_100   = "#D1F1E0";
+    private static final String INK         = "#0F172A";
+    private static final String TEXT        = "#1F2937";
+    private static final String TEXT_2      = "#4B5563";
+    private static final String MUTED       = "#6B7280";
+    private static final String MUTED_LIGHT = "#9CA3AF";
+    private static final String LINE        = "#E5E7EB";
+    private static final String BG          = "#F4F6F8";
+
+    /** Polished branded shell. */
     private String wrap(String title, String inner) {
-        return "<html><body style=\"font-family:Helvetica,Arial,sans-serif;color:#1a1a1a;line-height:1.5;\">"
-                + "<div style=\"max-width:560px;margin:0 auto;padding:24px;\">"
-                + "<h2 style=\"color:#0a6;\">" + safe(title) + "</h2>"
-                + inner
-                + "<hr style=\"border:none;border-top:1px solid #eee;margin-top:24px;\"/>"
-                + "<p style=\"font-size:11px;color:#999;\">Sent by MediBook · do not reply.</p>"
-                + "</div></body></html>";
+        // Backwards-compatible single-block variant.
+        return wrap(title, null, null, null, inner, null, null);
+    }
+
+    /** Polished branded shell with explicit content sections + optional status pill. */
+    private String wrap(String title, String greeting, String intro, String body, String aside, String cta) {
+        return wrap(title, null, greeting, intro, body, aside, cta);
+    }
+
+    /**
+     * Advanced, branded email shell.
+     *
+     * Layout (top → bottom):
+     *   • Pre-header (hidden inbox preview text)
+     *   • Hero card: gradient brand bar with MediBook logo wordmark, then
+     *     a status pill, large title, optional greeting + intro on white.
+     *   • Body card: caller-supplied HTML (typically a details card).
+     *   • Optional aside (muted callout).
+     *   • Optional CTA button (bullet-proof, with VML for Outlook).
+     *   • "Need help?" support strip.
+     *   • Footer: small logo, links, address, copyright.
+     *
+     * @param statusPill optional small uppercase label rendered as a pill under
+     *                   the title (e.g. "BOOKED", "CONFIRMED", "REMINDER").
+     */
+    private String wrap(String title, String statusPill, String greeting, String intro, String body, String aside, String cta) {
+        StringBuilder s = new StringBuilder(4096);
+        s.append("<!DOCTYPE html PUBLIC \"-//W3C//DTD XHTML 1.0 Transitional//EN\" \"http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd\">")
+         .append("<html xmlns=\"http://www.w3.org/1999/xhtml\" xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:o=\"urn:schemas-microsoft-com:office:office\">")
+         .append("<head><meta charset=\"utf-8\"/>")
+         .append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>")
+         .append("<meta http-equiv=\"X-UA-Compatible\" content=\"IE=edge\"/>")
+         .append("<title>").append(safe(title)).append("</title>")
+         .append("<!--[if mso]><xml><o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch></o:OfficeDocumentSettings></xml><![endif]-->")
+         .append("</head>")
+         .append("<body style=\"margin:0;padding:0;background:").append(BG)
+         .append(";font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:").append(TEXT).append(";-webkit-font-smoothing:antialiased;\">")
+
+         // Preheader (hidden in body, shown by inbox preview)
+         .append("<div style=\"display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:").append(BG).append(";\">")
+         .append(safe(intro != null ? intro : title))
+         .append("&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;")
+         .append("</div>")
+
+         // Outer wrapper
+         .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background:").append(BG).append(";padding:40px 16px;\">")
+         .append("<tr><td align=\"center\">")
+
+         // Card
+         .append("<table role=\"presentation\" width=\"600\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"max-width:600px;width:100%;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid ").append(LINE).append(";\">")
+
+         // ── HERO BAND (gradient) ─────────────────────────────────────────
+         .append("<tr><td style=\"background-color:").append(BRAND_DARK).append(";")
+         .append("background-image:linear-gradient(135deg,").append(BRAND).append(" 0%,").append(BRAND_DARK).append(" 60%,").append(BRAND_DARKER).append(" 100%);")
+         .append("padding:28px 32px 26px;\">")
+         .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>")
+         // Logo + wordmark
+         .append("<td style=\"vertical-align:middle;\">")
+         .append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>")
+         .append("<td style=\"width:36px;height:36px;background:#ffffff;border-radius:10px;text-align:center;vertical-align:middle;line-height:36px;\">")
+         .append("<span style=\"font-size:22px;font-weight:800;color:").append(BRAND).append(";font-family:Helvetica,Arial,sans-serif;\">+</span>")
+         .append("</td>")
+         .append("<td style=\"padding-left:12px;vertical-align:middle;\">")
+         .append("<div style=\"color:#ffffff;font-size:17px;font-weight:700;letter-spacing:-0.01em;line-height:1.1;\">MediBook</div>")
+         .append("<div style=\"color:rgba(255,255,255,0.7);font-size:11px;font-weight:500;letter-spacing:0.08em;text-transform:uppercase;line-height:1.1;margin-top:3px;\">Care, on schedule</div>")
+         .append("</td>")
+         .append("</tr></table>")
+         .append("</td>")
+         // Right-aligned tag
+         .append("<td align=\"right\" style=\"vertical-align:middle;\">")
+         .append("<span style=\"display:inline-block;padding:5px 11px;background:rgba(255,255,255,0.16);border:1px solid rgba(255,255,255,0.28);border-radius:999px;font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#ffffff;\">Healthcare</span>")
+         .append("</td>")
+         .append("</tr></table>")
+         .append("</td></tr>")
+
+         // ── TITLE BLOCK ──────────────────────────────────────────────────
+         .append("<tr><td style=\"padding:36px 32px 0;\">");
+
+        if (statusPill != null) {
+            s.append("<div style=\"margin:0 0 14px;\">")
+             .append("<span style=\"display:inline-block;padding:5px 12px;background:").append(BRAND_50).append(";color:").append(BRAND_DARK)
+             .append(";font-size:11px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;border-radius:999px;border:1px solid ").append(BRAND_100).append(";\">")
+             .append(safe(statusPill)).append("</span>")
+             .append("</div>");
+        }
+
+        s.append("<h1 style=\"margin:0;font-size:26px;line-height:1.25;font-weight:800;color:").append(INK).append(";letter-spacing:-0.02em;\">")
+         .append(safe(title)).append("</h1>");
+
+        if (greeting != null) {
+            s.append("<p style=\"margin:18px 0 0;font-size:15px;color:").append(TEXT).append(";font-weight:500;\">")
+             .append(safe(greeting)).append("</p>");
+        }
+        s.append("</td></tr>");
+
+        // ── INTRO ───────────────────────────────────────────────────────
+        if (intro != null) {
+            s.append("<tr><td style=\"padding:12px 32px 0;\"><p style=\"margin:0;font-size:15px;line-height:1.65;color:").append(TEXT_2).append(";\">")
+             .append(safe(intro)).append("</p></td></tr>");
+        }
+
+        // ── BODY (caller HTML — already escaped in generators) ─────────
+        if (body != null && !body.isBlank()) {
+            s.append("<tr><td style=\"padding:22px 32px 0;font-size:15px;line-height:1.65;color:").append(TEXT_2).append(";\">")
+             .append(body).append("</td></tr>");
+        }
+
+        // ── ASIDE ───────────────────────────────────────────────────────
+        if (aside != null) {
+            s.append("<tr><td style=\"padding:20px 32px 0;\">")
+             .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background:#FAFBFC;border-left:3px solid ").append(BRAND).append(";border-radius:6px;\"><tr>")
+             .append("<td style=\"padding:12px 16px;font-size:13px;line-height:1.55;color:").append(TEXT_2).append(";\">")
+             .append(safe(aside))
+             .append("</td></tr></table>")
+             .append("</td></tr>");
+        }
+
+        // ── CTA (bullet-proof, VML for Outlook) ─────────────────────────
+        if (cta != null) {
+            s.append("<tr><td style=\"padding:28px 32px 8px;\">").append(cta).append("</td></tr>");
+        }
+
+        // ── HELP STRIP ──────────────────────────────────────────────────
+        s.append("<tr><td style=\"padding:32px 32px 0;\">")
+         .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"background:").append(BRAND_50).append(";border-radius:12px;\"><tr>")
+         .append("<td style=\"padding:14px 18px;\">")
+         .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>")
+         .append("<td style=\"vertical-align:middle;\">")
+         .append("<div style=\"font-size:13px;font-weight:700;color:").append(BRAND_DARKER).append(";\">Need a hand?</div>")
+         .append("<div style=\"font-size:12px;color:").append(TEXT_2).append(";margin-top:2px;\">Our support team replies within a few hours.</div>")
+         .append("</td>")
+         .append("<td align=\"right\" style=\"vertical-align:middle;\">")
+         .append("<a href=\"mailto:support@medibook.health\" style=\"font-size:13px;font-weight:600;color:").append(BRAND_DARK).append(";text-decoration:none;\">Contact support &rarr;</a>")
+         .append("</td>")
+         .append("</tr></table>")
+         .append("</td></tr></table>")
+         .append("</td></tr>");
+
+        // ── FOOTER ──────────────────────────────────────────────────────
+        s.append("<tr><td style=\"padding:28px 32px 32px;\">")
+         .append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">")
+         // Mini logo row
+         .append("<tr><td style=\"padding-bottom:14px;border-bottom:1px solid ").append(LINE).append(";\">")
+         .append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>")
+         .append("<td style=\"width:22px;height:22px;background:").append(BRAND).append(";border-radius:6px;text-align:center;vertical-align:middle;line-height:22px;\">")
+         .append("<span style=\"font-size:14px;font-weight:800;color:#ffffff;font-family:Helvetica,Arial,sans-serif;\">+</span>")
+         .append("</td>")
+         .append("<td style=\"padding-left:8px;vertical-align:middle;font-size:13px;font-weight:700;color:").append(INK).append(";\">MediBook</td>")
+         .append("</tr></table>")
+         .append("</td></tr>")
+
+         // Disclaimer
+         .append("<tr><td style=\"padding-top:14px;\">")
+         .append("<p style=\"margin:0;font-size:12px;line-height:1.55;color:").append(MUTED).append(";\">")
+         .append("You're receiving this because you have a MediBook account. This is a transactional email — please do not reply directly.")
+         .append("</p>")
+         // Footer links
+         .append("<p style=\"margin:10px 0 0;font-size:12px;color:").append(MUTED).append(";\">")
+         .append("<a href=\"https://app.medibook.health/privacy\" style=\"color:").append(MUTED).append(";text-decoration:none;border-bottom:1px solid ").append(LINE).append(";\">Privacy</a>")
+         .append(" &nbsp;&middot;&nbsp; ")
+         .append("<a href=\"https://app.medibook.health/terms\" style=\"color:").append(MUTED).append(";text-decoration:none;border-bottom:1px solid ").append(LINE).append(";\">Terms</a>")
+         .append(" &nbsp;&middot;&nbsp; ")
+         .append("<a href=\"https://app.medibook.health/\" style=\"color:").append(MUTED).append(";text-decoration:none;border-bottom:1px solid ").append(LINE).append(";\">Help center</a>")
+         .append(" &nbsp;&middot;&nbsp; ")
+         .append("<a href=\"mailto:support@medibook.health\" style=\"color:").append(MUTED).append(";text-decoration:none;border-bottom:1px solid ").append(LINE).append(";\">Support</a>")
+         .append("</p>")
+         .append("<p style=\"margin:14px 0 0;font-size:11px;color:").append(MUTED_LIGHT).append(";line-height:1.5;\">")
+         .append("MediBook Health Ltd. &middot; 12 Marina, Lagos Island, Lagos &middot; Nigeria")
+         .append("<br/>&copy; 2026 MediBook Health. All rights reserved.")
+         .append("</p>")
+         .append("</td></tr>")
+         .append("</table>")
+         .append("</td></tr>")
+
+         .append("</table>")
+         .append("</td></tr></table>")
+         .append("</body></html>");
+
+        return s.toString();
+    }
+
+    /**
+     * Render (label, value) pairs as a polished two-column details card.
+     * Each row is icon-prefixed via a coloured leading marker for visual rhythm.
+     */
+    private String detailsTable(String... pairs) {
+        StringBuilder s = new StringBuilder(1024);
+        s.append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" ")
+         .append("style=\"margin:18px 0 4px;background:#ffffff;border:1px solid ").append(LINE).append(";border-radius:12px;overflow:hidden;\">");
+        for (int i = 0; i + 1 < pairs.length; i += 2) {
+            boolean isLast = (i + 2 >= pairs.length);
+            String border = isLast ? "" : "border-bottom:1px solid " + LINE + ";";
+            s.append("<tr>")
+             // Marker column
+             .append("<td style=\"width:6px;padding:0;background:").append(BRAND_50).append(";").append(border).append("\">&nbsp;</td>")
+             // Label
+             .append("<td style=\"padding:12px 8px 12px 16px;font-size:12px;font-weight:600;color:").append(MUTED)
+             .append(";text-transform:uppercase;letter-spacing:0.06em;width:36%;").append(border).append("\">")
+             .append(safe(pairs[i])).append("</td>")
+             // Value
+             .append("<td style=\"padding:12px 18px 12px 8px;font-size:15px;font-weight:600;color:").append(INK).append(";").append(border).append("\">")
+             .append(safe(pairs[i + 1])).append("</td>")
+             .append("</tr>");
+        }
+        s.append("</table>");
+        return s.toString();
+    }
+
+    /**
+     * Bullet-proof primary CTA. VML used for Outlook 2007-2019 so the rounded
+     * background renders; everywhere else the styled <a> takes over.
+     */
+    private String ctaButton(String url, String label) {
+        StringBuilder s = new StringBuilder(640);
+        s.append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td align=\"center\">")
+         // Outlook VML
+         .append("<!--[if mso]>")
+         .append("<v:roundrect xmlns:v=\"urn:schemas-microsoft-com:vml\" xmlns:w=\"urn:schemas-microsoft-com:office:word\" ")
+         .append("href=\"").append(url).append("\" style=\"height:48px;v-text-anchor:middle;width:240px;\" arcsize=\"17%\" stroke=\"f\" fillcolor=\"").append(BRAND).append("\">")
+         .append("<w:anchorlock/>")
+         .append("<center style=\"color:#ffffff;font-family:Helvetica,Arial,sans-serif;font-size:15px;font-weight:700;\">")
+         .append(safe(label))
+         .append("</center>")
+         .append("</v:roundrect>")
+         .append("<![endif]-->")
+         // Modern clients
+         .append("<!--[if !mso]><!-- -->")
+         .append("<a href=\"").append(url).append("\" ")
+         .append("style=\"display:inline-block;padding:14px 28px;background:").append(BRAND).append(";")
+         .append("background-image:linear-gradient(135deg,").append(BRAND).append(" 0%,").append(BRAND_DARK).append(" 100%);")
+         .append("color:#ffffff;font-size:15px;font-weight:700;text-decoration:none;border-radius:10px;letter-spacing:0.01em;\">")
+         .append(safe(label))
+         .append(" &rarr;")
+         .append("</a>")
+         .append("<!--<![endif]-->")
+         .append("</td></tr></table>");
+        return s.toString();
+    }
+
+    /** Human-readable date/time formatting for emails. */
+    private String formatDateTime(java.time.LocalDateTime dt) {
+        if (dt == null) return "—";
+        try {
+            return dt.format(java.time.format.DateTimeFormatter.ofPattern("EEE, MMM d, yyyy 'at' h:mm a"));
+        } catch (Exception e) {
+            return dt.toString();
+        }
     }
 
     private String safe(String s) {

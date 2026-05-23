@@ -297,13 +297,10 @@ public class TelemedicineCallService {
                 : session.getTwilioRoomName());
         saveSystemMessage(session, actorUserId, "VIDEO_CALL_ENDED", callEndedMessage(session));
 
-        // Close the linked chat conversation so further writes are blocked.
-        if (session.getChatConversationId() != null) {
-            conversationRepository.findById(session.getChatConversationId()).ifPresent(conv -> {
-                conv.setStatus(com.medibook.chat.entity.ChatConversation.ConversationStatus.CLOSED);
-                conversationRepository.save(conv);
-            });
-        }
+        // Note: the chat conversation is intentionally left ACTIVE here.
+        // ChatService.sendDirectMessage() enforces the ±10-minute consultation window
+        // independently; closing the conversation immediately would block the post-call
+        // grace period that patients and doctors rely on to send follow-up messages.
     }
 
     private void upsertInvitedParticipants(TelemedicineSession session, Appointment appointment) {

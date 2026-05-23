@@ -258,6 +258,13 @@ public class AppointmentService {
             throw new MediBookException("Cannot reschedule a completed or cancelled appointment", HttpStatus.BAD_REQUEST, "INVALID_STATUS_TRANSITION");
         }
 
+        long minutesUntil = java.time.temporal.ChronoUnit.MINUTES.between(LocalDateTime.now(), appt.getScheduledAt());
+        if (minutesUntil < 20) {
+            throw new MediBookException(
+                    "Appointments cannot be rescheduled within 20 minutes of the scheduled time.",
+                    HttpStatus.BAD_REQUEST, "RESCHEDULE_WINDOW_CLOSED");
+        }
+
         if (!request.getNewStart().isBefore(request.getNewEnd())) {
             throw new MediBookException("New end time must be after new start time",
                     HttpStatus.BAD_REQUEST, "INVALID_TIME_RANGE");

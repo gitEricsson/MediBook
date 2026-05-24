@@ -101,18 +101,23 @@ jobs:
 
       - name: OWASP Dependency-Check (SCA)
         run: |
+          # -DsarifOutputDirectory is NOT a recognized property of the
+          # dependency-check-maven plugin and was being silently ignored,
+          # which is why the upload step couldn't find the report. The
+          # canonical property is -DodcOutputDirectory; we let it use the
+          # default target/ and point the upload step there explicitly.
           mvn org.owasp:dependency-check-maven:check \
             -DfailBuildOnCVSS=7 \
             -DsuppressionFile=.owasp-suppressions.xml \
-            -Dformat=SARIF \
-            -DsarifOutputDirectory=target/dependency-check
+            -Dformat=SARIF
         continue-on-error: true
 
       - name: Upload Dependency-Check SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: target/dependency-check/dependency-check-report.sarif
+          sarif_file: target/dependency-check-report.sarif
+          category: owasp-dependency-check
 
   image-scan:
     name: Container Image Scan (Trivy)

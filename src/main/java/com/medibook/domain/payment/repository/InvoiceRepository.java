@@ -19,12 +19,36 @@ public interface InvoiceRepository extends JpaRepository<Invoice, Long> {
 
     Optional<Invoice> findByPaymentId(Long paymentId);
 
+    /**
+     * Returns the MOST RECENT invoice for an appointment, or empty if none exists.
+     *
+     * An appointment legitimately has multiple invoices when the patient retries
+     * payment (gateway failure, gave up, switched provider). Before this fix the
+     * query was `Optional<Invoice>` with no ordering, which Spring Data interprets
+     * as "must be unique-or-empty" and throws IncorrectResultSizeDataAccessException
+     * on the second invoice — taking the whole /me/appointments?tab=upcoming
+     * endpoint to 500.
+     *
+     * ORDER BY ... LIMIT 1 (set via Pageable) returns the latest, which is the
+     * one whose status represents the current settlement state. The caller still
+     * filters out PAID to compute "outstanding balance".
+     */
     @Query("""
         SELECT i FROM Invoice i
         JOIN FETCH i.payment p
         WHERE p.appointment.id = :appointmentId
+        ORDER BY i.createdAt DESC
         """)
-    Optional<Invoice> findByAppointmentId(@Param("appointmentId") Long appointmentId);
+    List<Invoice> findByAppointmentIdOrderByCreatedAtDesc(
+            @Param("appointmentId") Long appointmentId,
+            org.springframework.data.domain.Pageable pageable);
+
+    /** Convenience wrapper: most recent invoice for an appointment. */
+    default Optional<Invoice> findByAppointmentId(Long appointmentId) {
+        var page = org.springframework.data.domain.PageRequest.of(0, 1);
+        var rows = findByAppointmentIdOrderByCreatedAtDesc(appointmentId, page);
+        return rows.isEmpty() ? Optional.empty() : Optional.of(rows.get(0));
+    }
 
     Page<Invoice> findByPatientId(Long patientId, Pageable pageable);
 

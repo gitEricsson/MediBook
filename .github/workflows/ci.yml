@@ -17,6 +17,14 @@ jobs:
     name: Run Backend Tests
     runs-on: ubuntu-latest
 
+    # security-events:write lets `github/codeql-action/upload-sarif` post the
+    # OWASP Dependency-Check SARIF to the Security tab. Without it the upload
+    # step fails with "Resource not accessible by integration" and takes the
+    # whole job down even though the tests themselves passed.
+    permissions:
+      contents: read
+      security-events: write
+
     services:
       mysql:
         image: mysql:8.0

@@ -113,7 +113,12 @@ public class TelemedicineCallService {
 
         participant.setJoinedAt(LocalDateTime.now());
         participant.setLeftAt(null);
-        participant.setCameraEnabled(request == null || request.cameraEnabled() == null || request.cameraEnabled());
+
+        // Enforce medium: AUDIO appointments never allow camera.
+        boolean cameraRequested = request == null || request.cameraEnabled() == null || request.cameraEnabled();
+        boolean isAudioOnly = session.getAppointment().getConsultationMedium()
+                == com.medibook.domain.appointment.entity.ConsultationMedium.AUDIO;
+        participant.setCameraEnabled(cameraRequested && !isAudioOnly);
         participant.setMicrophoneEnabled(request == null || request.microphoneEnabled() == null || request.microphoneEnabled());
         participant.setConnectionStatus(CallConnectionStatus.JOINED);
         participantRepository.save(participant);
@@ -347,6 +352,8 @@ public class TelemedicineCallService {
     private VideoCallResponse buildResponse(TelemedicineSession session,
                                              String token, String identity,
                                              java.time.Instant tokenExpiresAt) {
+        boolean audioOnly = session.getAppointment().getConsultationMedium()
+                == com.medibook.domain.appointment.entity.ConsultationMedium.AUDIO;
         return VideoCallResponse.builder()
                 .sessionId(session.getId())
                 .appointmentId(session.getAppointment().getId())
@@ -363,6 +370,7 @@ public class TelemedicineCallService {
                 .token(token)
                 .identity(identity)
                 .tokenExpiresAt(tokenExpiresAt)
+                .audioOnly(audioOnly)
                 .build();
     }
 

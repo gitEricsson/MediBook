@@ -22,5 +22,6 @@ public record VideoCallResponse(
         LocalDateTime startedAt,
         LocalDateTime acceptedAt,
         LocalDateTime endedAt,
-        Integer durationSeconds
+        Integer durationSeconds,
+        boolean audioOnly
 ) {}

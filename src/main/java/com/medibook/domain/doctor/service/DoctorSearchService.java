@@ -157,12 +157,22 @@ public class DoctorSearchService {
             if (dayHours == null) continue;
             for (DoctorWorkingHours hours : dayHours) {
                 LocalTime current = hours.getStartTime();
-                while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
+                LocalTime end = hours.getEndTime();
+                while (true) {
+                    LocalTime slotEnd = current.plusMinutes(slotDuration);
+                    // Guard against midnight wrap-around: if adding slotDuration
+                    // wraps past midnight (slotEnd < current) we've exhausted
+                    // the day — stop. Also stop if the slot end exceeds the
+                    // configured end time.
+                    if (slotEnd.isBefore(current) || slotEnd.isAfter(end)) break;
                     LocalDateTime slotStart = date.atTime(current);
                     if (!slotStart.isBefore(now)) {
                         allSlotStarts.add(slotStart);
                     }
-                    current = current.plusMinutes(stepMins);
+                    LocalTime next = current.plusMinutes(stepMins);
+                    // Also guard the step itself against wrap-around
+                    if (next.isBefore(current) || next.equals(current)) break;
+                    current = next;
                 }
             }
         }
@@ -185,11 +195,16 @@ public class DoctorSearchService {
             if (dayHours != null) {
                 for (DoctorWorkingHours hours : dayHours) {
                     LocalTime current = hours.getStartTime();
-                    while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
+                    LocalTime dayEnd = hours.getEndTime();
+                    while (true) {
+                        LocalTime slotEndTime = current.plusMinutes(slotDuration);
+                        // Guard against midnight wrap-around
+                        if (slotEndTime.isBefore(current) || slotEndTime.isAfter(dayEnd)) break;
+
                         LocalDateTime start = date.atTime(current);
                         LocalDateTime end   = start.plusMinutes(slotDuration);
                         final LocalTime curF = current;
-                        final LocalTime endF = current.plusMinutes(slotDuration);
+                        final LocalTime endF = slotEndTime;
                         boolean isBlocked = blocksForDay.stream()
                                 .anyMatch(b -> curF.isBefore(b.getEndTime()) && endF.isAfter(b.getStartTime()));
 
@@ -211,7 +226,9 @@ public class DoctorSearchService {
                         slots.add(AvailabilityGridResponse.SlotInfo.builder()
                                 .start(start).end(end).status(status).build());
 
-                        current = current.plusMinutes(stepMins);
+                        LocalTime next = current.plusMinutes(stepMins);
+                        if (next.isBefore(current) || next.equals(current)) break;
+                        current = next;
                     }
                 }
             }

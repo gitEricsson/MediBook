@@ -20,10 +20,10 @@ import java.util.List;
  * Drives automatic appointment lifecycle transitions that cannot be triggered by
  * patient/doctor action alone.
  *
- * Pass 1 — NO_SHOW: CONFIRMED and IN_WAITING_ROOM appointments whose scheduled
- *   start passed more than {@code app.appointments.no-show-grace-minutes} ago are
- *   auto-marked NO_SHOW.  Grace period (default 30 min) gives late patients a window
- *   to still check in before the slot is closed.
+ * Pass 1 — NO_SHOW: CONFIRMED and IN_WAITING_ROOM appointments whose consultation
+ *   end time ({@code scheduledAt + durationMins}) has passed are auto-marked NO_SHOW.
+ *   The patient has the entire booked slot to check in; only after the full window
+ *   expires is the appointment flagged.
  *
  * Pass 2 — COMPLETE: IN_CONSULTATION appointments whose endTime passed more than
  *   {@code app.appointments.overtime-buffer-minutes} ago are auto-completed.
@@ -68,7 +68,7 @@ public class AppointmentLifecycleJob {
      * period after their scheduled start has elapsed.
      */
     private void markNoShows() {
-        LocalDateTime cutoff = LocalDateTime.now().minusMinutes(noShowGraceMinutes);
+        LocalDateTime cutoff = LocalDateTime.now();
         List<Appointment> missed = appointmentRepository.findMissedAppointments(cutoff);
         if (missed.isEmpty()) return;
 
@@ -78,7 +78,7 @@ public class AppointmentLifecycleJob {
         for (Appointment a : missed) {
             try {
                 transitionService.systemTransition(a.getId(), AppointmentStatus.NO_SHOW,
-                        "Auto-marked NO_SHOW after " + noShowGraceMinutes + "-minute grace period");
+                        "Auto-marked NO_SHOW — consultation window expired without check-in");
                 meterRegistry.counter("scheduled.job.appointment.auto_no_show").increment();
             } catch (Exception ex) {
                 log.warn("AppointmentLifecycleJob: could not mark appt [{}] as NO_SHOW: {}",

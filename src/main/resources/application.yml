@@ -256,7 +256,8 @@ app:
       api-key: ${GEMINI_API_KEY:}
 
   intelligence:
-    nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:stub}
+    nlp-provider: ${INTELLIGENCE_NLP_PROVIDER:gemini}
+    gemini-model: ${INTELLIGENCE_GEMINI_MODEL:gemini-2.5-flash}
     claude-api:
       key: ${CLAUDE_API_KEY:}
       max-tokens: 512

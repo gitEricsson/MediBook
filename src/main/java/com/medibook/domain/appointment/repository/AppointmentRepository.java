@@ -214,7 +214,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
                com.medibook.domain.appointment.entity.AppointmentStatus.CONFIRMED,
                com.medibook.domain.appointment.entity.AppointmentStatus.IN_WAITING_ROOM
            )
-             AND a.scheduledAt < :cutoff
+             AND a.endTime < :cutoff
            """)
     List<Appointment> findMissedAppointments(LocalDateTime cutoff);
 

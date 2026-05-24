@@ -126,7 +126,14 @@ jobs:
         continue-on-error: true
 
       - name: Upload Dependency-Check SARIF
+        # Repo is private and lacks GitHub Advanced Security, so the upload
+        # step returns 403 from the Code Scanning API regardless of the
+        # security-events:write permission. Keep the step (it'll work the
+        # moment GHAS is purchased or the repo goes public) but don't let
+        # its failure block the build. OWASP findings still appear in the
+        # job log above.
         if: always()
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: target/dependency-check-report.sarif

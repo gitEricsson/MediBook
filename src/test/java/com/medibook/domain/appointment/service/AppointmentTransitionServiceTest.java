@@ -6,6 +6,7 @@ import com.medibook.domain.appointment.dto.AppointmentResponse;
 import com.medibook.domain.appointment.dto.TransitionRequest;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
+import com.medibook.domain.appointment.entity.AppointmentType;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
@@ -229,6 +230,19 @@ class AppointmentTransitionServiceTest {
         verify(eventProducer).publishAppointmentEvent(
                 argThat(e -> e.getEventType().equals("STATUS_CHANGED_TO_COMPLETED")
                         && e.getPatientId().equals(appointment.getPatient().getId())));
+    }
+
+    @Test
+    @DisplayName("transition emergency IN_CONSULTATION→COMPLETED — generates settlement invoice")
+    void transition_emergencyCompleted_generatesSettlementInvoice() {
+        appointment.setStatus(AppointmentStatus.IN_CONSULTATION);
+        appointment.setConsultationType(AppointmentType.EMERGENCY);
+        when(appointmentRepository.findByIdWithDetails(100L)).thenReturn(Optional.of(appointment));
+        when(appointmentRepository.save(any())).thenReturn(appointment);
+
+        transitionService.transition(100L, transitionReq(AppointmentStatus.COMPLETED, null), DOCTOR_USER_ID);
+
+        verify(emergencySettlementService).generateOutstandingInvoice(100L);
     }
 
 

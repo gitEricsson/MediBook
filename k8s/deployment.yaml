@@ -155,6 +155,25 @@ spec:
                   key: super-admin-password
             - name: MEDIBOOK_RATE_LIMIT_TRUST_FORWARDED_HEADERS
               value: "true"
+            - name: MANAGEMENT_TRACING_ENABLED
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: otel-endpoint
+            - name: TRACING_SAMPLING_PROBABILITY
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: tracing-sampling-probability
+            - name: TZ
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: time-zone
+            - name: JAVA_TOOL_OPTIONS
+              value: "-Duser.timezone=$(TZ)"
           resources:
             requests:
               memory: "768Mi"

@@ -10,7 +10,9 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Data
@@ -44,6 +46,14 @@ public class DoctorResponse {
     private boolean seniorConsultant;
     private String gender;
     private LocalDateTime createdAt;
+    /**
+     * Current doctor-configured availability for patient search/profile cards.
+     * This is intentionally derived from doctor_working_hours instead of being
+     * hard-coded in the frontend, so Sunday or custom hour changes are visible
+     * immediately after the schedule update.
+     */
+    private String availabilitySummary;
+    private List<WorkingHoursResponse> workingHours;
 
     /**
      * Build response using hospital-wide pricing.
@@ -86,6 +96,22 @@ public class DoctorResponse {
                 .build();
     }
 
+    public static DoctorResponse fromEntity(
+            Doctor d,
+            HospitalProperties hospitalProps,
+            List<com.medibook.domain.doctor.entity.DoctorWorkingHours> hours) {
+        DoctorResponse response = fromEntity(d, hospitalProps);
+        List<com.medibook.domain.doctor.entity.DoctorWorkingHours> safeHours =
+                hours == null ? List.of() : hours;
+        response.setWorkingHours(safeHours.stream()
+                .map(WorkingHoursResponse::fromEntity)
+                .sorted(Comparator.comparing(WorkingHoursResponse::getDayOfWeek)
+                        .thenComparing(WorkingHoursResponse::getStartTime))
+                .toList());
+        response.setAvailabilitySummary(buildAvailabilitySummary(safeHours));
+        return response;
+    }
+
     private static List<Long> buildDeptIds(Doctor d) {
         List<Long> ids = new ArrayList<>();
         ids.add(d.getDepartment().getId());
@@ -121,6 +147,60 @@ public class DoctorResponse {
                     .forEach(specs::add);
         }
         return specs;
+    }
+
+    private static String buildAvailabilitySummary(
+            List<com.medibook.domain.doctor.entity.DoctorWorkingHours> hours) {
+        if (hours == null || hours.isEmpty()) {
+            return "Availability not set";
+        }
+
+        Map<String, List<Integer>> daysByWindow = hours.stream()
+                .sorted(Comparator.comparing(com.medibook.domain.doctor.entity.DoctorWorkingHours::getDayOfWeek)
+                        .thenComparing(com.medibook.domain.doctor.entity.DoctorWorkingHours::getStartTime))
+                .collect(Collectors.groupingBy(
+                        h -> formatTime(h.getStartTime()) + "-" + formatTime(h.getEndTime()),
+                        java.util.LinkedHashMap::new,
+                        Collectors.mapping(com.medibook.domain.doctor.entity.DoctorWorkingHours::getDayOfWeek,
+                                Collectors.toList())));
+
+        return "Available " + daysByWindow.entrySet().stream()
+                .map(e -> e.getKey() + ", " + summarizeDays(e.getValue()))
+                .collect(Collectors.joining("; "));
+    }
+
+    private static String summarizeDays(List<Integer> days) {
+        List<Integer> sorted = days.stream().distinct().sorted().toList();
+        List<String> ranges = new ArrayList<>();
+        int i = 0;
+        while (i < sorted.size()) {
+            int start = sorted.get(i);
+            int end = start;
+            while (i + 1 < sorted.size() && sorted.get(i + 1) == end + 1) {
+                i++;
+                end = sorted.get(i);
+            }
+            ranges.add(start == end ? shortDay(start) : shortDay(start) + "-" + shortDay(end));
+            i++;
+        }
+        return String.join(", ", ranges);
+    }
+
+    private static String shortDay(int dayOfWeek) {
+        return switch (dayOfWeek) {
+            case 1 -> "Mon";
+            case 2 -> "Tue";
+            case 3 -> "Wed";
+            case 4 -> "Thu";
+            case 5 -> "Fri";
+            case 6 -> "Sat";
+            case 7 -> "Sun";
+            default -> "?";
+        };
+    }
+
+    private static String formatTime(java.time.LocalTime time) {
+        return time == null ? "" : time.toString();
     }
 
     /** @deprecated Use {@link #fromEntity(Doctor, HospitalProperties)} instead */

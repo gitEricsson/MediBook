@@ -8,6 +8,8 @@ import java.time.LocalTime;
 
 @Data
 @Builder
+@lombok.NoArgsConstructor
+@lombok.AllArgsConstructor
 public class WorkingHoursResponse {
 
     private Long id;

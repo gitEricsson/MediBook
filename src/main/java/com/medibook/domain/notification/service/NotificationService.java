@@ -257,6 +257,60 @@ public class NotificationService implements MessageListener {
         });
     }
 
+    public void sendEmergencyConsultationRequested(AppointmentEvent event) {
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(event.getDoctorId(), "Emergency Consultation",
+                        "Emergency request from " + safe(event.getPatientName())
+                                + " is waiting now. Appointment #" + event.getAppointmentId() + ".",
+                        "EMERGENCY_CONSULTATION_REQUESTED", event.getAppointmentId());
+                save(event.getPatientId(), "Emergency Consultation Started",
+                        "You have been connected with Dr. " + safe(event.getDoctorName()) + ".",
+                        "EMERGENCY_CONSULTATION_STARTED", event.getAppointmentId());
+                sendEmailSafely(event.getDoctorEmail(),
+                        "Emergency consultation assigned",
+                        emergencyDoctorEmailBody(event));
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
+                log.warn("Emergency notification failed (attempt {}), will retry: {}",
+                        context.getRetryCount() + 1, e.getMessage());
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send emergency consultation notification", e);
+            } catch (Exception e) {
+                log.error("Permanent failure sending emergency consultation notification", e);
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
+    }
+
+    public void sendOutstandingBalanceCreated(AppointmentEvent event) {
+        notificationRetryTemplate.execute(context -> {
+            try {
+                save(event.getPatientId(), "Emergency Bill Due",
+                        "Your emergency consultation bill is ready. Please settle it before requesting another non-critical emergency consultation.",
+                        "OUTSTANDING_BALANCE_CREATED", event.getAppointmentId());
+                notificationMetrics.recordSuccess();
+                return null;
+            } catch (RuntimeException e) {
+                if (e instanceof IllegalArgumentException || e instanceof IllegalStateException || e instanceof UnsupportedOperationException) {
+                    notificationMetrics.recordPermanentFailure();
+                    throw e;
+                }
+                notificationMetrics.recordRetry();
+                throw new TemporaryFailureException("Failed to send outstanding balance notification", e);
+            } catch (Exception e) {
+                notificationMetrics.recordPermanentFailure();
+                throw e;
+            }
+        });
+    }
+
     public void sendPaymentSucceeded(Long patientId, String providerRef, String amount, String currency) {
         notificationRetryTemplate.execute(context -> {
             try {
@@ -781,6 +835,23 @@ public class NotificationService implements MessageListener {
                 details,
                 null,
                 ctaButton("https://app.medibook.health/doctor/schedule", "View schedule")
+        );
+    }
+
+    private String emergencyDoctorEmailBody(AppointmentEvent event) {
+        String details = detailsTable(
+                "Patient", safe(event.getPatientName()),
+                "Started", formatDateTime(event.getScheduledAt()),
+                "Reference", "#" + event.getAppointmentId()
+        );
+        return wrap(
+                "Emergency consultation assigned",
+                "Emergency",
+                "Hi Dr. " + safe(event.getDoctorName()) + ",",
+                "A patient is waiting for an emergency consultation now.",
+                details,
+                "Open MediBook to join the consultation.",
+                ctaButton("https://app.medibook.health/doctor/schedule", "Join consultation")
         );
     }
 

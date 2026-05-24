@@ -53,7 +53,7 @@ public class EmergencyConsultationService {
      * Flow:
      *  1. Enforce no unresolved emergency debt (unless criticalOverride).
      *  2. Find least-loaded available doctor (optionally in requested department).
-     *  3. Create EMERGENCY appointment with EMERGENCY_PENDING_SETTLEMENT status.
+     *  3. Create a live EMERGENCY appointment; settlement is generated after completion.
      *  4. Publish event so notification service pages the assigned doctor.
      */
     @Transactional
@@ -102,7 +102,7 @@ public class EmergencyConsultationService {
                 .type(AppointmentType.EMERGENCY)
                 .consultationMedium(medium)
                 .consultationType(AppointmentType.EMERGENCY)
-                .status(AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT)
+                .status(AppointmentStatus.IN_CONSULTATION)
                 .confirmationCode(confirmationCode)
                 .consultationFee(consultationFee)
                 .build();
@@ -206,7 +206,7 @@ public class EmergencyConsultationService {
                 .patientId(a.getPatient().getId())
                 .patientEmail(a.getPatient().getEmail())
                 .patientName(a.getPatient().getFullName())
-                .doctorId(a.getDoctor().getId())
+                .doctorId(a.getDoctor().getUser().getId())
                 .doctorEmail(a.getDoctor().getUser().getEmail())
                 .doctorName(a.getDoctor().getUser().getFullName())
                 .departmentName(a.getDoctor().getDepartment().getName())

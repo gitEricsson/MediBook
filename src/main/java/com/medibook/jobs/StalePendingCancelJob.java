@@ -118,7 +118,8 @@ public class StalePendingCancelJob {
                     .patientId(a.getPatient() != null ? a.getPatient().getId() : null)
                     .patientEmail(a.getPatient() != null ? a.getPatient().getEmail() : null)
                     .patientName(a.getPatient() != null ? a.getPatient().getFullName() : null)
-                    .doctorId(a.getDoctor() != null ? a.getDoctor().getId() : null)
+                    .doctorId(a.getDoctor() != null && a.getDoctor().getUser() != null
+                            ? a.getDoctor().getUser().getId() : null)
                     .doctorEmail(a.getDoctor() != null && a.getDoctor().getUser() != null
                             ? a.getDoctor().getUser().getEmail() : null)
                     .doctorName(a.getDoctor() != null && a.getDoctor().getUser() != null

@@ -84,6 +84,10 @@ class DoctorSearchServiceTest {
         when(doctorRepository.findIdsByFullText("cardio*")).thenReturn(List.of(doctor.getId()));
         when(doctorRepository.findAll(any(Specification.class), any(PageRequest.class)))
                 .thenReturn(new PageImpl<>(List.of(doctor)));
+        when(workingHoursRepository.findByDoctorIds(List.of(doctor.getId())))
+                .thenReturn(java.util.stream.IntStream.rangeClosed(1, 7)
+                        .mapToObj(day -> hours(doctor, day, "09:00", "17:00"))
+                        .toList());
 
         Page<DoctorResponse> page = service.searchDoctors("cardio", List.of(1L), List.of("Cardiology"),
                 null, null, true, PageRequest.of(0, 10));
@@ -91,6 +95,8 @@ class DoctorSearchServiceTest {
         assertThat(page.getContent()).hasSize(1);
         assertThat(page.getContent().getFirst().getFullName()).isEqualTo("Ada Lovelace");
         assertThat(page.getContent().getFirst().getDepartmentName()).isEqualTo("Cardiology");
+        assertThat(page.getContent().getFirst().getAvailabilitySummary())
+                .isEqualTo("Available 09:00-17:00, Mon-Sun");
     }
 
     @Test
@@ -183,6 +189,16 @@ class DoctorSearchServiceTest {
         assertThatThrownBy(() -> service.getAvailability(404L,
                 LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 1)))
                 .isInstanceOf(ResourceNotFoundException.class);
+    }
+
+    @Test
+    void getAvailabilityRejectsOversizedDateWindows() {
+        assertThatThrownBy(() -> service.getAvailability(9L,
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 10)))
+                .isInstanceOf(com.medibook.common.exception.MediBookException.class)
+                .hasMessageContaining("cannot exceed 31 days");
+
+        verifyNoInteractions(doctorRepository);
     }
 
     private static DoctorWorkingHours hours(Doctor doctor, int dayOfWeek, String start, String end) {

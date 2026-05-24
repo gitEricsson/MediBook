@@ -1,6 +1,7 @@
 package com.medibook.domain.doctor.service;
 
 import com.medibook.common.exception.ResourceNotFoundException;
+import com.medibook.common.exception.MediBookException;
 import com.medibook.config.HospitalProperties;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
@@ -19,6 +20,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.http.HttpStatus;
 
 import jakarta.persistence.criteria.JoinType;
 
@@ -28,6 +30,7 @@ import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -100,18 +103,27 @@ public class DoctorSearchService {
 
         spec = spec.and((root, q, cb) -> cb.isTrue(root.get("isActive")));
 
-        return doctorRepository.findAll(spec, sanitizedPageable).map(d -> DoctorResponse.fromEntity(d, hospitalProperties));
+        Page<Doctor> doctors = doctorRepository.findAll(spec, sanitizedPageable);
+        Map<Long, List<DoctorWorkingHours>> hoursByDoctor = loadWorkingHours(doctors.getContent());
+        return doctors.map(d -> DoctorResponse.fromEntity(
+                d,
+                hospitalProperties,
+                hoursByDoctor.getOrDefault(d.getId(), List.of())));
     }
 
     @Transactional(readOnly = true)
     public DoctorResponse getDoctorById(Long id) {
         return doctorRepository.findByIdWithDetails(id)
-                .map(d -> DoctorResponse.fromEntity(d, hospitalProperties))
+                .map(d -> DoctorResponse.fromEntity(
+                        d,
+                        hospitalProperties,
+                        workingHoursRepository.findByDoctorId(d.getId())))
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
     }
 
     @Transactional(readOnly = true)
     public AvailabilityGridResponse getAvailability(Long doctorId, LocalDate from, LocalDate to) {
+        validateAvailabilityWindow(from, to);
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
         // Slot duration: doctor override → department default → 30 (matches DoctorScheduleService).
@@ -235,13 +247,42 @@ public class DoctorSearchService {
     }
 
     private Pageable sanitizePageable(Pageable pageable) {
+        int size = Math.min(Math.max(pageable.getPageSize(), 1), 50);
         Sort sort = pageable.getSort().isSorted()
                 ? pageable.getSort()
                 : Sort.by(
                         Sort.Order.desc("averageRating"),
                         Sort.Order.desc("reviewCount"),
                         Sort.Order.asc("id"));
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sort);
+        return PageRequest.of(pageable.getPageNumber(), size, sort);
+    }
+
+    private Map<Long, List<DoctorWorkingHours>> loadWorkingHours(List<Doctor> doctors) {
+        if (doctors == null || doctors.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = doctors.stream().map(Doctor::getId).toList();
+        List<DoctorWorkingHours> rows = workingHoursRepository.findByDoctorIds(ids);
+        if (rows == null || rows.isEmpty()) {
+            return Map.of();
+        }
+        return rows.stream()
+                .collect(Collectors.groupingBy(h -> h.getDoctor().getId()));
+    }
+
+    private void validateAvailabilityWindow(LocalDate from, LocalDate to) {
+        if (from == null || to == null) {
+            throw new MediBookException("Availability date range is required.",
+                    HttpStatus.BAD_REQUEST, "INVALID_DATE_RANGE");
+        }
+        if (to.isBefore(from)) {
+            throw new MediBookException("Availability end date must be on or after start date.",
+                    HttpStatus.BAD_REQUEST, "INVALID_DATE_RANGE");
+        }
+        if (java.time.temporal.ChronoUnit.DAYS.between(from, to) > 31) {
+            throw new MediBookException("Availability range cannot exceed 31 days.",
+                    HttpStatus.BAD_REQUEST, "AVAILABILITY_RANGE_TOO_LARGE");
+        }
     }
 
     private String toBooleanModeQuery(String query) {

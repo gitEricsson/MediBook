@@ -165,11 +165,26 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     boolean existsByConfirmationCode(String confirmationCode);
 
-    /** Check whether patient has an unresolved emergency balance. */
+    /**
+     * Check whether patient has an unresolved emergency balance or active
+     * emergency consultation. A successful payment wins over stale appointment
+     * statuses, which lets previously stuck EMERGENCY_PENDING_SETTLEMENT rows
+     * recover immediately after settlement.
+     */
     @Query("""
            SELECT COUNT(a) > 0 FROM Appointment a
            WHERE a.patient.id = :patientId
-           AND a.status = com.medibook.domain.appointment.entity.AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT
+           AND a.consultationType = com.medibook.domain.appointment.entity.AppointmentType.EMERGENCY
+           AND a.status IN (
+               com.medibook.domain.appointment.entity.AppointmentStatus.IN_CONSULTATION,
+               com.medibook.domain.appointment.entity.AppointmentStatus.COMPLETED,
+               com.medibook.domain.appointment.entity.AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT
+           )
+           AND NOT EXISTS (
+               SELECT p.id FROM Payment p
+               WHERE p.appointment.id = a.id
+               AND p.status = com.medibook.domain.payment.entity.PaymentStatus.SUCCESSFUL
+           )
            """)
     boolean existsUnresolvedEmergencyDebt(@Param("patientId") Long patientId);
 

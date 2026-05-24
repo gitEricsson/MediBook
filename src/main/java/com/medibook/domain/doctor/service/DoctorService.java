@@ -5,16 +5,14 @@ import com.medibook.common.exception.ResourceNotFoundException;
 import com.medibook.config.HospitalProperties;
 import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.department.repository.DepartmentRepository;
-
-import java.util.HashSet;
-import java.util.Set;
-import java.util.stream.Collectors;
 import com.medibook.domain.doctor.dto.AdminCreateDoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorResponse;
-import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.doctor.entity.Doctor;
+import com.medibook.domain.doctor.entity.DoctorWorkingHours;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
+import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
 import com.medibook.messaging.event.AuditEvent;
@@ -34,7 +32,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -47,25 +50,38 @@ public class DoctorService {
     private final AppointmentEventProducer eventProducer;
     private final HospitalProperties       hospitalProperties;
     private final com.medibook.domain.user.service.PasswordResetService passwordResetService;
+    private final DoctorWorkingHoursRepository workingHoursRepository;
 
     @Cacheable(value = "doctors", key = "#id")
     @Bulkhead(name = "doctorService")
     @Transactional(readOnly = true)
     public DoctorResponse getById(Long id) {
         return doctorRepository.findByIdWithDetails(id)
-                .map(d -> DoctorResponse.fromEntity(d, hospitalProperties))
+                .map(d -> DoctorResponse.fromEntity(
+                        d,
+                        hospitalProperties,
+                        workingHoursRepository.findByDoctorId(d.getId())))
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", id));
     }
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> getAll(Pageable pageable) {
-        return doctorRepository.findAll(pageable).map(d -> DoctorResponse.fromEntity(d, hospitalProperties));
+        Page<Doctor> doctors = doctorRepository.findAll(pageable);
+        Map<Long, List<DoctorWorkingHours>> hoursByDoctor = loadWorkingHours(doctors.getContent());
+        return doctors.map(d -> DoctorResponse.fromEntity(
+                d,
+                hospitalProperties,
+                hoursByDoctor.getOrDefault(d.getId(), List.of())));
     }
 
     @Transactional(readOnly = true)
     public Page<DoctorResponse> getByDepartment(Long departmentId, Pageable pageable) {
-        return doctorRepository.findByDepartmentId(departmentId, pageable)
-                .map(d -> DoctorResponse.fromEntity(d, hospitalProperties));
+        Page<Doctor> doctors = doctorRepository.findByDepartmentId(departmentId, pageable);
+        Map<Long, List<DoctorWorkingHours>> hoursByDoctor = loadWorkingHours(doctors.getContent());
+        return doctors.map(d -> DoctorResponse.fromEntity(
+                d,
+                hospitalProperties,
+                hoursByDoctor.getOrDefault(d.getId(), List.of())));
     }
 
     @CacheEvict(value = "doctors", allEntries = true)
@@ -210,6 +226,18 @@ public class DoctorService {
         applySpecializations(doctor, request.getSpecialization(), request.getSpecializations());
 
         return DoctorResponse.fromEntity(doctorRepository.save(doctor), hospitalProperties);
+    }
+
+    private Map<Long, List<DoctorWorkingHours>> loadWorkingHours(List<Doctor> doctors) {
+        if (doctors == null || doctors.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = doctors.stream().map(Doctor::getId).toList();
+        List<DoctorWorkingHours> rows = workingHoursRepository.findByDoctorIds(ids);
+        if (rows == null || rows.isEmpty()) {
+            return Map.of();
+        }
+        return rows.stream().collect(Collectors.groupingBy(h -> h.getDoctor().getId()));
     }
 
     /**

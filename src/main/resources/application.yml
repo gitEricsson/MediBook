@@ -422,7 +422,15 @@ springdoc:
 
 # ─── Actuator / Prometheus / Tracing ────────────────────────────────────────
 management:
+  # Tracing is OFF by default because shipping to a non-existent
+  # `otel-collector` host was burning ~100% CPU on every pod via OkHttp DNS
+  # retry storms — the OkHttp dispatcher kept spawning lookup threads that
+  # held the JVM at the 1-core limit, breaking liveness probes. Re-enable
+  # (MANAGEMENT_TRACING_ENABLED=true) once a collector or direct OTLP
+  # endpoint is reachable. Prometheus metrics are unaffected — those go
+  # through micrometer-registry-prometheus, not the tracing pipeline.
   tracing:
+    enabled: ${MANAGEMENT_TRACING_ENABLED:false}
     sampling:
       probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
     propagation:

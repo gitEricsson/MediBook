@@ -91,7 +91,7 @@ public class AppointmentReminderJob {
                         .patientId(appt.getPatient().getId())
                         .patientEmail(appt.getPatient().getEmail())
                         .patientName(appt.getPatient().getFullName())
-                        .doctorId(appt.getDoctor().getId())
+                        .doctorId(appt.getDoctor().getUser().getId())
                         .doctorName(appt.getDoctor().getUser().getFullName())
                         .doctorEmail(appt.getDoctor().getUser().getEmail())
                         .scheduledAt(appt.getScheduledAt())

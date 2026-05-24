@@ -11,6 +11,7 @@ import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import com.medibook.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -41,7 +42,10 @@ public class DoctorWorkingHoursService {
      * Replaces all working hours for a doctor atomically.
      * Validates: startTime < endTime, no duplicate days.
      */
-    @CacheEvict(value = "doctors", key = "#doctorId")
+    @Caching(evict = {
+            @CacheEvict(value = "doctors", key = "#doctorId"),
+            @CacheEvict(value = "doctorSlots", allEntries = true)
+    })
     @Transactional
     public List<WorkingHoursResponse> replaceAll(Long doctorId, WorkingHoursRequest request) {
         Doctor doctor = doctorRepository.findById(doctorId)
@@ -67,7 +71,10 @@ public class DoctorWorkingHoursService {
                 .collect(Collectors.toList());
     }
 
-    @CacheEvict(value = "doctors", key = "#doctorId")
+    @Caching(evict = {
+            @CacheEvict(value = "doctors", key = "#doctorId"),
+            @CacheEvict(value = "doctorSlots", allEntries = true)
+    })
     @Transactional
     public List<WorkingHoursResponse> replaceAll(Long doctorId, WorkingHoursRequest request, UserPrincipal principal) {
         Doctor doctor = doctorRepository.findById(doctorId)

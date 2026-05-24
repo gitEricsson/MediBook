@@ -12,6 +12,14 @@ public interface DoctorWorkingHoursRepository extends JpaRepository<DoctorWorkin
     List<DoctorWorkingHours> findByDoctorIdAndDayOfWeek(Long doctorId, Integer dayOfWeek);
 
     @org.springframework.data.jpa.repository.Query("""
+            SELECT h FROM DoctorWorkingHours h
+            WHERE h.doctor.id IN :doctorIds
+            ORDER BY h.doctor.id ASC, h.dayOfWeek ASC, h.startTime ASC
+            """)
+    List<DoctorWorkingHours> findByDoctorIds(
+            @org.springframework.data.repository.query.Param("doctorIds") java.util.Collection<Long> doctorIds);
+
+    @org.springframework.data.jpa.repository.Query("""
             SELECT dwh FROM DoctorWorkingHours dwh
             JOIN FETCH dwh.doctor d
             JOIN FETCH d.department

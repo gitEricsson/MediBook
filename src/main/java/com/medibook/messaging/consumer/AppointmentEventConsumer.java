@@ -24,7 +24,7 @@ public class AppointmentEventConsumer {
     private final ProcessedEventRepository processedEventRepository;
 
     @KafkaListener(
-            topics = KafkaTopics.APPOINTMENT_EVENTS,
+            topics = {KafkaTopics.APPOINTMENT_EVENTS, KafkaTopics.OUTSTANDING_BALANCE_EVENTS},
             groupId = "medibook-notification-group",
             containerFactory = "appointmentKafkaListenerContainerFactory"
     )
@@ -52,6 +52,8 @@ public class AppointmentEventConsumer {
                 case "CONFIRMED", "STATUS_CHANGED_TO_CONFIRMED" -> notificationService.sendAppointmentConfirmed(event);
                 case "CANCELLED", "STATUS_CHANGED_TO_CANCELLED" -> notificationService.sendAppointmentCancelled(event);
                 case "REMINDER" -> notificationService.sendAppointmentReminder(event);
+                case "EMERGENCY_CONSULTATION_REQUESTED" -> notificationService.sendEmergencyConsultationRequested(event);
+                case "OUTSTANDING_BALANCE_CREATED" -> notificationService.sendOutstandingBalanceCreated(event);
                 default -> log.warn("Unhandled event type: {}", event.getEventType());
             }
             if (event.getEventId() != null) {

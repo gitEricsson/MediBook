@@ -10,6 +10,7 @@ import com.medibook.domain.department.entity.Department;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.payment.dto.InitiatePaymentRequest;
 import com.medibook.domain.payment.dto.PaymentResponse;
+import com.medibook.domain.payment.entity.Invoice;
 import com.medibook.domain.payment.entity.Payment;
 import com.medibook.domain.payment.entity.PaymentProvider;
 import com.medibook.domain.payment.entity.PaymentStatus;
@@ -30,6 +31,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 
 import java.math.BigDecimal;
@@ -56,6 +59,8 @@ class PaymentServiceTest {
     @Mock PricingEngine              pricingEngine;
     @Mock MeterRegistry              meterRegistry;
     @Mock Counter                    counter;
+    @Mock CacheManager               cacheManager;
+    @Mock Cache                      appointmentCache;
 
     @InjectMocks
     PaymentService paymentService;
@@ -108,6 +113,7 @@ class PaymentServiceTest {
                 .thenReturn(BigDecimal.valueOf(5000));
         lenient().when(meterRegistry.counter(anyString(), any(String[].class)))
                 .thenReturn(counter);
+        lenient().when(cacheManager.getCache("appointments")).thenReturn(appointmentCache);
     }
 
     @Test
@@ -212,5 +218,44 @@ class PaymentServiceTest {
 
         assertThat(response.getStatus()).isEqualTo(PaymentStatus.REFUNDED);
         verifyNoInteractions(providerFactory);
+    }
+
+    @Test
+    void successfulEmergencySettlement_marksStuckAppointmentCompleted() throws Exception {
+        appointment.setStatus(AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT);
+        appointment.setConsultationType(AppointmentType.EMERGENCY);
+        Payment payment = Payment.builder()
+                .id(44L)
+                .appointment(appointment)
+                .patient(patient)
+                .provider(PaymentProvider.PAYSTACK)
+                .providerRef("PS-EMG-001")
+                .amount(BigDecimal.valueOf(5000))
+                .currency("NGN")
+                .status(PaymentStatus.SUCCESSFUL)
+                .build();
+        Invoice invoice = Invoice.builder()
+                .id(9L)
+                .payment(payment)
+                .patient(patient)
+                .doctor(doctor)
+                .invoiceNumber("EMG-TEST")
+                .subtotal(BigDecimal.valueOf(5000))
+                .total(BigDecimal.valueOf(5000))
+                .status("UNPAID")
+                .build();
+
+        when(invoiceRepository.findByPaymentId(44L)).thenReturn(Optional.of(invoice));
+        when(invoiceRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(appointmentRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+        when(objectMapper.writeValueAsString(any())).thenReturn("{}");
+        when(outboxRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        paymentService.handleSuccessfulWebhookPayment(payment);
+
+        assertThat(invoice.getStatus()).isEqualTo("PAID");
+        assertThat(appointment.getStatus()).isEqualTo(AppointmentStatus.COMPLETED);
+        verify(appointmentRepository).save(argThat(a -> a.getStatus() == AppointmentStatus.COMPLETED));
+        verify(appointmentCache).evict(1L);
     }
 }

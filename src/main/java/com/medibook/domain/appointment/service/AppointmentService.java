@@ -452,7 +452,7 @@ public class AppointmentService {
                 .patientId(a.getPatient().getId())
                 .patientEmail(a.getPatient().getEmail())
                 .patientName(a.getPatient().getFullName())
-                .doctorId(a.getDoctor().getId())
+                .doctorId(a.getDoctor().getUser().getId())
                 .doctorEmail(a.getDoctor().getUser().getEmail())
                 .doctorName(a.getDoctor().getUser().getFullName())
                 .departmentName(a.getDoctor().getDepartment().getName())

@@ -6,6 +6,7 @@ import com.medibook.domain.appointment.dto.AppointmentResponse;
 import com.medibook.domain.appointment.dto.TransitionRequest;
 import com.medibook.domain.appointment.entity.Appointment;
 import com.medibook.domain.appointment.entity.AppointmentStatus;
+import com.medibook.domain.appointment.entity.AppointmentType;
 import com.medibook.domain.appointment.repository.AppointmentRepository;
 import com.medibook.domain.emergency.service.EmergencySettlementService;
 import com.medibook.messaging.event.AppointmentEvent;
@@ -93,6 +94,11 @@ public class AppointmentTransitionService {
                 .patientId(saved.getPatient().getId())
                 .patientEmail(saved.getPatient().getEmail())
                 .patientName(saved.getPatient().getFullName())
+                .doctorId(saved.getDoctor().getUser().getId())
+                .doctorEmail(saved.getDoctor().getUser().getEmail())
+                .doctorName(saved.getDoctor().getUser().getFullName())
+                .departmentName(saved.getDoctor().getDepartment().getName())
+                .scheduledAt(saved.getScheduledAt())
                 .status(saved.getStatus())
                 .build();
 
@@ -100,8 +106,7 @@ public class AppointmentTransitionService {
         final AppointmentStatus prevStatus = current;
         afterCommit(() -> {
             eventProducer.publishAppointmentEvent(event);
-            if (prevStatus == AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT
-                    && target == AppointmentStatus.COMPLETED) {
+            if (shouldGenerateEmergencyInvoice(saved, prevStatus, target)) {
                 emergencySettlementService.generateOutstandingInvoice(savedId);
             }
         });
@@ -141,12 +146,37 @@ public class AppointmentTransitionService {
                 .patientId(saved.getPatient().getId())
                 .patientEmail(saved.getPatient().getEmail())
                 .patientName(saved.getPatient().getFullName())
+                .doctorId(saved.getDoctor().getUser().getId())
+                .doctorEmail(saved.getDoctor().getUser().getEmail())
+                .doctorName(saved.getDoctor().getUser().getFullName())
+                .departmentName(saved.getDoctor().getDepartment().getName())
+                .scheduledAt(saved.getScheduledAt())
                 .status(saved.getStatus())
                 .build();
 
-        afterCommit(() -> eventProducer.publishAppointmentEvent(event));
+        final Long savedId = saved.getId();
+        final AppointmentStatus prevStatus = current;
+        afterCommit(() -> {
+            eventProducer.publishAppointmentEvent(event);
+            if (shouldGenerateEmergencyInvoice(saved, prevStatus, target)) {
+                emergencySettlementService.generateOutstandingInvoice(savedId);
+            }
+        });
         log.info("Appointment [{}] system-transitioned {} → {} reason={}", id, current, target, reason);
         return AppointmentResponse.fromEntity(saved);
+    }
+
+    private boolean shouldGenerateEmergencyInvoice(
+            Appointment appointment,
+            AppointmentStatus previous,
+            AppointmentStatus target) {
+        if (target != AppointmentStatus.COMPLETED || previous == AppointmentStatus.COMPLETED) {
+            return false;
+        }
+        AppointmentType type = appointment.getConsultationType() != null
+                ? appointment.getConsultationType()
+                : appointment.getType();
+        return type == AppointmentType.EMERGENCY;
     }
 
     private void afterCommit(Runnable action) {

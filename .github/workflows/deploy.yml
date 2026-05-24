@@ -121,6 +121,18 @@ jobs:
             --zone $GKE_ZONE \
             --project $PROJECT_ID
 
+      - name: Apply Kubernetes manifests
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/configmap.yaml
+          kubectl apply -f k8s/otel-collector.yaml
+          kubectl apply -f k8s/deployment.yaml
+          kubectl apply -f k8s/service.yaml
+          kubectl apply -f k8s/hpa.yaml
+          kubectl apply -f k8s/poddisruptionbudget.yaml
+          kubectl apply -f k8s/networkpolicy.yaml
+          kubectl apply -f k8s/prometheus-rules.yaml
+
       - name: Deploy to Kubernetes
         run: |
           kubectl set image deployment/medibook-app \

@@ -25,6 +25,8 @@ import com.medibook.security.UserPrincipal;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -58,6 +60,7 @@ public class PaymentService {
     private final HospitalProperties         hospitalProperties;
     private final PricingEngine              pricingEngine;
     private final MeterRegistry              meterRegistry;
+    private final CacheManager               cacheManager;
 
     @Transactional
     public PaymentResponse initiatePayment(InitiatePaymentRequest req, UserPrincipal principal) {
@@ -402,15 +405,37 @@ public class PaymentService {
 
         Appointment appointment = payment.getAppointment();
         if (appointment == null) return;
-        if (appointment.getStatus() != AppointmentStatus.PENDING) {
-            log.debug("Skipping appointment auto-confirm — appointment [{}] is in status [{}]",
-                    appointment.getId(), appointment.getStatus());
+        if (appointment.getStatus() == AppointmentStatus.PENDING) {
+            appointment.setStatus(AppointmentStatus.CONFIRMED);
+            appointmentRepository.save(appointment);
+            evictAppointmentCache(appointment.getId());
+            log.info("Appointment [{}] auto-confirmed after successful payment [{}]",
+                    appointment.getId(), payment.getId());
             return;
         }
-        appointment.setStatus(AppointmentStatus.CONFIRMED);
-        appointmentRepository.save(appointment);
-        log.info("Appointment [{}] auto-confirmed after successful payment [{}]",
-                appointment.getId(), payment.getId());
+
+        if (appointment.getStatus() == AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT) {
+            appointment.setStatus(AppointmentStatus.COMPLETED);
+            appointmentRepository.save(appointment);
+            evictAppointmentCache(appointment.getId());
+            log.info("Emergency appointment [{}] marked COMPLETED after successful settlement payment [{}]",
+                    appointment.getId(), payment.getId());
+            return;
+        }
+
+        evictAppointmentCache(appointment.getId());
+        log.debug("Skipping appointment auto-confirm — appointment [{}] is in status [{}]",
+                appointment.getId(), appointment.getStatus());
+    }
+
+    private void evictAppointmentCache(Long appointmentId) {
+        if (appointmentId == null || cacheManager == null) {
+            return;
+        }
+        Cache cache = cacheManager.getCache("appointments");
+        if (cache != null) {
+            cache.evict(appointmentId);
+        }
     }
 
     private void publishPaymentEvent(Payment payment, String eventType) {

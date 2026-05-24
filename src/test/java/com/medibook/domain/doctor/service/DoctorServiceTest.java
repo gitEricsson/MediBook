@@ -9,6 +9,7 @@ import com.medibook.domain.doctor.dto.DoctorRequest;
 import com.medibook.domain.doctor.dto.DoctorResponse;
 import com.medibook.domain.doctor.entity.Doctor;
 import com.medibook.domain.doctor.repository.DoctorRepository;
+import com.medibook.domain.doctor.repository.DoctorWorkingHoursRepository;
 import com.medibook.domain.user.entity.Role;
 import com.medibook.domain.user.entity.User;
 import com.medibook.domain.user.repository.UserRepository;
@@ -40,6 +41,7 @@ class DoctorServiceTest {
     @Mock UserRepository       userRepository;
     @Mock DepartmentRepository departmentRepository;
     @Mock HospitalProperties   hospitalProperties;
+    @Mock DoctorWorkingHoursRepository workingHoursRepository;
 
     @InjectMocks DoctorService doctorService;
 

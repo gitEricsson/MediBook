@@ -118,6 +118,7 @@ public class KafkaConfig {
         factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
                 baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(PaymentEvent.class)));
         factory.setConcurrency(2);
+        factory.setAutoStartup(listenerAutoStartup);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
         return factory;
@@ -131,6 +132,7 @@ public class KafkaConfig {
         factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
                 baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(ChatEvent.class)));
         factory.setConcurrency(2);
+        factory.setAutoStartup(listenerAutoStartup);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
         return factory;
@@ -144,6 +146,7 @@ public class KafkaConfig {
         factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
                 baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(TelemedicineEvent.class)));
         factory.setConcurrency(2);
+        factory.setAutoStartup(listenerAutoStartup);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
         return factory;
@@ -157,6 +160,7 @@ public class KafkaConfig {
         factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(
                 baseConsumerProps(), new StringDeserializer(), new JsonDeserializer<>(WaitlistEvent.class)));
         factory.setConcurrency(2);
+        factory.setAutoStartup(listenerAutoStartup);
         factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL_IMMEDIATE);
         factory.setCommonErrorHandler(buildErrorHandler(kafkaTemplate));
         return factory;

@@ -7,9 +7,10 @@ metadata:
 data:
   redis-host: "medibook-redis-master"
   kafka-brokers: "medibook-kafka:9092"
+  kafka-listener-auto-startup: "false"
   cassandra-host: "medibook-cassandra"
   cassandra-keyspace: "medibook"
-  cassandra-datacenter: "datacenter1"
+  cassandra-datacenter: "dc1"
   cors-origins: "https://app.dreammedibook.com,https://app.medibook.com"
   frontend-url: "https://app.dreammedibook.com"
   otel-endpoint: "http://otel-collector:4318/v1/traces"

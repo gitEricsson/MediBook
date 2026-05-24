@@ -116,6 +116,18 @@ spec:
                 configMapKeyRef:
                   name: medibook-config
                   key: kafka-brokers
+            - name: KAFKA_LISTENER_AUTO_STARTUP
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: kafka-listener-auto-startup
+            - name: SPRING_KAFKA_LISTENER_AUTO_STARTUP
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: kafka-listener-auto-startup
+            - name: SPRING_KAFKA_ADMIN_FAIL_FAST
+              value: "false"
             - name: CASSANDRA_HOST
               valueFrom:
                 configMapKeyRef:

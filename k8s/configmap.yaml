@@ -5,14 +5,45 @@ metadata:
   name: medibook-config
   namespace: medibook
 data:
+  # ─── Infra hosts ──────────────────────────────────────────────────────────
   redis-host: "medibook-redis-master"
   kafka-brokers: "medibook-kafka:9092"
-  kafka-listener-auto-startup: "false"
+  # Kafka listeners drive notification dispatch (AppointmentEventConsumer,
+  # PaymentEventConsumer, etc). Keeping these off silently disables in-app
+  # notifications and transactional emails. Only set to "false" for a
+  # temporary maintenance window where Kafka itself is being recovered.
+  kafka-listener-auto-startup: "true"
   cassandra-host: "medibook-cassandra"
   cassandra-keyspace: "medibook"
   cassandra-datacenter: "dc1"
+
+  # ─── HTTP / CORS ──────────────────────────────────────────────────────────
   cors-origins: "https://app.dreammedibook.com,https://app.medibook.com"
   frontend-url: "https://app.dreammedibook.com"
+
+  # ─── Mail (SMTP) ──────────────────────────────────────────────────────────
+  mail-host: "smtp.gmail.com"
+  mail-port: "587"
+  mail-smtp-auth: "true"
+  mail-smtp-starttls-enable: "true"
+  mail-from-address: "sadiqib22@gmail.com"
+  mail-from-name: "MediBook"
+
+  # ─── Payments ─────────────────────────────────────────────────────────────
+  paystack-enabled: "true"
+  paystack-base-url: "https://api.paystack.co"
+  monnify-enabled: "true"
+  monnify-base-url: "https://sandbox.monnify.com"
+  monnify-redirect-url: "https://dreammedibook.com/payment/callback"
+  stripe-enabled: "true"
+
+  # ─── AI / NLP / Telemedicine ──────────────────────────────────────────────
+  ai-support-provider: "gemini"
+  ai-chat-baa-active: "true"
+  intelligence-nlp-provider: "claude-api"
+  telemedicine-provider: "twilio"
+
+  # ─── Observability ────────────────────────────────────────────────────────
   otel-endpoint: "http://otel-collector:4318/v1/traces"
   tracing-sampling-probability: "0.10"
   time-zone: "Africa/Lagos"

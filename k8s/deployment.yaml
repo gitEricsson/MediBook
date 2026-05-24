@@ -25,7 +25,7 @@ spec:
         app.kubernetes.io/name: medibook
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/path: "/prometheus"
         prometheus.io/port: "8080"
     spec:
       topologySpreadConstraints:
@@ -165,10 +165,153 @@ spec:
                 secretKeyRef:
                   name: medibook-secrets
                   key: super-admin-password
+            # ─── Mail (SMTP) ──────────────────────────────────────────
+            - name: MAIL_HOST
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: mail-host
+            - name: MAIL_PORT
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: mail-port
+            - name: MAIL_SMTP_AUTH
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: mail-smtp-auth
+            - name: MAIL_SMTP_STARTTLS_ENABLE
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: mail-smtp-starttls-enable
+            - name: MAIL_FROM_ADDRESS
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: mail-from-address
+            - name: MAIL_FROM_NAME
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: mail-from-name
+            - name: MAIL_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: mail-username
+            # ─── Payments — Paystack / Monnify / Stripe ───────────────
+            - name: PAYSTACK_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: paystack-enabled
+            - name: PAYSTACK_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: paystack-base-url
+            - name: PAYSTACK_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: paystack-secret-key
+            - name: MONNIFY_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: monnify-enabled
+            - name: MONNIFY_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: monnify-base-url
+            - name: MONNIFY_REDIRECT_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: monnify-redirect-url
+            - name: MONNIFY_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: monnify-api-key
+            - name: MONNIFY_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: monnify-secret-key
+            - name: MONNIFY_CONTRACT_CODE
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: monnify-contract-code
+            - name: STRIPE_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: stripe-enabled
+            - name: STRIPE_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: stripe-secret-key
+            - name: STRIPE_WEBHOOK_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: stripe-webhook-secret
+            # ─── AI / NLP / Telemedicine ──────────────────────────────
+            - name: AI_SUPPORT_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: ai-support-provider
+            - name: AI_CHAT_BAA_ACTIVE
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: ai-chat-baa-active
+            - name: INTELLIGENCE_NLP_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: intelligence-nlp-provider
+            - name: TELEMEDICINE_PROVIDER
+              valueFrom:
+                configMapKeyRef:
+                  name: medibook-config
+                  key: telemedicine-provider
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: gemini-api-key
+            - name: CLAUDE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: claude-api-key
+            - name: TWILIO_ACCOUNT_SID
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: twilio-account-sid
+            - name: TWILIO_API_KEY_SID
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: twilio-api-key-sid
+            - name: TWILIO_API_KEY_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: medibook-secrets
+                  key: twilio-api-key-secret
             - name: MEDIBOOK_RATE_LIMIT_TRUST_FORWARDED_HEADERS
               value: "true"
             - name: MANAGEMENT_TRACING_ENABLED
-              value: "true"
+              value: "false"
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               valueFrom:
                 configMapKeyRef:
@@ -195,14 +338,14 @@ spec:
               cpu: "1000m"
           startupProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /health/liveness
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 12
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /health/liveness
               port: 8080
             initialDelaySeconds: 0
             periodSeconds: 30
@@ -210,7 +353,7 @@ spec:
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
+              path: /health/readiness
               port: 8080
             initialDelaySeconds: 0
             periodSeconds: 10

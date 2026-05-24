@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,16 +127,14 @@ public class DoctorSearchService {
         validateAvailabilityWindow(from, to);
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
-        // Slot duration: doctor override → department default → 30 (matches DoctorScheduleService).
-        // Step: slot duration + department buffer so the grid reflects the realistic cadence
-        // (consult time + cleaning/prep), and any configured midday break falls out naturally
-        // because each working-hours shift is iterated separately.
         int slotDuration = resolveSlotDurationMins(doctor);
         int bufferMins   = resolveBufferMins(doctor);
         int stepMins     = slotDuration + bufferMins;
         LocalDateTime now = LocalDateTime.now();
 
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
+        Map<Integer, List<DoctorWorkingHours>> hoursByDay = workingHours.stream()
+                .collect(Collectors.groupingBy(DoctorWorkingHours::getDayOfWeek));
 
         List<Appointment> bookedAppointments = appointmentRepository
                 .findByDoctorIdAndScheduledAtBetweenOrderByScheduledAtAsc(
@@ -147,12 +146,10 @@ public class DoctorSearchService {
 
         List<LocalDateTime> allSlotStarts = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
-            int dayOfWeek = date.getDayOfWeek().getValue();
-            for (DoctorWorkingHours hours : workingHours) {
-                if (hours.getDayOfWeek() != dayOfWeek) continue;
+            List<DoctorWorkingHours> dayHours = hoursByDay.get(date.getDayOfWeek().getValue());
+            if (dayHours == null) continue;
+            for (DoctorWorkingHours hours : dayHours) {
                 LocalTime current = hours.getStartTime();
-                // A slot only fits if (current + slotDuration) is still inside the shift —
-                // otherwise we'd offer a window that bleeds past closing time.
                 while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
                     LocalDateTime slotStart = date.atTime(current);
                     if (!slotStart.isBefore(now)) {
@@ -164,54 +161,51 @@ public class DoctorSearchService {
         }
 
         Set<LocalDateTime> heldSlots = holdService.getHeldSlots(doctorId, allSlotStarts);
-
-        // Ad-hoc per-day blocks the doctor declared (e.g. "operating on patient X").
-        // Pulled once for the whole window — overlap checks per slot are O(blocks)
-        // which is tiny in practice.
         var slotBlocks = doctorSlotBlockService.findRawForDoctor(doctorId, from, to);
+
+        Set<LocalDate> leaveDates = doctorLeaveService.getLeaveDatesInRange(doctorId, from, to);
 
         List<AvailabilityGridResponse.DaySlots> days = new ArrayList<>();
         for (LocalDate date = from; !date.isAfter(to); date = date.plusDays(1)) {
-            int dayOfWeek = date.getDayOfWeek().getValue();
-            boolean onLeave = doctorLeaveService.isDoctorOnLeave(doctorId, date);
+            List<DoctorWorkingHours> dayHours = hoursByDay.get(date.getDayOfWeek().getValue());
+            boolean onLeave = leaveDates.contains(date);
             final LocalDate dateF = date;
             var blocksForDay = slotBlocks.stream()
                     .filter(b -> b.getBlockDate().equals(dateF))
                     .toList();
             List<AvailabilityGridResponse.SlotInfo> slots = new ArrayList<>();
 
-            for (DoctorWorkingHours hours : workingHours) {
-                if (hours.getDayOfWeek() != dayOfWeek) continue;
-                LocalTime current = hours.getStartTime();
-                while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
-                    LocalDateTime start = date.atTime(current);
-                    LocalDateTime end   = start.plusMinutes(slotDuration);
-                    final LocalTime curF = current;
-                    final LocalTime endF = current.plusMinutes(slotDuration);
-                    boolean isBlocked = blocksForDay.stream()
-                            .anyMatch(b -> curF.isBefore(b.getEndTime()) && endF.isAfter(b.getStartTime()));
+            if (dayHours != null) {
+                for (DoctorWorkingHours hours : dayHours) {
+                    LocalTime current = hours.getStartTime();
+                    while (!current.plusMinutes(slotDuration).isAfter(hours.getEndTime())) {
+                        LocalDateTime start = date.atTime(current);
+                        LocalDateTime end   = start.plusMinutes(slotDuration);
+                        final LocalTime curF = current;
+                        final LocalTime endF = current.plusMinutes(slotDuration);
+                        boolean isBlocked = blocksForDay.stream()
+                                .anyMatch(b -> curF.isBefore(b.getEndTime()) && endF.isAfter(b.getStartTime()));
 
-                    // Mark past slots as PAST instead of excluding them entirely
-                    // so the frontend can grey them out for visual context.
-                    String status;
-                    if (start.isBefore(now)) {
-                        status = "PAST";
-                    } else if (onLeave) {
-                        status = "ON_LEAVE";
-                    } else if (overlapsAnyAppointment(start, end, bookedAppointments)) {
-                        status = "TAKEN";
-                    } else if (isBlocked) {
-                        status = "BLOCKED";
-                    } else if (heldSlots.contains(start)) {
-                        status = "HELD";
-                    } else {
-                        status = "OPEN";
+                        String status;
+                        if (start.isBefore(now)) {
+                            status = "PAST";
+                        } else if (onLeave) {
+                            status = "ON_LEAVE";
+                        } else if (overlapsAnyAppointment(start, end, bookedAppointments)) {
+                            status = "TAKEN";
+                        } else if (isBlocked) {
+                            status = "BLOCKED";
+                        } else if (heldSlots.contains(start)) {
+                            status = "HELD";
+                        } else {
+                            status = "OPEN";
+                        }
+
+                        slots.add(AvailabilityGridResponse.SlotInfo.builder()
+                                .start(start).end(end).status(status).build());
+
+                        current = current.plusMinutes(stepMins);
                     }
-
-                    slots.add(AvailabilityGridResponse.SlotInfo.builder()
-                            .start(start).end(end).status(status).build());
-
-                    current = current.plusMinutes(stepMins);
                 }
             }
 

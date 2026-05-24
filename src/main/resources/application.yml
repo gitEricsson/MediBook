@@ -32,7 +32,7 @@ spring:
 
   # ─── MySQL / HikariCP ───────────────────────────────────────────────────
   datasource:
-    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:localhost}}:${MEDIBOOK_DB_PORT:${DB_PORT:3306}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC
+    url: jdbc:mysql://${MEDIBOOK_DB_HOST:${DB_HOST:localhost}}:${MEDIBOOK_DB_PORT:${DB_PORT:3306}}/${MEDIBOOK_DB_NAME:${DB_NAME:medibook}}?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Africa/Lagos
     username: ${MEDIBOOK_DB_USER:${DB_USER:medibook}}
     password: ${MEDIBOOK_DB_PASSWORD:${DB_PASSWORD:medibook}}
     hikari:

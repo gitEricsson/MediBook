@@ -13,6 +13,7 @@ import com.medibook.domain.appointment.service.AppointmentPricingService;
 import com.medibook.domain.doctor.service.DoctorScheduleService;
 import com.medibook.domain.emergency.dto.EmergencyConsultationRequest;
 import com.medibook.domain.emergency.dto.EmergencyConsultationResponse;
+import com.medibook.domain.notification.service.NotificationService;
 import com.medibook.domain.telemedicine.dto.VideoCallResponse;
 import com.medibook.domain.telemedicine.service.TelemedicineCallService;
 import com.medibook.domain.user.entity.User;
@@ -46,6 +47,7 @@ public class EmergencyConsultationService {
     private final DoctorScheduleService   doctorScheduleService;
     private final TelemedicineCallService telemedicineCallService;
     private final AppointmentPricingService pricingService;
+    private final NotificationService     notificationService;
 
     /**
      * Request an emergency consultation.
@@ -113,7 +115,21 @@ public class EmergencyConsultationService {
         // for regular bookings during the emergency slot period.
         doctorScheduleService.evictSlotCache(doctor.getId(), appointment.getScheduledAt().toLocalDate());
 
-        publishEmergencyEvent(appointment, "EMERGENCY_CONSULTATION_REQUESTED");
+        AppointmentEvent emergencyEvent = buildEmergencyEvent(appointment, "EMERGENCY_CONSULTATION_REQUESTED");
+        eventProducer.publishAppointmentEvent(emergencyEvent);
+
+        // Emergencies are too critical to depend solely on Kafka delivery. If the
+        // consumer is lagging, paused, or the listener is mis-configured, the doctor
+        // would never know. Dispatching the notification inline guarantees the
+        // doctor's in-app banner + email fire as part of this request; the Kafka
+        // path remains for downstream analytics and retry semantics.
+        try {
+            notificationService.sendEmergencyConsultationRequested(emergencyEvent);
+        } catch (Exception ex) {
+            log.warn("Inline emergency notification failed for appointment [{}] — Kafka path will retry: {}",
+                    appointment.getId(), ex.getMessage());
+        }
+
         log.info("Emergency consultation [{}] assigned to doctor [{}] for patient [{}]",
                 appointment.getId(), doctor.getId(), patient.getId());
 
@@ -199,8 +215,8 @@ public class EmergencyConsultationService {
         }
     }
 
-    private void publishEmergencyEvent(Appointment a, String eventType) {
-        eventProducer.publishAppointmentEvent(AppointmentEvent.builder()
+    private AppointmentEvent buildEmergencyEvent(Appointment a, String eventType) {
+        return AppointmentEvent.builder()
                 .eventType(eventType)
                 .appointmentId(a.getId())
                 .patientId(a.getPatient().getId())
@@ -212,6 +228,6 @@ public class EmergencyConsultationService {
                 .departmentName(a.getDoctor().getDepartment().getName())
                 .scheduledAt(a.getScheduledAt())
                 .status(a.getStatus())
-                .build());
+                .build();
     }
 }

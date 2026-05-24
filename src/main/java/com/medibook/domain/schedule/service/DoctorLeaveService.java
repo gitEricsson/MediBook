@@ -19,7 +19,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -171,6 +173,23 @@ public class DoctorLeaveService {
     public boolean isDoctorOnLeave(Long doctorId, LocalDate date) {
         return !leaveRepository.findActiveLeaveOnDate(doctorId, date).isEmpty()
                 || holidayRepository.existsByHolidayDate(date);
+    }
+
+    @Transactional(readOnly = true)
+    public Set<LocalDate> getLeaveDatesInRange(Long doctorId, LocalDate from, LocalDate to) {
+        Set<LocalDate> dates = new HashSet<>();
+        for (DoctorLeave leave : leaveRepository.findOverlapping(doctorId, from, to)) {
+            if (!"APPROVED".equals(leave.getStatus())) continue;
+            LocalDate d = leave.getStartDate().isBefore(from) ? from : leave.getStartDate();
+            while (!d.isAfter(to) && !d.isAfter(leave.getEndDate())) {
+                dates.add(d);
+                d = d.plusDays(1);
+            }
+        }
+        for (HospitalHoliday h : holidayRepository.findByHolidayDateBetween(from, to)) {
+            dates.add(h.getHolidayDate());
+        }
+        return dates;
     }
 
     @Transactional

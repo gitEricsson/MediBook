@@ -167,17 +167,20 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     /**
      * Check whether patient has an unresolved emergency balance or active
-     * emergency consultation. A successful payment wins over stale appointment
-     * statuses, which lets previously stuck EMERGENCY_PENDING_SETTLEMENT rows
-     * recover immediately after settlement.
+     * emergency consultation. COMPLETED is intentionally excluded — under the
+     * new FSM an emergency reaches COMPLETED only after settlement, so any
+     * appointment in that state is fully paid. A successful payment also wins
+     * over a stale EMERGENCY_PENDING_SETTLEMENT row so old data inconsistencies
+     * recover automatically. We also match on type OR consultationType so legacy
+     * rows that only set one of the two are still caught.
      */
     @Query("""
            SELECT COUNT(a) > 0 FROM Appointment a
            WHERE a.patient.id = :patientId
-           AND a.consultationType = com.medibook.domain.appointment.entity.AppointmentType.EMERGENCY
+           AND (a.type = com.medibook.domain.appointment.entity.AppointmentType.EMERGENCY
+                OR a.consultationType = com.medibook.domain.appointment.entity.AppointmentType.EMERGENCY)
            AND a.status IN (
                com.medibook.domain.appointment.entity.AppointmentStatus.IN_CONSULTATION,
-               com.medibook.domain.appointment.entity.AppointmentStatus.COMPLETED,
                com.medibook.domain.appointment.entity.AppointmentStatus.EMERGENCY_PENDING_SETTLEMENT
            )
            AND NOT EXISTS (

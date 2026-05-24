@@ -131,7 +131,11 @@ jobs:
           kubectl apply -f k8s/hpa.yaml
           kubectl apply -f k8s/poddisruptionbudget.yaml
           kubectl apply -f k8s/networkpolicy.yaml
-          kubectl apply -f k8s/prometheus-rules.yaml
+          if kubectl get crd prometheusrules.monitoring.coreos.com >/dev/null 2>&1; then
+            kubectl apply -f k8s/prometheus-rules.yaml
+          else
+            echo "Skipping k8s/prometheus-rules.yaml: PrometheusRule CRD is not installed in this cluster"
+          fi
 
       - name: Deploy to Kubernetes
         run: |

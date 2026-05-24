@@ -100,6 +100,11 @@ jobs:
           mvn clean verify
 
       - name: OWASP Dependency-Check (SCA)
+        # Run even when the preceding test step fails — security scan output
+        # is most useful exactly when something is already off. Without
+        # `if: always()` a failed test phase skips OWASP entirely, which is
+        # also why the SARIF upload step then can't find the report.
+        if: always()
         run: |
           # -DsarifOutputDirectory is NOT a recognized property of the
           # dependency-check-maven plugin and was being silently ignored,

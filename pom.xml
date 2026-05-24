@@ -32,8 +32,16 @@
     <testcontainers.version>2.0.5</testcontainers.version>
     <commons-lang3.version>3.20.0</commons-lang3.version>
     <commons-io.version>2.20.0</commons-io.version>
-    <!-- 2.7.0 bundles swagger-ui 5.18.x → newer DOMPurify, patches multiple GHSA advisories. -->
-    <springdoc.version>2.7.0</springdoc.version>
+    <!--
+      springdoc-openapi compatibility (per upstream release notes):
+        2.5.0 → Spring Boot 3.2.x / 3.3.x
+        2.6.0 → Spring Boot 3.3.x  ← pinned here
+        2.7.0+ → Spring Boot 3.4.x (do NOT use with 3.3.x — context fails to load)
+      2.6.0 bundles swagger-ui 5.17.x, which still has DOMPurify CVEs that are
+      suppressed in .owasp-suppressions.xml (admin-gated, not reachable to
+      unauth attackers). Upgrade to 2.7+ when we move to Spring Boot 3.4.
+    -->
+    <springdoc.version>2.6.0</springdoc.version>
 
     <!-- Explicit overrides for transitive deps Spring Boot's BOM doesn't bump fast enough. -->
     <netty.version>4.1.124.Final</netty.version>

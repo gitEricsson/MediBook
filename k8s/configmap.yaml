@@ -7,7 +7,10 @@ metadata:
 data:
   # ─── Infra hosts ──────────────────────────────────────────────────────────
   redis-host: "medibook-redis-master"
-  kafka-brokers: "medibook-kafka:9092"
+  # Kafka lives in the `kafka` namespace (Strimzi-style: bootstrap + brokers
+  # services). Cross-namespace DNS requires the `.<namespace>` suffix; the
+  # short `medibook-kafka` form only resolves inside the kafka namespace.
+  kafka-brokers: "medibook-kafka-bootstrap.kafka.svc.cluster.local:9092"
   # Kafka listeners drive notification dispatch (AppointmentEventConsumer,
   # PaymentEventConsumer, etc). Keeping these off silently disables in-app
   # notifications and transactional emails. Only set to "false" for a

@@ -155,6 +155,7 @@ jobs:
             -n medibook
 
       - name: Wait for rollout
+        id: rollout
         run: |
           # 900s — measured rolling-restart on a real Spring Boot pod here
           # is ~90s per pod (Kafka attach, Cassandra session, Hikari pool,
@@ -165,6 +166,49 @@ jobs:
           kubectl rollout status deployment/medibook-app \
             -n medibook \
             --timeout=900s
+
+      - name: Rollout diagnostics (on failure)
+        # Runs only when the rollout step failed. Without this we have to
+        # SSH into the cluster every time CD breaks. Dumps everything
+        # needed to triage from the CI log alone: events (scheduling
+        # failures, image pulls), pod status, and tail of pod logs for
+        # any pod that is not Ready.
+        if: failure() && steps.rollout.conclusion == 'failure'
+        run: |
+          set +e
+          echo "::group::Deployment describe"
+          kubectl describe deployment/medibook-app -n medibook
+          echo "::endgroup::"
+
+          echo "::group::ReplicaSets"
+          kubectl get rs -n medibook -l app=medibook-api -o wide
+          echo "::endgroup::"
+
+          echo "::group::Pods"
+          kubectl get pods -n medibook -l app=medibook-api -o wide
+          echo "::endgroup::"
+
+          echo "::group::Recent namespace events (sorted)"
+          kubectl get events -n medibook \
+            --sort-by=.lastTimestamp \
+            --field-selector type!=Normal | tail -50
+          echo "::endgroup::"
+
+          echo "::group::Describe + logs for non-Ready pods"
+          for pod in $(kubectl get pods -n medibook -l app=medibook-api \
+                       -o jsonpath='{range .items[?(@.status.phase!="Running")]}{.metadata.name}{"\n"}{end}' \
+                       ; kubectl get pods -n medibook -l app=medibook-api \
+                       -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.status.containerStatuses[0].ready}{"\n"}{end}' \
+                       | awk '$2=="false"{print $1}'); do
+            echo "── $pod ──"
+            kubectl describe pod "$pod" -n medibook | tail -60
+            echo
+            kubectl logs "$pod" -n medibook --tail=80 --all-containers=true 2>&1 || true
+            kubectl logs "$pod" -n medibook --tail=80 --previous 2>&1 || true
+            echo
+          done
+          echo "::endgroup::"
+          exit 1
 
       # The `kubectl rollout status --timeout=600s` above already blocks until
       # all replicas are Available (Ready and stable). Adding a separate

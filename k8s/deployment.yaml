@@ -26,13 +26,17 @@ spec:
         app.kubernetes.io/name: medibook
       annotations:
         prometheus.io/scrape: "true"
-        prometheus.io/path: "/actuator/prometheus"
+        prometheus.io/path: "/prometheus"
         prometheus.io/port: "8080"
     spec:
       topologySpreadConstraints:
+        # Best-effort spread, not a hard gate. With DoNotSchedule + maxSkew:1
+        # a small cluster (or one with accumulated pods from a failed rollout)
+        # can leave new pods stuck Pending forever because no node satisfies
+        # the constraint — which stalls every subsequent deploy.
         - maxSkew: 1
           topologyKey: kubernetes.io/hostname
-          whenUnsatisfiable: DoNotSchedule
+          whenUnsatisfiable: ScheduleAnyway
           labelSelector:
             matchLabels:
               app: medibook-api
@@ -339,14 +343,14 @@ spec:
               cpu: "1000m"
           startupProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /health/liveness
               port: 8080
             initialDelaySeconds: 30
             periodSeconds: 10
             failureThreshold: 18
           livenessProbe:
             httpGet:
-              path: /actuator/health/liveness
+              path: /health/liveness
               port: 8080
             initialDelaySeconds: 0
             periodSeconds: 30
@@ -354,7 +358,7 @@ spec:
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
-              path: /actuator/health/readiness
+              path: /health/readiness
               port: 8080
             initialDelaySeconds: 0
             periodSeconds: 10

@@ -38,7 +38,7 @@ USER medibook
 EXPOSE 8080
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=300s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health/liveness 2>/dev/null | grep -q '"status"' || exit 1
+  CMD wget -qO- http://localhost:8080/health/liveness 2>/dev/null | grep -q '"status"' || exit 1
 
 ENTRYPOINT ["java", \
   "-XX:+UseContainerSupport", \

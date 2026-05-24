@@ -122,17 +122,28 @@ jobs:
             --project $PROJECT_ID
 
       - name: Apply Kubernetes manifests
+        # Server-side apply with --force-conflicts:
+        #   - kube-apiserver owns the merge; stale fields from prior
+        #     client-side applies get pruned (this fixes the env[41]
+        #     invalid-merge error that blocked the previous deploy).
+        #   - Field ownership is tracked, so HPA-owned spec.replicas
+        #     doesn't get stomped by the Deployment manifest during
+        #     a rollout.
+        #   - --force-conflicts transfers ownership of any fields
+        #     still tracked by the legacy client-side manager on
+        #     the first SSA run.
         run: |
-          kubectl apply -f k8s/namespace.yaml
-          kubectl apply -f k8s/configmap.yaml
-          kubectl apply -f k8s/otel-collector.yaml
-          kubectl apply -f k8s/deployment.yaml
-          kubectl apply -f k8s/service.yaml
-          kubectl apply -f k8s/hpa.yaml
-          kubectl apply -f k8s/poddisruptionbudget.yaml
-          kubectl apply -f k8s/networkpolicy.yaml
+          SSA="kubectl apply --server-side --force-conflicts --field-manager=github-actions"
+          $SSA -f k8s/namespace.yaml
+          $SSA -f k8s/configmap.yaml
+          $SSA -f k8s/otel-collector.yaml
+          $SSA -f k8s/deployment.yaml
+          $SSA -f k8s/service.yaml
+          $SSA -f k8s/hpa.yaml
+          $SSA -f k8s/poddisruptionbudget.yaml
+          $SSA -f k8s/networkpolicy.yaml
           if kubectl get crd prometheusrules.monitoring.coreos.com >/dev/null 2>&1; then
-            kubectl apply -f k8s/prometheus-rules.yaml
+            $SSA -f k8s/prometheus-rules.yaml
           else
             echo "Skipping k8s/prometheus-rules.yaml: PrometheusRule CRD is not installed in this cluster"
           fi

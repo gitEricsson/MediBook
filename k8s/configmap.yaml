@@ -21,8 +21,8 @@ data:
   cassandra-datacenter: "dc1"
 
   # ─── HTTP / CORS ──────────────────────────────────────────────────────────
-  cors-origins: "https://app.dreammedibook.com,https://app.medibook.com"
-  frontend-url: "https://app.dreammedibook.com"
+  cors-origins: "https://dreammedibook.com,https://app.dreammedibook.com,https://app.medibook.com"
+  frontend-url: "https://dreammedibook.com"
 
   # ─── Mail (SMTP) ──────────────────────────────────────────────────────────
   mail-host: "smtp.gmail.com"

@@ -129,12 +129,15 @@ jobs:
 
       - name: Wait for rollout
         run: |
-          # 600s — the app's startup is slow (Kafka attach, Cassandra session,
-          # Hikari pool warmup, Redis listener). A 4-pod rolling restart with
-          # maxSurge=1 / maxUnavailable=25% takes ~6 min total in practice.
+          # 900s — measured rolling-restart on a real Spring Boot pod here
+          # is ~90s per pod (Kafka attach, Cassandra session, Hikari pool,
+          # Redis listener). 4 replicas with maxSurge=1 means the rollout
+          # is effectively sequential, so 4 × 90s + overhead ≈ 7-8 min.
+          # 600s was too tight and false-failed deploys that actually
+          # succeeded at the K8s level.
           kubectl rollout status deployment/medibook-app \
             -n medibook \
-            --timeout=600s
+            --timeout=900s
 
       # The `kubectl rollout status --timeout=600s` above already blocks until
       # all replicas are Available (Ready and stable). Adding a separate

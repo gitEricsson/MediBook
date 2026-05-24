@@ -41,7 +41,7 @@ public class SecurityResponseHeaderFilter extends OncePerRequestFilter {
         response.setHeader("X-Content-Type-Options", "nosniff");
         response.setHeader("X-Frame-Options", "DENY");
         response.setHeader("X-XSS-Protection", "0");
-        response.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+        response.setHeader("Permissions-Policy", "camera=(self), microphone=(self), geolocation=()");
     }
 
     private boolean isAuthenticatedApiRequest(HttpServletRequest request) {

@@ -173,7 +173,7 @@ class DoctorSearchServiceTest {
                                 .build()));
         when(holdService.getHeldSlots(9L, List.of(ten, tenTwenty, tenForty))).thenReturn(Set.of(tenTwenty));
 
-        AvailabilityGridResponse response = service.getAvailability(9L, date, date);
+        AvailabilityGridResponse response = service.getAvailability(9L, date, date, null);
 
         assertThat(response.getDays()).hasSize(1);
         assertThat(response.getDays().getFirst().getSlots())
@@ -187,14 +187,14 @@ class DoctorSearchServiceTest {
         when(doctorRepository.findById(404L)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> service.getAvailability(404L,
-                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 1)))
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 1), null))
                 .isInstanceOf(ResourceNotFoundException.class);
     }
 
     @Test
     void getAvailabilityRejectsOversizedDateWindows() {
         assertThatThrownBy(() -> service.getAvailability(9L,
-                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 10)))
+                LocalDate.of(2026, 6, 1), LocalDate.of(2026, 7, 10), null))
                 .isInstanceOf(com.medibook.common.exception.MediBookException.class)
                 .hasMessageContaining("cannot exceed 31 days");
 

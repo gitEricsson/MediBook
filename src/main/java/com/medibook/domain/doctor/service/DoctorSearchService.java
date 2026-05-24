@@ -27,6 +27,7 @@ import jakarta.persistence.criteria.JoinType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -123,14 +124,20 @@ public class DoctorSearchService {
     }
 
     @Transactional(readOnly = true)
-    public AvailabilityGridResponse getAvailability(Long doctorId, LocalDate from, LocalDate to) {
+    public AvailabilityGridResponse getAvailability(Long doctorId, LocalDate from, LocalDate to, String tz) {
         validateAvailabilityWindow(from, to);
         Doctor doctor = doctorRepository.findById(doctorId)
                 .orElseThrow(() -> new ResourceNotFoundException("Doctor", "id", doctorId));
         int slotDuration = resolveSlotDurationMins(doctor);
         int bufferMins   = resolveBufferMins(doctor);
         int stepMins     = slotDuration + bufferMins;
-        LocalDateTime now = LocalDateTime.now();
+        ZoneId zoneId;
+        try {
+            zoneId = (tz != null && !tz.isBlank()) ? ZoneId.of(tz) : ZoneId.of("Africa/Lagos");
+        } catch (Exception e) {
+            zoneId = ZoneId.of("Africa/Lagos");
+        }
+        LocalDateTime now = LocalDateTime.now(zoneId);
 
         List<DoctorWorkingHours> workingHours = workingHoursRepository.findByDoctorId(doctorId);
         Map<Integer, List<DoctorWorkingHours>> hoursByDay = workingHours.stream()

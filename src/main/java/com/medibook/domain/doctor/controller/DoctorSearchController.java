@@ -53,6 +53,6 @@ public class DoctorSearchController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) String tz) {
-        return ResponseEntity.ok(ApiResponse.ok(doctorSearchService.getAvailability(id, from, to)));
+        return ResponseEntity.ok(ApiResponse.ok(doctorSearchService.getAvailability(id, from, to, tz)));
     }
 }
